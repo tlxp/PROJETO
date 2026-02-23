@@ -1,0 +1,6 @@
+pefile>=2023.2.7
+yara-python>=4.3.1
+windnd>=0.1.0
+capstone>=5.0.0
+# Opcional: para decompilar binários nativos para pseudo-C (requer Ghidra 12+ e GHIDRA_INSTALL_DIR)
+pyghidra>=3.0.0
