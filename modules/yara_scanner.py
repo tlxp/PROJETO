@@ -61,13 +61,28 @@ class YaraScanner:
                     'strings': []
                 }
                 
-                # Adicionar strings encontradas
+                # Adicionar strings encontradas (compatível com yara-python 3.x e 4.x)
                 for string in match.strings:
-                    match_info['strings'].append({
-                        'identifier': string[1],
-                        'offset': hex(string[0]),
-                        'data': string[2].decode('utf-8', errors='ignore')[:100]
-                    })
+                    if hasattr(string, 'identifier') and hasattr(string, 'instances'):
+                        # yara-python 4.x: StringMatch com .identifier e .instances (StringMatchInstance)
+                        for inst in string.instances:
+                            data = inst.matched_data
+                            if isinstance(data, bytes):
+                                data = data.decode('utf-8', errors='ignore')[:100]
+                            else:
+                                data = str(data)[:100]
+                            match_info['strings'].append({
+                                'identifier': string.identifier,
+                                'offset': hex(inst.offset),
+                                'data': data
+                            })
+                    else:
+                        # yara-python 3.x: tuplo (offset, identifier, data)
+                        match_info['strings'].append({
+                            'identifier': string[1],
+                            'offset': hex(string[0]),
+                            'data': (string[2].decode('utf-8', errors='ignore') if isinstance(string[2], bytes) else str(string[2]))[:100]
+                        })
                 
                 matches.append(match_info)
         except Exception as e:
@@ -105,7 +120,7 @@ rule RAT_Generic_Indicators
 """
         
         # Regra para detectar strings de C&C
-        c2_rule = """
+        c2_rule = r"""
 rule C2_Communication_Patterns
 {
     meta:

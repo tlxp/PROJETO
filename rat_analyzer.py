@@ -19,6 +19,7 @@ from modules.risk_scorer import RiskScorer
 from modules.report_generator import ReportGenerator
 from modules.dotnet_decompiler import DotNetDecompiler
 from modules.native_disassembly import disassemble_pe
+from modules.pseudo_c_highlighter import extract_flagged_indicators
 try:
     from modules.ghidra_decompiler import decompile_binary_to_c
 except ImportError:
@@ -185,6 +186,7 @@ class RATAnalyzer:
         if decompiled_c_file and not Path(decompiled_c_file).exists():
             decompiled_c_file = ""
         # Guardar last_analysis.json para a GUI poder mostrar "Ver código" / "Ver assembly" / "Ver C"
+        flagged_indicators = extract_flagged_indicators(self.analysis_results) if decompiled_c_file else []
         last_analysis = {
             "target_file": str(self.target_file),
             "report_path": str(report_path),
@@ -194,6 +196,7 @@ class RATAnalyzer:
             "disassembly_file": disassembly_file,
             "decompiled_c_file": decompiled_c_file,
             "decompilation_error_summary": decompilation_error_summary,
+            "flagged_indicators": flagged_indicators,
         }
         last_path = self.output_dir / "last_analysis.json"
         try:

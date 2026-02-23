@@ -467,6 +467,7 @@ class RATAnalyzerApp:
         report_path = data.get("report_path", "")
         decompiled_dir = data.get("decompiled_dir", "")
         decompilation_error_summary = data.get("decompilation_error_summary", "")
+        flagged_indicators = data.get("flagged_indicators", [])
 
         win = tk.Toplevel(self.root)
         win.title("Resultado da análise")
@@ -489,7 +490,11 @@ class RATAnalyzerApp:
             ttk.Button(frm, text="Ver assembly (desmontagem .asm)", command=lambda: self._show_code_window(Path(disassembly), "Assembly")).pack(anchor=tk.W, pady=2)
             has_code = True
         if decompiled_c and Path(decompiled_c).exists():
-            ttk.Button(frm, text="Ver código decompilado (pseudo-C)", command=lambda: self._show_code_window(Path(decompiled_c), "Pseudo-C (Ghidra)")).pack(anchor=tk.W, pady=2)
+            ttk.Button(
+                frm,
+                text="Ver código decompilado (pseudo-C) com highlights",
+                command=lambda: self._show_code_window(Path(decompiled_c), "Pseudo-C (Ghidra)", highlights=flagged_indicators),
+            ).pack(anchor=tk.W, pady=2)
             has_code = True
         if decompiled_dir and Path(decompiled_dir).is_dir():
             ttk.Button(frm, text="Abrir pasta do código/assembly", command=lambda: _open_folder(decompiled_dir)).pack(anchor=tk.W, pady=2)
@@ -503,8 +508,8 @@ class RATAnalyzerApp:
             ttk.Button(frm, text="Abrir relatório (.txt)", command=lambda: _open_file(report_path)).pack(anchor=tk.W, pady=4)
         ttk.Button(frm, text="Fechar", command=win.destroy).pack(anchor=tk.W, pady=(12, 0))
 
-    def _show_code_window(self, file_path: Path, title: str):
-        """Abre uma janela com o conteúdo do ficheiro .cs (só leitura)."""
+    def _show_code_window(self, file_path: Path, title: str, highlights: list | None = None):
+        """Abre uma janela com o conteúdo do ficheiro (só leitura). Se highlights for fornecido, realça as ocorrências."""
         if not file_path.exists():
             messagebox.showwarning("Ficheiro", f"Ficheiro não encontrado: {file_path}")
             return
@@ -515,6 +520,43 @@ class RATAnalyzerApp:
         frm = ttk.Frame(win, padding=8)
         frm.pack(fill=tk.BOTH, expand=True)
         ttk.Button(frm, text="Abrir pasta", command=lambda: _open_folder(str(file_path.parent))).pack(anchor=tk.W)
+        nav_state = {"ranges": [], "idx": 0}
+        if highlights and len(highlights) > 0:
+            ttk.Label(
+                frm,
+                text="Amarelo = indicadores que deram flag (YARA, análise estática, evasão)",
+                foreground="#666",
+                font=("", 8),
+            ).pack(anchor=tk.W)
+            nav = ttk.Frame(frm)
+            nav.pack(anchor=tk.W, pady=(2, 0))
+
+            def _ensure_ranges():
+                if not nav_state["ranges"]:
+                    nav_state["ranges"] = list(txt.tag_ranges("rat_flag"))
+                    nav_state["idx"] = 0
+
+            def _goto_next():
+                _ensure_ranges()
+                r = nav_state["ranges"]
+                if not r:
+                    return
+                start = r[nav_state["idx"]]
+                txt.see(start)
+                nav_state["idx"] = (nav_state["idx"] + 2) % len(r)
+
+            def _goto_prev():
+                _ensure_ranges()
+                r = nav_state["ranges"]
+                if not r:
+                    return
+                nav_state["idx"] = (nav_state["idx"] - 2) % len(r)
+                start = r[nav_state["idx"]]
+                txt.see(start)
+
+            ttk.Button(nav, text="◀ Anterior", command=_goto_prev).pack(side=tk.LEFT, padx=(0, 4))
+            ttk.Button(nav, text="Seguinte ▶", command=_goto_next).pack(side=tk.LEFT)
+
         txt = scrolledtext.ScrolledText(frm, wrap=tk.WORD, font=("Consolas", 10), state=tk.NORMAL)
         txt.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
         try:
@@ -522,6 +564,20 @@ class RATAnalyzerApp:
             txt.insert(tk.END, content)
         except Exception as e:
             txt.insert(tk.END, f"Erro ao ler ficheiro: {e}")
+        # Aplicar highlights (indicadores que deram flag no RAT Analyzer)
+        if highlights and isinstance(highlights, list) and len(highlights) > 0:
+            txt.tag_config("rat_flag", background="#ffeb3b", foreground="#000")
+            for indicator in highlights:
+                if not indicator or not isinstance(indicator, str) or len(indicator) < 3:
+                    continue
+                start_idx = "1.0"
+                while True:
+                    pos = txt.search(indicator, start_idx, tk.END, nocase=False)
+                    if not pos:
+                        break
+                    end_idx = f"{pos}+{len(indicator)}c"
+                    txt.tag_add("rat_flag", pos, end_idx)
+                    start_idx = end_idx
         txt.config(state=tk.DISABLED)
 
     def log(self, msg: str):

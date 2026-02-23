@@ -4,7 +4,7 @@ rule RAT_Generic_Indicators
         description = "Indicadores genericos de Remote Access Trojans"
         severity = "high"
         author = "RAT Analyzer"
-        tags = "rat", "injection", "keylog"
+        tags = "rat injection keylog"
 
     strings:
         $s1 = "CreateRemoteThread" ascii

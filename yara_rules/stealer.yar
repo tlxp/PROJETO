@@ -4,7 +4,7 @@ rule Stealer_Credential_Indicators
         description = "Indicadores de credential stealers e keyloggers"
         severity = "high"
         author = "RAT Analyzer"
-        tags = "stealer", "keylog", "credentials", "browser"
+        tags = "stealer keylog credentials browser"
 
     strings:
         $s1 = "Login Data" ascii

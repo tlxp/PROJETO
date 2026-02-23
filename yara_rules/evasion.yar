@@ -4,7 +4,7 @@ rule Evasion_Techniques
         description = "Tecnicas de evasao de deteccao e anti-analise"
         severity = "medium"
         author = "RAT Analyzer"
-        tags = "evasion", "anti-debug", "anti-vm"
+        tags = "evasion anti-debug anti-vm"
 
     strings:
         $s1 = "IsDebuggerPresent" ascii

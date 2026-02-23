@@ -4,7 +4,7 @@ rule C2_Communication_Patterns
         description = "Padroes de comunicacao C&C e exfiltracao"
         severity = "high"
         author = "RAT Analyzer"
-        tags = "c2", "beacon", "exfil"
+        tags = "c2 beacon exfil"
 
     strings:
         $s1 = /http[s]?:\/\/[a-zA-Z0-9.-]+\.(onion|bit|tk|ml|ga|cf|gq)/
