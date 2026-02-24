@@ -5,8 +5,8 @@ Todos os caminhos e constantes do projeto num único sítio.
 
 from pathlib import Path
 
-# Raiz do projeto (pasta onde estão rat_analyzer.py, config.py, modules/, etc.)
-PROJECT_ROOT = Path(__file__).resolve().parent
+# Raiz do projeto (pasta PROJETO, acima de backend/)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # Saídas geradas (não versionadas)
 REPORTS_DIR = PROJECT_ROOT / "reports"
