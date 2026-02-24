@@ -1,12 +1,16 @@
 """
 Módulo de Deobfuscação
-Remove ou reduz ofuscação de código (binário e código fonte C#)
+Remove ou reduz ofuscação de código (binário e código fonte C#).
+Para binários: unpack UPX e/ou patch de strings XOR em .rdata/.data;
+o ficheiro de saída pode ser usado pelo Ghidra.
 """
 
 import base64
 import re
+import shutil
+import subprocess
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 
 class Deobfuscator:
@@ -161,6 +165,185 @@ class Deobfuscator:
         for i, byte in enumerate(data):
             result.append(byte ^ key[i % len(key)])
         return bytes(result)
+
+    # ---------- Deobfuscação de binário (saída = ficheiro para Ghidra) ----------
+
+    def _is_upx_packed(self, file_path: str) -> bool:
+        """Deteta se o PE está empacotado com UPX (secções UPX0/UPX1 ou assinatura UPX!)."""
+        try:
+            with open(file_path, "rb") as f:
+                head = f.read(8192)
+            if b"UPX!" in head or b"UPX0" in head or b"UPX1" in head:
+                return True
+        except Exception:
+            pass
+        try:
+            import pefile
+            pe = pefile.PE(file_path)
+            for section in pe.sections:
+                name = section.Name.decode("utf-8", errors="ignore").rstrip("\x00").upper()
+                if name in ("UPX0", "UPX1", "UPX2"):
+                    return True
+            pe.close()
+        except Exception:
+            pass
+        return False
+
+    def _unpack_upx(self, input_path: str, output_path: str) -> Tuple[bool, str]:
+        """Desempacota UPX: upx -d -o output input. Retorna (sucesso, mensagem)."""
+        try:
+            r = subprocess.run(
+                ["upx", "-d", "-o", output_path, input_path],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if r.returncode == 0 and Path(output_path).exists():
+                return True, "UPX unpacked"
+            return False, r.stderr or r.stdout or f"upx exit {r.returncode}"
+        except FileNotFoundError:
+            return False, "upx não encontrado no PATH (instale UPX para desempacotar)"
+        except subprocess.TimeoutExpired:
+            return False, "upx timeout"
+        except Exception as e:
+            return False, str(e)
+
+    def _xor_decrypt_byte(self, data: bytes, key: int) -> bytes:
+        return bytes([b ^ key for b in data])
+
+    def _printable_ratio(self, data: bytes) -> float:
+        if not data:
+            return 0.0
+        printable = sum(1 for b in data if 0x20 <= b <= 0x7E or b in (0x09, 0x0A, 0x0D))
+        return printable / len(data)
+
+    def _try_xor_patch_sections(self, file_path: str, output_path: str) -> Tuple[bool, int]:
+        """
+        Tenta encontrar blocos em .rdata/.data que parecem XOR single-byte e grava
+        um novo PE com esses blocos substituídos pelo texto decodificado.
+        Retorna (sucesso, número de regiões patched).
+        """
+        try:
+            import pefile
+        except ImportError:
+            return False, 0
+        try:
+            pe = pefile.PE(file_path)
+        except Exception:
+            return False, 0
+        data_section_names = (b".rdata", b".data", b".idata", b"UPX1")
+        patches: List[Tuple[int, bytes]] = []  # (file_offset, new_data)
+        for section in pe.sections:
+            name = section.Name.rstrip(b"\x00")
+            if name not in data_section_names and not name.startswith(b".rdata") and not name.startswith(b".data"):
+                continue
+            raw_offset = section.PointerToRawData
+            raw_size = section.SizeOfRawData
+            if raw_size < 8 or raw_offset <= 0:
+                continue
+            try:
+                with open(file_path, "rb") as f:
+                    f.seek(raw_offset)
+                    blob = f.read(min(raw_size, 512 * 1024))
+            except Exception:
+                continue
+            # Janelas de 32 a 256 bytes; tentar chaves 1..255
+            min_len, max_len = 32, 256
+            step = 16
+            for start in range(0, len(blob) - min_len, step):
+                for length in (min_len, 64, 128, 256):
+                    if start + length > len(blob):
+                        break
+                    block = blob[start : start + length]
+                    best_key = None
+                    best_ratio = 0.0
+                    for key in range(1, 256):
+                        dec = self._xor_decrypt_byte(block, key)
+                        if b"\x00" in dec[:10]:
+                            continue
+                        r = self._printable_ratio(dec)
+                        if r > best_ratio and r >= 0.85:
+                            best_ratio = r
+                            best_key = key
+                    if best_key is not None and best_ratio >= 0.90:
+                        new_data = self._xor_decrypt_byte(block, best_key)
+                        file_off = raw_offset + start
+                        patches.append((file_off, new_data))
+                        break
+        try:
+            pe.close()
+        except Exception:
+            pass
+        if not patches:
+            return False, 0
+        try:
+            with open(file_path, "rb") as f:
+                out_data = bytearray(f.read())
+            for (offset, new_data) in patches:
+                if offset + len(new_data) <= len(out_data):
+                    out_data[offset : offset + len(new_data)] = new_data
+            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+            with open(output_path, "wb") as f:
+                f.write(out_data)
+            return True, len(patches)
+        except Exception:
+            return False, 0
+
+    def deobfuscate_binary(
+        self,
+        file_path: str,
+        output_path: Optional[str] = None,
+        output_root: str = "decompiled",
+    ) -> Dict:
+        """
+        Produz um binário deobfuscado a partir do ficheiro dado (unpack UPX e/ou
+        patch de strings XOR). O ficheiro de saída deve ser usado como entrada do Ghidra.
+        :param file_path: Caminho para o .exe ou .dll
+        :param output_path: Ficheiro de saída (opcional)
+        :param output_root: Pasta base se output_path for None
+        :return: { "success", "output_file", "techniques_applied", "error" }
+        """
+        result = {
+            "success": False,
+            "output_file": "",
+            "techniques_applied": [],
+            "error": "",
+        }
+        path = Path(file_path).resolve()
+        if not path.exists():
+            result["error"] = f"Ficheiro não encontrado: {path}"
+            return result
+        out_dir = Path(output_root).resolve() / path.stem
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_file = Path(output_path) if output_path else (out_dir / f"{path.stem}.deobfuscated{path.suffix}")
+
+        # 1) Tentar UPX unpack
+        if self._is_upx_packed(str(path)):
+            try:
+                ok, msg = self._unpack_upx(str(path), str(out_file))
+                if ok:
+                    result["success"] = True
+                    result["output_file"] = str(out_file)
+                    result["techniques_applied"].append("UPX unpack")
+                    return result
+                result["error"] = msg or "UPX desempacotagem falhou."
+            except Exception as e:
+                result["error"] = str(e)
+            # Se UPX falhou, continuar e tentar XOR no original
+
+        # 2) Tentar patch XOR em secções de dados (só para PE)
+        if path.suffix.lower() in (".exe", ".dll"):
+            ok, count = self._try_xor_patch_sections(str(path), str(out_file))
+            if ok and count > 0:
+                result["success"] = True
+                result["output_file"] = str(out_file)
+                result["techniques_applied"].append(f"XOR string patch ({count} regiões)")
+                return result
+
+        # 3) Nada aplicado: devolver cópia do original como "deobfuscated" para o Ghidra usar o mesmo ficheiro
+        result["success"] = True
+        result["output_file"] = str(path)
+        return result
 
     def deobfuscate_source(self, source_path: str, output_path: Optional[str] = None) -> Dict:
         """

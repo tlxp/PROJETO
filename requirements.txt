@@ -4,3 +4,7 @@ windnd>=0.1.0
 capstone>=5.0.0
 # Opcional: para decompilar binários nativos para pseudo-C (requer Ghidra 12+ e GHIDRA_INSTALL_DIR)
 pyghidra>=3.0.0
+# API para o frontend (drop-n-analyze)
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.12

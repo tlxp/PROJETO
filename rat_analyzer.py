@@ -35,6 +35,7 @@ class RATAnalyzer:
         output_dir: str | None = None,
         use_dotnet_decompiler: bool = False,
         ilspy_path: str | None = None,
+        log_callback=None,
     ):
         self.target_file = Path(target_file)
         self.output_dir = Path(output_dir or str(config.REPORTS_DIR))
@@ -54,6 +55,7 @@ class RATAnalyzer:
             ilspy_path=ilspy_path,
             output_root=str(config.DECOMPILED_DIR),
         )
+        self._log_callback = log_callback
         
         # Resultados da análise
         self.analysis_results = {
@@ -68,8 +70,14 @@ class RATAnalyzer:
         }
     
     def _log(self, msg: str) -> None:
-        """Imprime e faz flush para logs em tempo real na GUI."""
-        print(msg, flush=True)
+        """Imprime ou envia via callback para logs em tempo real."""
+        if self._log_callback is not None:
+            try:
+                self._log_callback(msg)
+            except Exception:
+                print(msg, flush=True)
+        else:
+            print(msg, flush=True)
 
     def analyze(self):
         """Executa a análise completa do ficheiro"""
@@ -142,7 +150,7 @@ class RATAnalyzer:
                 if do_result.get("base64_decoded"):
                     print(f"[+] Código desobfuscado guardado: {deobfuscated_file} ({do_result['base64_decoded']} Base64 decodificados)")
         else:
-            # Binário nativo ou .NET AOT: gerar assembly e tentar decompilação para pseudo-C (PyGhidra)
+            # Binário nativo ou .NET AOT: assembly e Ghidra diretamente no binário original (sem deobfuscação binária)
             self._log("[7a] Desmontagem (assembly) do binário...")
             out_asm = str(config.DECOMPILED_DIR / self.target_file.stem / f"{self.target_file.stem}.asm")
             disasm_result = disassemble_pe(str(self.target_file), output_path=out_asm, output_root=str(config.DECOMPILED_DIR))
@@ -163,6 +171,7 @@ class RATAnalyzer:
                         output_path=out_c,
                         output_root=str(config.DECOMPILED_DIR),
                         ghidra_install_dir=ghidra_dir,
+                        progress_callback=lambda pct: self._log(f"[GHIDRA_PROGRESS] {pct:.1f}"),
                     )
                     self.analysis_results["ghidra_decompilation"] = ghidra_result
                     if ghidra_result.get("success"):
