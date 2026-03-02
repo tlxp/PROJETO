@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "kyqH6pw1orVaBiBvMJ8QL4gkk6a7zzm/Zx7TBDia/O8=",
+  "Source": "vm-agent",
+  "BasePath": "_content/vm-agent",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}

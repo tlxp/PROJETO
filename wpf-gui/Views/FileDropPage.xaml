@@ -1,0 +1,138 @@
+<Page x:Class="RatAnalyzer.Desktop.Views.FileDropPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      mc:Ignorable="d"
+      Background="{StaticResource PrimaryBackgroundBrush}"
+      AllowDrop="True"
+      Drop="OnDrop"
+      DragOver="OnDragOver">
+    <Grid Margin="32">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Orientation="Vertical" Margin="0,0,0,24">
+            <TextBlock Text="Análise de ficheiros"
+                       Style="{StaticResource TitleTextBlock}" />
+            <TextBlock Text="Arraste um ficheiro executável (.exe, .dll, .zip) para a área abaixo para iniciar a análise."
+                       Margin="0,6,0,0"
+                       Style="{StaticResource SubtitleTextBlock}" />
+        </StackPanel>
+
+        <!-- Drop zone -->
+        <Border Grid.Row="1"
+                x:Name="DropZone"
+                CornerRadius="{StaticResource Radius.Large}"
+                BorderThickness="2"
+                BorderBrush="{StaticResource AccentSoftBrush}"
+                Background="{StaticResource SurfaceBrush}"
+                SnapsToDevicePixels="True"
+                Padding="40">
+            <Border.Effect>
+                <StaticResource ResourceKey="Shadow.Accent" />
+            </Border.Effect>
+
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="Solte aqui o ficheiro para analisar"
+                           HorizontalAlignment="Center"
+                           Foreground="{StaticResource TextPrimaryBrush}"
+                           FontSize="18"
+                           FontWeight="SemiBold" />
+
+                <TextBlock Grid.Row="1"
+                           Text="ou clique para selecionar manualmente (placeholder)"
+                           HorizontalAlignment="Center"
+                           Margin="0,8,0,0"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           FontSize="13" />
+
+                <StackPanel Grid.Row="2"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Center"
+                            Margin="0,20,0,0">
+                    <Border Width="40" Height="40" CornerRadius="{StaticResource Radius.Medium}" Background="{StaticResource SurfaceAltBrush}">
+                        <Viewbox>
+                            <TextBlock Text="⬆"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Center"
+                                       Foreground="{StaticResource AccentSoftBrush}" />
+                        </Viewbox>
+                    </Border>
+                    <StackPanel Orientation="Vertical" Margin="8,0,0,0">
+                        <TextBlock Text="Suporta .exe, .dll, .zip"
+                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                   FontSize="12" />
+                        <TextBlock Text="O ficheiro será enviado para o backend quando integrares esta UI."
+                                   Foreground="{StaticResource TextMutedBrush}"
+                                   FontSize="11" />
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Selected file + options -->
+        <StackPanel Grid.Row="2"
+                    Orientation="Vertical"
+                    Margin="0,24,0,0">
+            <Border Background="{StaticResource PrimaryBackgroundBrush}"
+                    BorderBrush="{StaticResource BorderBrushBase}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource Radius.Medium}"
+                    Padding="10"
+                    Visibility="{Binding ElementName=AnalysisOptionsPanel, Path=Visibility}">
+                <StackPanel Orientation="Vertical" Margin="0,0,0,4">
+                    <TextBlock Text="Ficheiro selecionado"
+                               Foreground="{StaticResource TextPrimaryBrush}"
+                               FontWeight="SemiBold" />
+                    <TextBlock x:Name="SelectedFileText"
+                               Text="Nenhum ficheiro selecionado."
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               FontSize="12" />
+                </StackPanel>
+            </Border>
+
+            <Border x:Name="AnalysisOptionsPanel"
+                    Background="{StaticResource PrimaryBackgroundBrush}"
+                    BorderBrush="{StaticResource BorderBrushBase}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource Radius.Medium}"
+                    Padding="12"
+                    Visibility="Collapsed">
+                <StackPanel Orientation="Vertical" Margin="0,10,0,0">
+                    <TextBlock Text="Escolha o tipo de análise"
+                               Foreground="{StaticResource TextPrimaryBrush}"
+                               FontWeight="SemiBold" />
+                    <TextBlock Text="(Ainda não ligado ao backend — apenas placeholder visual.)"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               FontSize="11" />
+
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <Button Content="Análise estática"
+                                Width="150"
+                                Padding="8,6"
+                                Click="OnStaticAnalysisClicked"
+                                Style="{StaticResource AccentButtonStyle}" />
+                        <Button Content="Análise comportamental"
+                                Width="190"
+                                Padding="8,6"
+                                Margin="12,0,0,0"
+                                Click="OnDynamicAnalysisClicked"
+                                Style="{StaticResource ModernButtonStyle}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </Grid>
+</Page>
+

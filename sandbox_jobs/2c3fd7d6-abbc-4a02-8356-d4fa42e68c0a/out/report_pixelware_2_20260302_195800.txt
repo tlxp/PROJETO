@@ -1,0 +1,159 @@
+================================================================================
+RELATÓRIO DE ANÁLISE - RAT ANALYZER
+================================================================================
+Data/Hora: 2026-02-27T17:46:29.136090
+
+RESUMO
+----------------------------------------
+  C&C: 7  |  Stealer: 2  |  Persistência: 0
+  Evasão: 9  |  YARA: 2  |  Ofuscação: 1
+
+--------------------------------------------------------------------------------
+INFORMAÇÕES DO FICHEIRO
+--------------------------------------------------------------------------------
+Nome: pixelware_2.dll
+Tamanho: 1,412,096 bytes
+Extensão: .dll
+MD5: 2bd6c4132fdc247cda2b9926094cfa2a
+SHA256: 5b346f96dcb555393b4cf82d1b5c29b9b24ac6eb627918f08425a88e54f86bbe
+
+--------------------------------------------------------------------------------
+SCORE DE RISCO
+--------------------------------------------------------------------------------
+Score: 84/100
+Nível: CRÍTICO
+
+(O score é calculado sobre o binário: análise estática, YARA e deobfuscação do .exe/.dll.
+ Não depende do código fonte descompilado; funciona mesmo quando a descompilação falha.)
+
+Detalhes do Score:
+  - Suspicious Imports: 3 ocorrências = 15/15 pontos
+  - Suspicious Functions: 5 ocorrências = 15/18 pontos
+  - C2 Strings: 7 ocorrências = 14/20 pontos
+  - Stealer Indicators: 2 ocorrências = 6/15 pontos
+  - Persistence Indicators: 0 ocorrências = 0/10 pontos
+  - Evasion Techniques: 9 ocorrências = 15/15 pontos
+  - Yara Matches: 2 ocorrências = 10/20 pontos
+  - Packer Indicators: 1 ocorrências = 5/10 pontos
+  - Obfuscation: 1 ocorrências = 2/10 pontos
+  - High Entropy: 1 ocorrências = 2/5 pontos
+
+--------------------------------------------------------------------------------
+ANÁLISE ESTÁTICA
+--------------------------------------------------------------------------------
+
+Imports Suspeitos (3):
+  - shell32.dll
+  - kernel32.dll
+  - user32.dll
+
+Funções Suspeitas (5):
+  - SetClipboardData
+  - WriteProcessMemory
+  - ReadFile
+  - WriteFile
+  - GetAsyncKeyState
+
+Strings C&C Detectadas (7):
+  - http://purl.org/dc/elements/1.1/
+  - http://ns.adobe.com/photoshop/1.0/
+  - http://ns.adobe.com/xap/1.0/mm/
+  - http://ns.adobe.com/xap/1.0/
+  - GetAsync
+  - http://ns.adobe.com/xap/1.0/sType/ResourceEvent#
+  - http://www.w3.org/1999/02/22-rdf-syntax-ns#
+
+Indicadores de Stealer/Credenciais (2):
+  - SetClipboardData
+  - GetAsyncKeyState
+
+Técnicas de Evasão (9):
+  - VirtualProtect
+  - GetForegroundWindow
+  - QueryPerformanceCounter
+  - VirtualAlloc
+  - IsDebuggerPresent
+  - Debugger
+  - SetUnhandledExceptionFilter
+  - FindWindow
+  - GetTickCount
+
+Entropia das Secções:
+  - .text: 6.7
+  - .rdata: 6.26
+  - .data: 7.89
+  - .rsrc: 4.72
+  - .reloc: 6.79
+
+Indicadores de Packer (1):
+  - Alta entropia na secção .data (7.89)
+
+--------------------------------------------------------------------------------
+SCAN YARA
+--------------------------------------------------------------------------------
+Total de Matches: 2
+
+Regra: Evasion_Techniques
+  Descrição: Tecnicas de evasao de deteccao e anti-analise
+  Severidade: medium
+  Tags: 
+  Strings encontradas: 3
+
+Regra: RAT_Generic_Indicators
+  Descrição: Indicadores genericos de Remote Access Trojans
+  Severidade: high
+  Tags: 
+  Strings encontradas: 11
+
+--------------------------------------------------------------------------------
+DESCOMPILAÇÃO .NET
+--------------------------------------------------------------------------------
+Status: ✗ Falhou
+Motivo: ILSpy retornou código 70.
+Erro: ICSharpCode.Decompiler.Metadata.MetadataFileNotSupportedException: PE file does not contain any managed metadata.
+   at ICSharpCode.Decompiler.Metadata.MetadataFile..ctor(MetadataFileKind kind, String fileName, PEReader reader, MetadataReaderOptions metadataOptions) in /_/ICSharpCode.Decompiler/Metadata/MetadataFile.cs:line 245
+   at ICSharpCode.Decompiler.Metadata.PEFile..ctor(String fileName, PEReader reader, MetadataReaderOptions metadataOptions) in /_/ICSharpCode.Decompiler/Metadata/PEFile.cs:line 49
+   at ICSharpCode.Decompiler.Metadata.PEFile..ctor(String fileName, PEStreamOptions streamOptions, MetadataReaderOptions metadataOptions) in /_/ICSharpCode.Decompiler/Metadata/PEFile.cs:line 39
+   at ICSharpCode.ILSpyCmd.ILSpyCmdProgram.DecompileAsProject(String assemblyFileName, String projectFileName) in D:\a\ILSpy\ILSpy\ICSharpCode.ILSpyCmd\IlspyCmdProgram.cs:line 377
+   at ICSharpCode.ILSpyCmd.ILSpyCmdProgram.OnExecuteAsync(CommandLineApplication app) in D:\a\ILSpy\ILSpy\ICSharpCode.ILSpyCmd\IlspyCmdProgram.cs:line 194
+
+Nota: Este ficheiro não tem o cabeçalho CLR de um assembly .NET. Pode ser um executável nativo (C/C++) ou .NET compilado com Native AOT (neste caso o ILSpy não consegue descompilar). Para descompilar, use um .exe/.dll .NET normal (ex.: dotnet publish sem PublishAot).
+
+--------------------------------------------------------------------------------
+DESMONTAGEM (ASSEMBLY)
+--------------------------------------------------------------------------------
+Status: ✓ Gerado (binário nativo ou .NET AOT)
+Ficheiro: C:\Users\jmigu\Desktop\PROJETO\PROJETO\decompiled\pixelware_2\pixelware_2.asm
+Instruções: 90739 | Arquitetura: x86
+
+--------------------------------------------------------------------------------
+DESCOMPILAÇÃO GHIDRA (PSEUDO-C)
+--------------------------------------------------------------------------------
+Status: ✓ Gerado com PyGhidra
+Ficheiro: C:\Users\jmigu\Desktop\PROJETO\PROJETO\decompiled\pixelware_2\pixelware_2_decompiled.c
+Funções decompiladas: 3071
+
+--------------------------------------------------------------------------------
+DEOBFUSCAÇÃO
+--------------------------------------------------------------------------------
+Indicadores de Ofuscação:
+  - C# string concatenation: 4 ocorrências
+
+Strings Base64 Detectadas (2):
+  Encoded: debug/debugambientcube
+  Decoded: u^n.m
+  Encoded: 9Crc6tgXmKVeU2cD4Eo3R/2
+  Decoded: *^SgJ7G
+
+Técnicas Aplicadas: Base64 decoding
+
+--------------------------------------------------------------------------------
+CONCLUSÃO
+--------------------------------------------------------------------------------
+O ficheiro apresenta um nível de risco CRÍTICO.
+Score de risco: 84/100
+
+⚠️  AVISO: Este ficheiro apresenta características altamente suspeitas!
+Recomenda-se análise adicional e isolamento do sistema.
+
+================================================================================

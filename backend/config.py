@@ -12,6 +12,12 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 REPORTS_DIR = PROJECT_ROOT / "reports"
 DECOMPILED_DIR = PROJECT_ROOT / "decompiled"
 
+# Diretório base para jobs de análise (estática/dinâmica)
+SANDBOX_JOBS_DIR = PROJECT_ROOT / "sandbox_jobs"
+
+# Base de dados SQLite para histórico/auditoria (por defeito dentro de sandbox_jobs/)
+ANALYSIS_DB_PATH = SANDBOX_JOBS_DIR / "analysis.db"
+
 # Dados do analisador
 YARA_RULES_DIR = PROJECT_ROOT / "yara_rules"
 

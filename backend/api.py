@@ -1,16 +1,18 @@
 """
 API REST para o RAT Analyzer.
-Expõe um endpoint de upload e análise para o frontend (drop-n-analyze).
+Expõe um endpoint de upload e análise para o frontend (drop-n-analyze) e para o WPF.
 """
 
 import os
 import sys
 import uuid
 import tempfile
+import time
+import logging
 from pathlib import Path
 from typing import Iterable, List, Tuple
 
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -20,6 +22,15 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 import config
 from rat_analyzer import RATAnalyzer
+from analysis_jobs import AnalysisType, AnalysisJob, create_job, get_job, get_job_payload
+import job_store
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
+logger = logging.getLogger("rat_analyzer_api")
+
 
 app = FastAPI(title="RAT Analyzer API", version="1.0.0")
 
@@ -38,7 +49,15 @@ CCODE_WINDOW_RADIUS: int = 40   # ±40 linhas em volta de cada indicador
 
 
 def _read_file_safe(path: str | None, encoding: str = "utf-8", errors: str = "replace") -> str:
-    if not path or not Path(path).exists():
+    if not path:
+        return ""
+    p = Path(path)
+    if not p.exists():
+        return ""
+    try:
+        with open(p, encoding=encoding, errors=errors) as f:
+            return f.read()
+    except Exception:  # noqa: BLE001
         return ""
 
 
@@ -127,23 +146,20 @@ def _summarize_c_code(c_code: str, flagged_indicators: Iterable[str], max_chars:
                 return "\n".join(out_lines)
 
     return "\n".join(out_lines)
-    try:
-        with open(path, encoding=encoding, errors=errors) as f:
-            return f.read()
-    except Exception:
-        return ""
 
 
 @app.post("/api/analyze")
-async def analyze_file(file: UploadFile = File(...)):
+async def analyze_file(request: Request, file: UploadFile = File(...)):
     """
     Recebe um ficheiro (.exe, .dll, .cs), executa a análise e devolve
     relatório, código C#/C e assembly/IL para exibir no frontend.
     """
+    client_host = request.client.host if request.client else "unknown"
     # Validar extensão
     name = file.filename or "file"
     ext = Path(name).suffix.lower()
     if ext not in (".exe", ".dll", ".cs"):
+        logger.warning("Rejeitado ficheiro %s (%s) de %s: extensão não suportada", name, ext, client_host)
         raise HTTPException(400, "Apenas ficheiros .exe, .dll ou .cs são suportados.")
 
     suffix = ext
@@ -151,26 +167,38 @@ async def analyze_file(file: UploadFile = File(...)):
     tmp_dir = Path(tempfile.mkdtemp(prefix=prefix))
     target_path = tmp_dir / name
 
+    logger.info("Recebido pedido /api/analyze de %s para ficheiro %s (ext=%s)", client_host, name, ext)
     try:
         contents = await file.read()
         target_path.write_bytes(contents)
     except Exception as e:
         raise HTTPException(500, f"Erro ao guardar ficheiro: {e}")
 
+    start_time = time.perf_counter()
     try:
         # Usar diretório de saída dedicado a este pedido
         output_dir = tmp_dir / "out"
         output_dir.mkdir(exist_ok=True)
 
+        def log_cb(msg: str) -> None:
+            logger.info("[ANALYZE %s] %s", name, msg)
+
         analyzer = RATAnalyzer(
             str(target_path),
             output_dir=str(output_dir),
             use_dotnet_decompiler=(ext in (".exe", ".dll")),
+            log_callback=log_cb,
         )
+        logger.info("Iniciar análise estática para %s", target_path)
         results = analyzer.analyze()
+        elapsed = time.perf_counter() - start_time
+        logger.info("Análise terminada para %s em %.1f segundos (risk_score=%s, risk_level=%s)",
+                    name, elapsed, results.get("risk_score"), results.get("risk_level"))
     except FileNotFoundError as e:
+        logger.error("Erro FileNotFound durante análise de %s: %s", name, e)
         raise HTTPException(400, str(e))
     except Exception as e:
+        logger.exception("Erro inesperado durante análise de %s", name)
         raise HTTPException(500, f"Erro na análise: {str(e)}")
     finally:
         # Limpeza: remover ficheiro temporário (opcional manter out_dir por um tempo)
@@ -359,6 +387,65 @@ async def analyze_file_stream(file: UploadFile = File(...)):
             yield line.encode("utf-8")
 
     return StreamingResponse(streamer(), media_type="application/x-ndjson")
+
+
+@app.post("/api/analysis")
+async def submit_analysis(
+    file: UploadFile = File(...),
+    analysis_type: AnalysisType = Query(
+        AnalysisType.STATIC,
+        description="Tipo de análise: static, dynamic ou both.",
+    ),
+) -> dict:
+    """
+    Submete um job de análise (estática/dinâmica/ambas) e devolve um ID.
+
+    Esta rota é a base da nova pipeline:
+      - O ficheiro é guardado num diretório isolado em SANDBOX_JOBS_DIR
+      - A análise estática reutiliza o RATAnalyzer existente
+      - A análise dinâmica está ligada, por agora, a um stub onde o
+        orquestrador de VMs será implementado.
+    """
+    name = file.filename or "file"
+    ext = Path(name).suffix.lower()
+    if ext not in (".exe", ".dll", ".cs"):
+        raise HTTPException(400, "Apenas ficheiros .exe, .dll ou .cs são suportados.")
+
+    try:
+        contents = await file.read()
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(500, f"Erro ao ler ficheiro: {e}")
+
+    job = create_job(name, contents, analysis_type)
+
+    return {
+        "jobId": job.id,
+        "analysisType": job.analysis_type.value,
+        "status": job.status.value,
+    }
+
+
+@app.get("/api/analysis/{job_id}")
+async def get_analysis_status(job_id: str) -> dict:
+    """
+    Devolve o estado e os resultados (quando disponíveis) de um job de análise.
+    """
+    payload = get_job_payload(job_id)
+    if not payload:
+        raise HTTPException(404, "Job não encontrado.")
+    return payload
+
+
+@app.get("/api/analyses")
+async def list_analyses(limit: int = 50, offset: int = 0) -> dict:
+    """
+    Lista histórico de análises (persistente em SQLite).
+    """
+    try:
+        items = job_store.list_jobs(limit=limit, offset=offset)
+        return {"items": items, "limit": limit, "offset": offset}
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(500, f"Erro ao listar análises: {e}")
 
 
 @app.get("/api/health")

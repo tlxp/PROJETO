@@ -1,0 +1,98 @@
+<Page x:Class="RatAnalyzer.Desktop.Views.LoadingPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      mc:Ignorable="d"
+      Background="{StaticResource PrimaryBackgroundBrush}">
+    <Grid Margin="32">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="3*" />
+            <ColumnDefinition Width="2*" />
+        </Grid.ColumnDefinitions>
+
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.ColumnSpan="2" Orientation="Vertical" Margin="0,0,0,24">
+            <TextBlock Text="A preparar o ambiente de sandbox"
+                       Style="{StaticResource TitleTextBlock}" />
+            <TextBlock Text="A iniciar backend em localhost, a preparar VM e a configurar sandbox segura..."
+                       Margin="0,6,0,0"
+                       Style="{StaticResource SubtitleTextBlock}" />
+        </StackPanel>
+
+        <!-- Loader + status -->
+        <StackPanel Grid.Row="1" Orientation="Vertical" VerticalAlignment="Center" Margin="0,40,0,0">
+            <Grid Width="180" Height="180">
+                <!-- Circular loader -->
+                <Ellipse Stroke="{StaticResource BorderBrushBase}"
+                         StrokeThickness="10" />
+                <Ellipse Stroke="{StaticResource SuccessBrush}"
+                         StrokeThickness="10"
+                         StrokeStartLineCap="Round"
+                         StrokeEndLineCap="Round">
+                    <Ellipse.StrokeDashArray>
+                        4 6
+                    </Ellipse.StrokeDashArray>
+                    <Ellipse.RenderTransform>
+                        <RotateTransform x:Name="SpinnerRotate" CenterX="90" CenterY="90" />
+                    </Ellipse.RenderTransform>
+                </Ellipse>
+            </Grid>
+
+            <TextBlock x:Name="StatusText"
+                       Text="A iniciar..."
+                       Margin="0,24,0,0"
+                       Foreground="White"
+                       FontSize="16"
+                       FontWeight="SemiBold" />
+        </StackPanel>
+
+        <!-- Logs -->
+        <Border Grid.Column="1"
+                Grid.Row="1"
+                Background="{StaticResource PrimaryBackgroundBrush}"
+                BorderBrush="{StaticResource BorderBrushBase}"
+                BorderThickness="1"
+                CornerRadius="{StaticResource Radius.Medium}"
+                Padding="12">
+            <DockPanel>
+                <TextBlock Text="Logs de arranque"
+                           DockPanel.Dock="Top"
+                           Foreground="{StaticResource TextPrimaryBrush}"
+                           FontWeight="SemiBold"
+                           Margin="0,0,0,8" />
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl x:Name="LogsList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
+                                           FontFamily="Consolas"
+                                           FontSize="12"
+                                           Text="{Binding}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
+
+        <!-- Animations -->
+        <Grid.Resources>
+            <Storyboard x:Key="SpinnerStoryboard" RepeatBehavior="Forever">
+                <DoubleAnimation Storyboard.TargetName="SpinnerRotate"
+                                 Storyboard.TargetProperty="Angle"
+                                 From="0"
+                                 To="360"
+                                 Duration="0:0:1.2"
+                                 RepeatBehavior="Forever" />
+            </Storyboard>
+        </Grid.Resources>
+    </Grid>
+</Page>
+
