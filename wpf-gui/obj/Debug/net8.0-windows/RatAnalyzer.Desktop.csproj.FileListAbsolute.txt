@@ -29,3 +29,5 @@ C:\Users\jmigu\Desktop\PROJETO\PROJETO\wpf-gui\obj\Debug\net8.0-windows\refint\R
 C:\Users\jmigu\Desktop\PROJETO\PROJETO\wpf-gui\obj\Debug\net8.0-windows\RatAnalyzer.Desktop.pdb
 C:\Users\jmigu\Desktop\PROJETO\PROJETO\wpf-gui\obj\Debug\net8.0-windows\RatAnalyzer.Desktop.genruntimeconfig.cache
 C:\Users\jmigu\Desktop\PROJETO\PROJETO\wpf-gui\obj\Debug\net8.0-windows\ref\RatAnalyzer.Desktop.dll
+C:\Users\jmigu\Desktop\PROJETO\PROJETO\wpf-gui\obj\Debug\net8.0-windows\Views\VmAnalysisWindow.baml
+C:\Users\jmigu\Desktop\PROJETO\PROJETO\wpf-gui\obj\Debug\net8.0-windows\Views\VmAnalysisWindow.g.cs

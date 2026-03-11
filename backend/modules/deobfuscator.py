@@ -232,7 +232,7 @@ class Deobfuscator:
         except Exception:
             return False, 0
         data_section_names = (b".rdata", b".data", b".idata", b"UPX1")
-        patches: List[Tuple[int, bytes]] = []  # (file_offset, new_data)
+        patches: List[Tuple[int, bytes, bytes]] = []  # (file_offset, original_data, new_data)
         for section in pe.sections:
             name = section.Name.rstrip(b"\x00")
             if name not in data_section_names and not name.startswith(b".rdata") and not name.startswith(b".data"):
@@ -268,7 +268,7 @@ class Deobfuscator:
                     if best_key is not None and best_ratio >= 0.90:
                         new_data = self._xor_decrypt_byte(block, best_key)
                         file_off = raw_offset + start
-                        patches.append((file_off, new_data))
+                        patches.append((file_off, block, new_data))
                         break
         try:
             pe.close()
@@ -279,12 +279,22 @@ class Deobfuscator:
         try:
             with open(file_path, "rb") as f:
                 out_data = bytearray(f.read())
-            for (offset, new_data) in patches:
+            out_parent = Path(output_path).parent
+            out_parent.mkdir(parents=True, exist_ok=True)
+            for (offset, _orig, new_data) in patches:
                 if offset + len(new_data) <= len(out_data):
                     out_data[offset : offset + len(new_data)] = new_data
-            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
             with open(output_path, "wb") as f:
                 f.write(out_data)
+            # Gravar regiões obfuscadas/deobfuscadas para auditoria
+            stem = Path(file_path).stem
+            regions_path = out_parent / f"{stem}.obfuscated_binary_regions.txt"
+            with open(regions_path, "w", encoding="utf-8", errors="replace") as rf:
+                rf.write("# Regiões XOR patched (offset, tamanho, bytes originais hex, bytes deobfuscados hex)\n\n")
+                for (offset, orig, new_data) in patches:
+                    rf.write(f"--- offset 0x{offset:X} size {len(orig)} ---\n")
+                    rf.write(f"original_hex: {orig.hex()}\n")
+                    rf.write(f"deobfuscated_hex: {new_data.hex()}\n\n")
             return True, len(patches)
         except Exception:
             return False, 0
@@ -401,4 +411,40 @@ class Deobfuscator:
         except Exception as e:
             result["error"] = str(e)
         return result
+
+    def deobfuscate_content(self, content: str) -> str:
+        """
+        Aplica deobfuscação a um bloco de texto (ex.: snippet): decodifica Base64
+        em comentários. Reutilizável pelo obfuscation_snippet_extractor.
+        :param content: Texto (ex. várias linhas de código C#)
+        :return: Texto com comentários '// Decoded Base64: ...' adicionados
+        """
+        if not content or not content.strip():
+            return content
+        lines = content.split("\n")
+        new_lines = []
+        base64_literal = re.compile(r'"([A-Za-z0-9+/]{20,}={0,2})"')
+        for line in lines:
+            new_lines.append(line)
+            decoded_parts = []
+            for m in base64_literal.finditer(line):
+                b64 = m.group(1)
+                if any(fp in b64.lower() for fp in self.BASE64_DOTNET_FALSE_POSITIVES):
+                    continue
+                try:
+                    raw = base64.b64decode(b64 + "==")
+                    decoded = raw.decode("utf-8", errors="replace")
+                    if len(decoded) > 2 and sum(1 for c in decoded if c.isprintable() or c in "\n\r\t") / max(len(decoded), 1) >= 0.6:
+                        safe = decoded.replace("*/", "* /").replace("//", "/ /")[:150]
+                        if len(decoded) > 150:
+                            safe += "..."
+                        decoded_parts.append(safe)
+                except Exception:
+                    pass
+            if decoded_parts:
+                comment = "  // Decoded Base64: " + " | ".join(f'"{p}"' for p in decoded_parts[:3])
+                if len(decoded_parts) > 3:
+                    comment += f" (+{len(decoded_parts) - 3} mais)"
+                new_lines.append(comment)
+        return "\n".join(new_lines)
 

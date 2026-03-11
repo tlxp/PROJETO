@@ -11,7 +11,7 @@
         <StackPanel Grid.Row="0" Margin="8,0,8,12">
             <TextBlock Text="A preparar o ambiente de sandbox"
                        Style="{StaticResource TitleTextBlock}" />
-            <TextBlock Text="A iniciar backend em localhost, a restaurar snapshot limpo e a aguardar o agente da VM..."
+            <TextBlock Text="A iniciar backend (porta 8000) e frontend (porta 8080); ao fechar a aplicação as portas são libertadas."
                        Style="{StaticResource SubtitleTextBlock}"
                        Margin="0,4,0,0" />
         </StackPanel>
@@ -91,7 +91,7 @@
                                    FontWeight="SemiBold" />
                         <TextBlock Text=" · "
                                    Foreground="{StaticResource TextMutedBrush}" />
-                        <TextBlock Text="Inicialização da VM de sandbox e backend"
+                        <TextBlock Text="Backend e frontend (portas 8000 e 8080)"
                                    Foreground="{StaticResource TextSecondaryBrush}"
                                    FontSize="11" />
                     </StackPanel>

@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -25,6 +26,8 @@ public partial class MainDashboardView : UserControl
     }
 
     private string? _selectedFilePath;
+    private string? _lastStaticJobId;
+    private string? _lastStaticJobUrl;
 
     public MainDashboardView()
     {
@@ -62,6 +65,9 @@ public partial class MainDashboardView : UserControl
         StaticAnalysisProgressBar.Visibility = Visibility.Visible;
         StaticAnalysisProgressBar.IsIndeterminate = true;
         StaticAnalysisProgressBar.Value = 0;
+        StaticAnalysisJobIdText.Visibility = Visibility.Collapsed;
+        StaticAnalysisJobUrlText.Visibility = Visibility.Collapsed;
+        OpenResultsButton.Visibility = Visibility.Collapsed;
 
         try
         {
@@ -71,14 +77,18 @@ public partial class MainDashboardView : UserControl
             StaticAnalysisProgressBar.IsIndeterminate = false;
             StaticAnalysisProgressBar.Value = 100;
 
+            // Atualiza cache e elementos de UI com o último jobId/URL.
+            _lastStaticJobId = jobId;
+            _lastStaticJobUrl = $"{FrontendUrl}/resultados?jobId={Uri.EscapeDataString(jobId)}";
+            StaticAnalysisJobIdText.Text = $"Job ID: {jobId}";
+            StaticAnalysisJobUrlText.Text = _lastStaticJobUrl;
+            StaticAnalysisJobIdText.Visibility = Visibility.Visible;
+            StaticAnalysisJobUrlText.Visibility = Visibility.Visible;
+            OpenResultsButton.Visibility = Visibility.Visible;
+
             try
             {
-                var url = $"{FrontendUrl}/resultados?jobId={Uri.EscapeDataString(jobId)}";
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = url,
-                    UseShellExecute = true
-                });
+                OpenResultsInBrowser();
             }
             catch (Exception ex)
             {
@@ -124,17 +134,18 @@ public partial class MainDashboardView : UserControl
         // Garante que o backend (uvicorn) está a correr antes de submeter o pedido.
         await EnsureBackendRunningAsync(client);
 
-        StaticAnalysisStatusText.Text = "A submeter job de análise estática...";
+        // 1) Enviar o ficheiro para /api/analyze (análise estática síncrona, como o frontend).
+        StaticAnalysisStatusText.Text = "A enviar ficheiro para análise estática...";
 
         using var form = new MultipartFormDataContent();
         await using var stream = File.OpenRead(filePath);
         var fileContent = new StreamContent(stream);
         form.Add(fileContent, "file", Path.GetFileName(filePath));
 
-        HttpResponseMessage submitResponse;
+        HttpResponseMessage analyzeResponse;
         try
         {
-            submitResponse = await client.PostAsync($"{ApiBaseUrl}/api/analysis?analysis_type=static", form);
+            analyzeResponse = await client.PostAsync($"{ApiBaseUrl}/api/analyze", form);
         }
         catch (HttpRequestException)
         {
@@ -144,127 +155,118 @@ public partial class MainDashboardView : UserControl
                 "uvicorn api:app --reload --host 0.0.0.0 --port 8000");
         }
 
-        if (!submitResponse.IsSuccessStatusCode)
+        if (!analyzeResponse.IsSuccessStatusCode)
         {
-            var body = await submitResponse.Content.ReadAsStringAsync();
+            var body = await analyzeResponse.Content.ReadAsStringAsync();
             throw new InvalidOperationException(
-                $"Falha ao submeter análise estática (HTTP {(int)submitResponse.StatusCode}).\n\n{body}");
+                $"Falha ao executar análise estática (HTTP {(int)analyzeResponse.StatusCode}).\n\n{body}");
         }
 
-        var json = await submitResponse.Content.ReadAsStringAsync();
-        var submit = JsonSerializer.Deserialize<SubmitResponse>(json, new JsonSerializerOptions
+        var analyzeJson = await analyzeResponse.Content.ReadAsStringAsync();
+        var analyze = JsonSerializer.Deserialize<AnalyzeResponse>(analyzeJson, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        });
+
+        if (analyze is null)
+        {
+            throw new InvalidOperationException("Resposta inesperada do backend ao executar a análise estática.");
+        }
+
+        // 2) Publicar o resultado no backend via /api/analysis/upload_static para obter um jobId
+        //    compatível com /resultados?jobId=... no frontend.
+        StaticAnalysisStatusText.Text = "A publicar resultados no backend...";
+
+        var uploadPayload = new StaticUploadPayload
+        {
+            FileName = analyze.FileName ?? Path.GetFileName(filePath),
+            Report = analyze.Report ?? string.Empty,
+            CCode = analyze.CCode ?? string.Empty,
+            IlCode = analyze.IlCode ?? string.Empty,
+            RiskScore = analyze.RiskScore,
+            RiskLevel = analyze.RiskLevel ?? string.Empty,
+            FlaggedIndicators = analyze.FlaggedIndicators ?? Array.Empty<string>(),
+            FlaggedFunctions = analyze.FlaggedFunctions ?? Array.Empty<object>()
+        };
+
+        // O backend FastAPI espera campos em camelCase (fileName, report, cCode, ilCode, ...).
+        // Configuramos o serializer para gerar JSON em camelCase para alinhar com o modelo StaticAnalysisUpload.
+        var serializeOptions = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
+        var jsonPayload = JsonSerializer.Serialize(uploadPayload, serializeOptions);
+        using var uploadContent = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+
+        HttpResponseMessage uploadResponse;
+        try
+        {
+            uploadResponse = await client.PostAsync($"{ApiBaseUrl}/api/analysis/upload_static", uploadContent);
+        }
+        catch (HttpRequestException)
+        {
+            throw new InvalidOperationException(
+                "Não foi possível publicar o resultado da análise estática no backend.");
+        }
+
+        if (!uploadResponse.IsSuccessStatusCode)
+        {
+            var body = await uploadResponse.Content.ReadAsStringAsync();
+            throw new InvalidOperationException(
+                $"Falha ao registar resultado estático no backend (HTTP {(int)uploadResponse.StatusCode}).\n\n{body}");
+        }
+
+        var uploadJson = await uploadResponse.Content.ReadAsStringAsync();
+        var submit = JsonSerializer.Deserialize<SubmitResponse>(uploadJson, new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
         });
 
         if (submit is null || string.IsNullOrWhiteSpace(submit.JobId))
         {
-            throw new InvalidOperationException("Resposta inesperada ao submeter a análise estática (jobId em falta).");
+            throw new InvalidOperationException("Resposta inesperada ao publicar o resultado estático (jobId em falta).");
         }
 
-        var jobId = submit.JobId;
-        var jobSubmittedAt = DateTime.UtcNow;
-        // Tempo mínimo em segundos antes de aceitar "completed" e abrir o browser (evita "scan instantâneo" e dá tempo ao backend persistir).
-        const int minAnalysisSeconds = 3;
-
-        // Atualiza estado visível para o utilizador com o ID do job.
-        StaticAnalysisStatusText.Text = $"Job de análise criado ({jobId[..8]}...). A aguardar início...";
-        StaticAnalysisProgressBar.IsIndeterminate = true;
-        StaticAnalysisProgressBar.Value = 15;
-
-        var attempts = 0;
-        // ~30 minutos de espera máxima (1 s por tentativa)
-        const int maxAttempts = 1800;
-
-        while (attempts < maxAttempts)
-        {
-            attempts++;
-            await Task.Delay(1000);
-
-            HttpResponseMessage statusResponse;
-            try
-            {
-                statusResponse = await client.GetAsync($"{ApiBaseUrl}/api/analysis/{jobId}");
-            }
-            catch (HttpRequestException)
-            {
-                throw new InvalidOperationException(
-                    "Perdeu-se a ligação ao backend durante o acompanhamento da análise.");
-            }
-
-            if (!statusResponse.IsSuccessStatusCode)
-            {
-                if (statusResponse.StatusCode == System.Net.HttpStatusCode.NotFound)
-                {
-                    throw new InvalidOperationException("Job de análise não encontrado no backend.");
-                }
-
-                var errorBody = await statusResponse.Content.ReadAsStringAsync();
-                throw new InvalidOperationException(
-                    $"Falha ao obter estado da análise (HTTP {(int)statusResponse.StatusCode}).\n\n{errorBody}");
-            }
-
-            var statusJson = await statusResponse.Content.ReadAsStringAsync();
-            var jobStatus = JsonSerializer.Deserialize<JobStatusPayload>(statusJson, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
-
-            if (jobStatus is null || string.IsNullOrWhiteSpace(jobStatus.Status))
-            {
-                StaticAnalysisStatusText.Text = "A aguardar resposta do backend...";
-                continue;
-            }
-
-            var status = jobStatus.Status;
-            if (string.Equals(status, "queued", StringComparison.OrdinalIgnoreCase))
-            {
-                StaticAnalysisStatusText.Text = $"Análise estática em fila no backend... (espera {attempts}s)";
-                StaticAnalysisProgressBar.IsIndeterminate = true;
-                StaticAnalysisProgressBar.Value = 25;
-            }
-            else if (string.Equals(status, "running", StringComparison.OrdinalIgnoreCase))
-            {
-                // Quando entra em running, passamos a barra para modo determinado e avançamos suavemente até ~90%.
-                StaticAnalysisProgressBar.IsIndeterminate = false;
-                var fraction = Math.Min(1.0, attempts / (double)maxAttempts);
-                var value = 30 + fraction * 60; // 30% -> 90%
-                StaticAnalysisProgressBar.Value = value;
-                StaticAnalysisStatusText.Text = $"A executar análise estática... ({attempts}s decorridos)";
-            }
-            else if (string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase))
-            {
-                var elapsedSec = (DateTime.UtcNow - jobSubmittedAt).TotalSeconds;
-                var remaining = minAnalysisSeconds - elapsedSec;
-                if (remaining > 0)
-                {
-                    StaticAnalysisStatusText.Text = "Análise concluída no backend. A guardar resultados...";
-                    await Task.Delay(TimeSpan.FromSeconds(remaining));
-                }
-                StaticAnalysisStatusText.Text = "Análise estática concluída no backend.";
-                StaticAnalysisProgressBar.IsIndeterminate = false;
-                StaticAnalysisProgressBar.Value = 100;
-                return jobId;
-            }
-            else if (string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase))
-            {
-                var errorMessage = string.IsNullOrWhiteSpace(jobStatus.Error)
-                    ? "A análise estática falhou no backend."
-                    : $"A análise estática falhou: {jobStatus.Error}";
-                StaticAnalysisStatusText.Text = "Análise estática falhou.";
-                StaticAnalysisProgressBar.IsIndeterminate = false;
-                StaticAnalysisProgressBar.Value = 0;
-                throw new InvalidOperationException(errorMessage);
-            }
-            else
-            {
-                StaticAnalysisStatusText.Text = $"Estado desconhecido da análise: {status}";
-            }
-        }
-
+        StaticAnalysisStatusText.Text = "Análise estática concluída e registada no backend.";
         StaticAnalysisProgressBar.IsIndeterminate = false;
-        StaticAnalysisProgressBar.Value = 0;
-        throw new TimeoutException("Timeout ao aguardar a conclusão da análise estática.");
+        StaticAnalysisProgressBar.Value = 100;
+
+        return submit.JobId;
+    }
+
+    private void OpenResultsInBrowser()
+    {
+        if (string.IsNullOrWhiteSpace(_lastStaticJobUrl))
+        {
+            MessageBox.Show(
+                "Ainda não existe nenhum job de análise concluído para abrir no navegador.",
+                "RAT Analyzer",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = _lastStaticJobUrl,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Não foi possível abrir a página de resultados no navegador.\n\n{ex.Message}",
+                "RAT Analyzer",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    private void OpenResultsButton_Click(object sender, RoutedEventArgs e)
+    {
+        OpenResultsInBrowser();
     }
 
     private static async Task<bool> IsBackendUpAsync(HttpClient client)
@@ -322,11 +324,18 @@ public partial class MainDashboardView : UserControl
             return;
         }
 
-        MessageBox.Show(
-            $"(Placeholder)\n\nIria ser iniciada a ANÁLISE COMPORTAMENTAL/DINÂMICA em VM para:\n{_selectedFilePath}",
-            "Behavioral Analysis",
-            MessageBoxButton.OK,
-            MessageBoxImage.Information);
+        if (!File.Exists(_selectedFilePath))
+        {
+            MessageBox.Show("O ficheiro selecionado já não existe no disco.", "RAT Analyzer", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var runFirstTimeSetup = FirstTimeVmCheckBox?.IsChecked == true;
+        var vmWindow = new VmAnalysisWindow(_selectedFilePath, runFirstTimeSetup)
+        {
+            Owner = Window.GetWindow(this)
+        };
+        vmWindow.Show();
     }
 
     private sealed class SubmitResponse
@@ -336,9 +345,27 @@ public partial class MainDashboardView : UserControl
         public string? Status { get; set; }
     }
 
-    private sealed class JobStatusPayload
+    private sealed class AnalyzeResponse
     {
-        public string? Status { get; set; }
-        public string? Error { get; set; }
+        public string? Report { get; set; }
+        public string? CCode { get; set; }
+        public string? IlCode { get; set; }
+        public string? FileName { get; set; }
+        public int RiskScore { get; set; }
+        public string? RiskLevel { get; set; }
+        public string[]? FlaggedIndicators { get; set; }
+        public object[]? FlaggedFunctions { get; set; }
+    }
+
+    private sealed class StaticUploadPayload
+    {
+        public string FileName { get; set; } = string.Empty;
+        public string Report { get; set; } = string.Empty;
+        public string CCode { get; set; } = string.Empty;
+        public string IlCode { get; set; } = string.Empty;
+        public int RiskScore { get; set; }
+        public string RiskLevel { get; set; } = string.Empty;
+        public string[]? FlaggedIndicators { get; set; }
+        public object[]? FlaggedFunctions { get; set; }
     }
 }

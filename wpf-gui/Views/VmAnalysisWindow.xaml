@@ -1,0 +1,72 @@
+<Window x:Class="RatAnalyzer.Desktop.Views.VmAnalysisWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Análise comportamental em VM"
+        Width="900"
+        Height="620"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource PrimaryBackgroundBrush}"
+        ResizeMode="CanResizeWithGrip"
+        WindowStyle="SingleBorderWindow">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Text="Log da análise em tempo real (comandos e saída da VM)"
+                   Style="{StaticResource SubtitleTextBlock}"
+                   Margin="0,0,0,8" />
+
+        <Border Grid.Row="1"
+                BorderBrush="{StaticResource BorderBrushBase}"
+                BorderThickness="1"
+                CornerRadius="{StaticResource Radius.Small}"
+                Background="#0a0f1a"
+                Padding="8">
+            <ScrollViewer x:Name="TerminalScrollViewer"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Auto"
+                          Padding="4">
+                <TextBlock x:Name="TerminalOutput"
+                           TextWrapping="NoWrap"
+                           FontFamily="Consolas"
+                           FontSize="12"
+                           Foreground="{StaticResource TextPrimaryBrush}"
+                           Padding="4"
+                           VerticalAlignment="Top"
+                           HorizontalAlignment="Left" />
+            </ScrollViewer>
+        </Border>
+
+        <ProgressBar x:Name="ProgressBar"
+                    Grid.Row="2"
+                    Height="6"
+                    Margin="0,8,0,0"
+                    IsIndeterminate="True"
+                    Visibility="Visible" />
+
+        <Grid Grid.Row="3" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="StatusText"
+                       Grid.Column="0"
+                       VerticalAlignment="Center"
+                       Style="{StaticResource MutedTextBlock}"
+                       Text="A iniciar..." />
+            <Button x:Name="CloseButton"
+                    Grid.Column="1"
+                    Content="Fechar"
+                    IsEnabled="False"
+                    MinWidth="100"
+                    Padding="12,6"
+                    Style="{StaticResource ModernButtonStyle}"
+                    Click="CloseButton_Click" />
+        </Grid>
+    </Grid>
+</Window>

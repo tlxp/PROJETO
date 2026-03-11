@@ -23,3 +23,8 @@ YARA_RULES_DIR = PROJECT_ROOT / "yara_rules"
 
 # Projeto de exemplo para testes (opcional)
 SAMPLE_PROJECT_DIR = PROJECT_ROOT / "programa"
+
+# Limites para extração de trechos obfuscados (evitar ficheiros enormes)
+OBFUSCATION_SNIPPETS_MAX = 50
+OBFUSCATION_SNIPPET_MAX_LINES = 50
+OBFUSCATION_CONTEXT_LINES = 3

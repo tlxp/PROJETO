@@ -35,6 +35,13 @@ decompiled/
 programa/bin/
 programa/obj/
 
+# WPF GUI – binários e artefatos de build
+wpf-gui/bin/
+wpf-gui/obj/
+
+# Sandbox – jobs e base de dados de análise (dados de runtime)
+sandbox_jobs/
+
 # IDE
 .vscode/
 .idea/

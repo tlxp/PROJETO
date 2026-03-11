@@ -104,14 +104,25 @@
                                 Style="{StaticResource AccentButtonStyle}"
                                 Click="DynamicAnalysis_Click"/>
                     </StackPanel>
+                    <CheckBox x:Name="FirstTimeVmCheckBox"
+                              Content="Primeira entrada na VM (instalar software comum com winget e criar snapshot)"
+                              Foreground="{StaticResource TextSecondaryBrush}"
+                              FontSize="11"
+                              Margin="0,8,0,0"
+                              HorizontalAlignment="Center"
+                              IsChecked="False"
+                              ToolTip="Marque se for a primeira vez: instala Chrome, 7zip, VSCode, etc. na VM e cria o snapshot limpo antes de correr a amostra."/>
                     <StackPanel Orientation="Vertical"
                                 Margin="0,12,0,0"
-                                HorizontalAlignment="Center">
+                                HorizontalAlignment="Center"
+                                Width="360">
                         <TextBlock x:Name="StaticAnalysisStatusText"
                                    Text="A preparar análise estática..."
                                    Visibility="Collapsed"
                                    Foreground="{StaticResource TextSecondaryBrush}"
                                    FontSize="12"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
                                    HorizontalAlignment="Center" />
                         <ProgressBar x:Name="StaticAnalysisProgressBar"
                                      Width="260"
@@ -120,7 +131,31 @@
                                      Maximum="100"
                                      Value="0"
                                      IsIndeterminate="False"
-                                     Visibility="Collapsed" />
+                                     Visibility="Collapsed"
+                                     Margin="0,4,0,0" />
+                        <!-- Informação detalhada sobre o job atual (ID e URL de resultados) -->
+                        <TextBlock x:Name="StaticAnalysisJobIdText"
+                                   Margin="0,8,0,0"
+                                   Visibility="Collapsed"
+                                   Foreground="{StaticResource TextMutedBrush}"
+                                   FontSize="11"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap" />
+                        <TextBlock x:Name="StaticAnalysisJobUrlText"
+                                   Margin="0,2,0,0"
+                                   Visibility="Collapsed"
+                                   Foreground="{StaticResource AccentSoftBrush}"
+                                   FontSize="11"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap" />
+                        <Button x:Name="OpenResultsButton"
+                                Content="Abrir página de resultados"
+                                Width="220"
+                                Height="32"
+                                Margin="0,8,0,0"
+                                Visibility="Collapsed"
+                                Style="{StaticResource ModernButtonStyle}"
+                                Click="OpenResultsButton_Click" />
                     </StackPanel>
                 </StackPanel>
             </Grid>

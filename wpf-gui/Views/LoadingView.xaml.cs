@@ -26,20 +26,20 @@ public partial class LoadingView : UserControl
 
     private async Task RunStartupSequenceAsync()
     {
-        AddLog("[INFO] A iniciar backend em http://localhost:8000 ...");
-        await Task.Delay(1000);
-
-        AddLog("[INFO] A verificar estado da VM de sandbox (Hyper-V / Proxmox)...");
-        await Task.Delay(1000);
-
-        AddLog("[INFO] A criar/restaurar snapshot limpo da VM...");
-        await Task.Delay(1200);
-
-        AddLog("[INFO] A arrancar VM e a aguardar vm-agent...");
-        await Task.Delay(1200);
-
-        AddLog("[OK] Ambiente de sandbox pronto. Pode enviar ficheiros para análise.");
-        await Task.Delay(600);
+        try
+        {
+            await LoadingPage.RunFullStartupSequenceAsync(AddLog);
+        }
+        catch (Exception ex)
+        {
+            AddLog("[ERRO] Falha no arranque do ambiente.");
+            AddLog(ex.Message);
+            MessageBox.Show(
+                ex.Message + "\n\nPode iniciar manualmente o backend (pasta 'backend') e o frontend (pasta 'frontend').",
+                "Erro ao iniciar ambiente",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
 
         LoadingCompleted?.Invoke(this, EventArgs.Empty);
     }

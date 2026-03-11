@@ -100,6 +100,52 @@ public partial class LoadingPage : Page
         LoadingCompleted?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>
+    /// Executa a sequência completa de arranque: verifica/inicia backend (porta 8000),
+    /// verifica/inicia frontend (porta 8080) e abre o browser. Usado pela LoadingView
+    /// para que o WPF abra as portas ao iniciar. Ao fechar, ShutdownManager liberta-as.
+    /// </summary>
+    public static async Task RunFullStartupSequenceAsync(Action<string>? addLog = null)
+    {
+        using var client = new HttpClient();
+
+        addLog?.Invoke("[INFO] A verificar backend em http://localhost:8000 ...");
+        var backendAlreadyRunning = await IsBackendUpAsync(client);
+        if (!backendAlreadyRunning)
+        {
+            addLog?.Invoke("[INFO] Backend não encontrado. A iniciar servidor uvicorn...");
+            await StartBackendAsync(client);
+            addLog?.Invoke("[OK] Backend iniciado com sucesso em http://localhost:8000.");
+        }
+        else
+        {
+            addLog?.Invoke("[OK] Backend já se encontra em execução.");
+        }
+
+        addLog?.Invoke("[INFO] Backend pronto. A iniciar frontend...");
+        await EnsureFrontendRunningAsync();
+        addLog?.Invoke("[OK] Frontend pronto.");
+        addLog?.Invoke("[INFO] A abrir interface web em http://localhost:8080 ...");
+        OpenFrontendInBrowser(addLog);
+    }
+
+    private static void OpenFrontendInBrowser(Action<string>? addLog)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = FrontendUrl,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            addLog?.Invoke("[ERRO] Não foi possível abrir automaticamente o navegador.");
+            addLog?.Invoke(ex.Message);
+        }
+    }
+
     private static async Task<bool> IsBackendUpAsync(HttpClient client)
     {
         try
@@ -186,18 +232,18 @@ public partial class LoadingPage : Page
         var projectRoot = backendDir != null ? Directory.GetParent(backendDir)?.FullName : null;
         if (!string.IsNullOrWhiteSpace(projectRoot))
         {
-            var candidate = Path.Combine(projectRoot!, "drop-n-analyze");
+            var candidate = Path.Combine(projectRoot!, "frontend");
             if (Directory.Exists(candidate))
             {
                 return candidate;
             }
         }
 
-        // Fallback: procurar "drop-n-analyze" a partir da pasta do executável.
+        // Fallback: procurar "frontend" a partir da pasta do executável.
         var current = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
         for (var i = 0; i < 6 && current is not null; i++)
         {
-            var candidate = Path.Combine(current.FullName, "drop-n-analyze");
+            var candidate = Path.Combine(current.FullName, "frontend");
             if (Directory.Exists(candidate))
             {
                 return candidate;
@@ -220,7 +266,7 @@ public partial class LoadingPage : Page
         if (string.IsNullOrWhiteSpace(frontendDir))
         {
             throw new InvalidOperationException(
-                "Não foi possível localizar a pasta 'drop-n-analyze' para iniciar o frontend.\n\n" +
+                "Não foi possível localizar a pasta 'frontend' para iniciar o frontend.\n\n" +
                 "Certifique-se de que a estrutura do projeto é a esperada e, se necessário, inicie manualmente o dev server.");
         }
 
@@ -241,7 +287,7 @@ public partial class LoadingPage : Page
         {
             throw new InvalidOperationException(
                 "Não foi possível iniciar automaticamente o dev server do frontend (npm run dev).\n\n" +
-                "Tente iniciar manualmente a partir da pasta 'drop-n-analyze' com:\n" +
+                "Tente iniciar manualmente a partir da pasta 'frontend' com:\n" +
                 "npm run dev\n\n" +
                 ex.Message);
         }
@@ -264,7 +310,7 @@ public partial class LoadingPage : Page
         throw new TimeoutException(
             "Não foi possível confirmar o arranque do frontend em http://localhost:8080.\n\n" +
             "Verifique se o Node/npm estão instalados e, se necessário, inicie manualmente o dev server:\n" +
-            "npm run dev (na pasta drop-n-analyze)");
+            "npm run dev (na pasta frontend)");
     }
 
     private static async Task<bool> IsFrontendUpAsync()

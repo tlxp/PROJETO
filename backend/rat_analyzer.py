@@ -15,11 +15,15 @@ import config
 from modules.static_analyzer import StaticAnalyzer
 from modules.yara_scanner import YaraScanner
 from modules.deobfuscator import Deobfuscator
+from modules.obfuscation_snippet_extractor import (
+    extract_and_write_snippets,
+    extract_and_write_snippets_from_content,
+)
 from modules.risk_scorer import RiskScorer
 from modules.report_generator import ReportGenerator
 from modules.dotnet_decompiler import DotNetDecompiler
 from modules.native_disassembly import disassemble_pe
-from modules.pseudo_c_highlighter import extract_flagged_indicators
+from modules.pseudo_c_highlighter import extract_flagged_indicators, build_flagged_functions
 try:
     from modules.ghidra_decompiler import decompile_binary_to_c
 except ImportError:
@@ -134,14 +138,45 @@ class RATAnalyzer:
         consolidated_file = decomp.get("consolidated_file") or ""
         decompiled_dir = decomp.get("output_dir") or ""
         deobfuscated_file = ""
+        obfuscated_snippets_file = ""
+        obfuscated_snippets_deobfuscated_file = ""
+        obfuscation_snippets_summary: dict = {}
+        self.analysis_results["obfuscated_snippets_file"] = ""
+        self.analysis_results["obfuscated_snippets_deobfuscated_file"] = ""
+        self.analysis_results["obfuscated_snippets_pseudoc_file"] = ""
+        self.analysis_results["obfuscated_snippets_deobfuscated_pseudoc_file"] = ""
+        self.analysis_results["obfuscation_snippets_summary"] = {}
         decompilation_error_summary = ""
         disassembly_file = ""
         decompiled_c_file = ""
+        obfuscated_snippets_pseudoc_file = ""
+        obfuscated_snippets_deobfuscated_pseudoc_file = ""
         if not decomp.get("success") and decomp.get("error"):
             decompilation_error_summary = decomp.get("error_short") or decomp.get("error", "")
             if len(decompilation_error_summary) > 280:
                 decompilation_error_summary = decompilation_error_summary[:277] + "..."
         if decomp.get("success") and consolidated_file and Path(consolidated_file).exists():
+            # Extrair trechos obfuscados para ficheiros separados (antes de deobfuscar o ficheiro inteiro)
+            output_dir_snippets = Path(consolidated_file).parent
+            obf_path, deob_path, summary = extract_and_write_snippets(
+                consolidated_file,
+                output_dir_snippets,
+                self.target_file.stem,
+                self.deobfuscator.deobfuscate_content,
+            )
+            if obf_path:
+                obfuscated_snippets_file = obf_path
+                obfuscated_snippets_deobfuscated_file = deob_path
+                obfuscation_snippets_summary = dict(summary)
+                n = sum(summary.values())
+                self._log(
+                    f"[+] Trechos obfuscados: {n} extraídos; "
+                    f"obfuscado → {obf_path}; deobfuscado → {deob_path}"
+                )
+            self.analysis_results["obfuscated_snippets_file"] = obfuscated_snippets_file
+            self.analysis_results["obfuscated_snippets_deobfuscated_file"] = obfuscated_snippets_deobfuscated_file
+            self.analysis_results["obfuscation_snippets_summary"] = obfuscation_snippets_summary
+
             print("[*] A aplicar deobfuscação ao código descompilado...")
             out_deob = Path(consolidated_file).parent / (self.target_file.stem + ".deobfuscated.cs")
             do_result = self.deobfuscator.deobfuscate_source(consolidated_file, str(out_deob))
@@ -177,6 +212,28 @@ class RATAnalyzer:
                     if ghidra_result.get("success"):
                         decompiled_c_file = ghidra_result.get("output_file", "")
                         self._log(f"[+] Pseudo-C guardado: {decompiled_c_file} ({ghidra_result.get('functions_decompiled', 0)} funções)")
+                        # Extrair trechos obfuscados do pseudo-C
+                        try:
+                            content_c = Path(decompiled_c_file).read_text(encoding="utf-8", errors="replace")
+                            out_dir_c = Path(decompiled_c_file).parent
+                            obf_p, deob_p, sum_p = extract_and_write_snippets_from_content(
+                                content_c,
+                                decompiled_c_file,
+                                out_dir_c,
+                                f"{self.target_file.stem}_pseudoc",
+                                self.deobfuscator.deobfuscate_content,
+                            )
+                            if obf_p:
+                                obfuscated_snippets_pseudoc_file = obf_p
+                                obfuscated_snippets_deobfuscated_pseudoc_file = deob_p
+                                for k, v in sum_p.items():
+                                    obfuscation_snippets_summary[k] = obfuscation_snippets_summary.get(k, 0) + v
+                                self.analysis_results["obfuscation_snippets_summary"] = obfuscation_snippets_summary
+                                self.analysis_results["obfuscated_snippets_pseudoc_file"] = obf_p
+                                self.analysis_results["obfuscated_snippets_deobfuscated_pseudoc_file"] = deob_p
+                                self._log(f"[+] Trechos obfuscados (pseudo-C): {obf_p}")
+                        except Exception as e:
+                            self._log(f"[!] Extração de trechos pseudo-C falhou: {e}")
                     elif ghidra_result.get("error"):
                         self._log(f"[!] Ghidra: {ghidra_result['error'][:80]}...")
                 except Exception as e:
@@ -194,18 +251,37 @@ class RATAnalyzer:
 
         if decompiled_c_file and not Path(decompiled_c_file).exists():
             decompiled_c_file = ""
-        # Guardar last_analysis.json para a GUI poder mostrar "Ver código" / "Ver assembly" / "Ver C"
+        # Guardar last_analysis.json para a GUI / API poder mostrar "Ver código" / "Ver assembly" / "Ver C"
         flagged_indicators = extract_flagged_indicators(self.analysis_results) if decompiled_c_file else []
+        flagged_functions = (
+            build_flagged_functions(
+                Path(decompiled_c_file).read_text(encoding="utf-8", errors="replace"),
+                self.analysis_results,
+                flagged_indicators,
+            )
+            if decompiled_c_file
+            else []
+        )
+        deobf = self.analysis_results.get("deobfuscation", {})
+        obfuscation_indicators = deobf.get("obfuscation_indicators", []) or []
+
         last_analysis = {
             "target_file": str(self.target_file),
             "report_path": str(report_path),
             "decompiled_dir": decompiled_dir or (str(Path(disassembly_file).parent) if disassembly_file else ""),
             "consolidated_file": consolidated_file,
             "deobfuscated_file": deobfuscated_file,
+            "obfuscated_snippets_file": obfuscated_snippets_file,
+            "obfuscated_snippets_deobfuscated_file": obfuscated_snippets_deobfuscated_file,
+            "obfuscated_snippets_pseudoc_file": obfuscated_snippets_pseudoc_file,
+            "obfuscated_snippets_deobfuscated_pseudoc_file": obfuscated_snippets_deobfuscated_pseudoc_file,
+            "obfuscation_snippets_summary": obfuscation_snippets_summary,
+            "obfuscation_indicators": obfuscation_indicators,
             "disassembly_file": disassembly_file,
             "decompiled_c_file": decompiled_c_file,
             "decompilation_error_summary": decompilation_error_summary,
             "flagged_indicators": flagged_indicators,
+            "flagged_functions": flagged_functions,
         }
         last_path = self.output_dir / "last_analysis.json"
         try:

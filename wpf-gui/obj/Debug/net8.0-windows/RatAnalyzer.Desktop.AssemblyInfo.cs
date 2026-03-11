@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("RatAnalyzer.Desktop")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+33d5a84116d885a7392566f22cf5ed8d687b39d9")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4d1ce7bb444ff0e5f8df3c0e3c98abbb489f0833")]
 [assembly: System.Reflection.AssemblyProductAttribute("RatAnalyzer.Desktop")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RatAnalyzer.Desktop")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

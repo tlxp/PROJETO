@@ -89,10 +89,10 @@ pip install -r requirements.txt
 A aplicação **Drop & Analyze** é uma interface web em React que se liga a este backend. Permite arrastar ficheiros .exe ou .dll e ver relatórios, pseudo-C e IL em tempo real.
 
 1. Inicie o backend (servidor Python que expõe a API).
-2. Na pasta `drop-n-analyze`, execute `npm i` e `npm run dev`.
+2. Na pasta `frontend`, execute `npm i` e `npm run dev`.
 3. Abra o URL indicado (ex.: http://localhost:5173) e arraste ficheiros para analisar.
 
-Consulte `drop-n-analyze/README.md` para mais detalhes.
+Consulte `frontend/README.md` para mais detalhes.
 
 ### Interface gráfica Python (recomendado para projetos .NET)
 Arraste um ficheiro `.cs` (ou selecione-o), compile o projeto e escolha analisar o `.exe` ou o `.dll`:
@@ -167,7 +167,7 @@ PROJETO/
 ├── reports/                 # Relatórios gerados (criada automaticamente)
 ├── decompiled/              # Código C# descompilado (ILSpy)
 ├── programa/                # Projeto .NET de exemplo para testes
-├── drop-n-analyze/          # Interface web (React/Vite) – ver drop-n-analyze/README.md
+├── frontend/                # Interface web (React/Vite) – ver frontend/README.md
 ├── requirements.txt
 └── README.md
 ```
@@ -254,9 +254,9 @@ Edite `modules/risk_scorer.py` para ajustar os pesos dos diferentes fatores.
 
 ## Melhorias Futuras
 
-- [ ] Integração com ferramentas de descompilação (Ghidra, IDA)
+- [ ] Integração com IDA (descompilação; Ghidra já integrado)
 - [ ] Deobfuscação avançada
-- [ ] Análise comportamental (sandbox)
+- [ ] Análise comportamental em sandbox real (Hyper-V/Proxmox; stub e scripts já existem)
 - [ ] Suporte para mais formatos de ficheiro
 - [ ] Base de dados de assinaturas de malware conhecido
 - [ ] Análise de rede (tráfego C&C)
@@ -371,6 +371,8 @@ Quando adicionar Sysmon/ETW/hooking, basta preencher as listas no JSON de `/api/
 ## Guia completo: criar a VM de sandbox no Hyper-V (Windows)
 
 Este guia descreve **todos os passos**, sem resumos, para ter uma VM Windows isolada (sem internet) no Hyper-V, pronta para análise dinâmica com o driver `hyperv`.
+
+**Alternativa com relatório via porta serial (sem HTTP):** na pasta **`scripts/hyperv-sandbox/`** existe um fluxo completo que usa **D:\PROJETOVM**, cria a VM, executa a amostra na VM, monitoriza alterações (ficheiros, registry, processos, rede, serviços, tarefas agendadas) e envia o relatório em .txt para o host através de uma **porta serial virtual** (Named Pipe), sem rede nem VM Agent. Ver `scripts/hyperv-sandbox/README.md`.
 
 ### Pré-requisitos
 
@@ -613,7 +615,7 @@ Ajusta `VM_AGENT_BASE_URL` se usaste outro IP na VM.
 
 ### 12. Uso na webapp (drag-and-drop)
 
-1. Arranca o frontend (`npm run dev` em `drop-n-analyze`).
+1. Arranca o frontend (`npm run dev` em `frontend`).
 2. Escolhe **"Apenas dinâmica"** ou **"Ambas"**.
 3. Faz upload do ficheiro (drag-and-drop ou seleção).
 

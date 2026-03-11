@@ -210,6 +210,27 @@ class ReportGenerator:
         
         if deobf.get('techniques_applied'):
             report_lines.append(f"\nTécnicas Aplicadas: {', '.join(deobf.get('techniques_applied', []))}")
+
+        # Trechos obfuscados extraídos (ficheiros separados)
+        obf_snippets = analysis_results.get("obfuscated_snippets_file") or ""
+        obf_snippets_deob = analysis_results.get("obfuscated_snippets_deobfuscated_file") or ""
+        obf_snippets_pseudoc = analysis_results.get("obfuscated_snippets_pseudoc_file") or ""
+        obf_snippets_deob_pseudoc = analysis_results.get("obfuscated_snippets_deobfuscated_pseudoc_file") or ""
+        summary = analysis_results.get("obfuscation_snippets_summary") or {}
+        if obf_snippets or obf_snippets_deob or obf_snippets_pseudoc or obf_snippets_deob_pseudoc:
+            report_lines.append("\nTrechos obfuscados extraídos:")
+            if summary:
+                total = sum(summary.values())
+                parts = [f"{desc}: {n}" for desc, n in sorted(summary.items(), key=lambda x: -x[1])]
+                report_lines.append(f"  Total: {total} trechos ({'; '.join(parts)})")
+            if obf_snippets:
+                report_lines.append(f"  Ficheiro trechos obfuscados (C#): {obf_snippets}")
+            if obf_snippets_deob:
+                report_lines.append(f"  Ficheiro trechos deobfuscados (C#): {obf_snippets_deob}")
+            if obf_snippets_pseudoc:
+                report_lines.append(f"  Ficheiro trechos obfuscados (pseudo-C): {obf_snippets_pseudoc}")
+            if obf_snippets_deob_pseudoc:
+                report_lines.append(f"  Ficheiro trechos deobfuscados (pseudo-C): {obf_snippets_deob_pseudoc}")
         
         report_lines.append("")
         

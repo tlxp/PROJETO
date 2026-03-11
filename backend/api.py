@@ -14,7 +14,8 @@ from typing import Iterable, List, Tuple
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
+from pydantic import BaseModel
 
 # Garantir que o projeto está no path
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -22,7 +23,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 import config
 from rat_analyzer import RATAnalyzer
-from analysis_jobs import AnalysisType, AnalysisJob, create_job, get_job, get_job_payload
+from analysis_jobs import AnalysisType, AnalysisJob, create_job, get_job, get_job_payload, summarize_c_code
 import job_store
 
 logging.basicConfig(
@@ -32,7 +33,7 @@ logging.basicConfig(
 logger = logging.getLogger("rat_analyzer_api")
 
 
-app = FastAPI(title="RAT Analyzer API", version="1.0.0")
+app = FastAPI(title="RAT Analyzer API v2", version="1.0.0")
 
 # CORS para o frontend React (Vite normalmente em localhost:8080 ou 5173)
 app.add_middleware(
@@ -43,9 +44,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Limites de tamanho para o código C enviado ao frontend
-MAX_CCODE_CHARS: int = 200_000  # ~200 KB de pseudo-C no payload
-CCODE_WINDOW_RADIUS: int = 40   # ±40 linhas em volta de cada indicador
+class StaticAnalysisUpload(BaseModel):
+    """Payload enviado pelo WPF com um resultado de análise estática já concluído.
+
+    Este endpoint permite que o WPF faça a análise completa primeiro (usando, por exemplo,
+    /api/analyze ou /api/analyze_stream) e só depois publique o resultado final no backend
+    para ser consumido pelo frontend via /api/analysis/{jobId}.
+    """
+
+    fileName: str
+    report: str
+    cCode: str
+    ilCode: str
+    riskScore: int = 0
+    riskLevel: str = ""
+    flaggedIndicators: list[str] | None = None
+    flaggedFunctions: list[dict] | None = None
 
 
 def _read_file_safe(path: str | None, encoding: str = "utf-8", errors: str = "replace") -> str:
@@ -106,46 +120,6 @@ def _build_windows_around_indicators(lines: List[str], indicators: List[str], ra
             cur_start, cur_end = s, e
     merged.append((cur_start, cur_end))
     return merged
-
-
-def _summarize_c_code(c_code: str, flagged_indicators: Iterable[str], max_chars: int = MAX_CCODE_CHARS) -> str:
-    """
-    Se o pseudo-C for muito grande, devolve apenas janelas em volta das linhas que contêm
-    indicadores suspeitos, com limite de tamanho total. Mantém o ficheiro original intacto
-    no disco para download completo pelo utilizador.
-    """
-    if not c_code:
-        return c_code
-    if len(c_code) <= max_chars:
-        return c_code
-
-    indicators = _normalize_indicators(flagged_indicators)
-    if not indicators:
-        # Sem indicadores, limitar apenas por tamanho bruto (corta no fim com aviso)
-        return c_code[:max_chars] + "\n/* ... saída truncada para evitar lag no frontend ... */"
-
-    lines = c_code.split("\n")
-    windows = _build_windows_around_indicators(lines, indicators, CCODE_WINDOW_RADIUS)
-    if not windows:
-        return c_code[:max_chars] + "\n/* ... saída truncada (nenhuma ocorrência explícita de indicadores no pseudo-C) ... */"
-
-    out_lines: List[str] = []
-    total_chars = 0
-    placeholder = "/* ... código omitido para evitar lag no site ... */"
-
-    for idx, (start, end) in enumerate(windows):
-        # Separador entre blocos não contíguos
-        if idx > 0:
-            out_lines.append(placeholder)
-        for i in range(start, end + 1):
-            line = lines[i]
-            out_lines.append(line)
-            total_chars += len(line) + 1  # +1 pelo '\n'
-            if total_chars >= max_chars:
-                out_lines.append("/* ... saída truncada por tamanho total ... */")
-                return "\n".join(out_lines)
-
-    return "\n".join(out_lines)
 
 
 @app.post("/api/analyze")
@@ -215,6 +189,7 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
     il_code = ""
 
     flagged_indicators: list[str] = []
+    flagged_functions: list[dict] = []
     if last_path.exists():
         import json
         with open(last_path, encoding="utf-8") as f:
@@ -222,6 +197,7 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
         report_path = last.get("report_path")
         report_content = _read_file_safe(report_path)
         flagged_indicators = last.get("flagged_indicators") or []
+        flagged_functions = last.get("flagged_functions") or []
 
         # Código “C”: preferir C# descompilado (desobfuscado ou consolidado) ou pseudo-C
         deobf = last.get("deobfuscated_file")
@@ -235,6 +211,8 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
             c_code = _read_file_safe(decompiled_c)
         if not c_code and last.get("decompilation_error_summary"):
             c_code = f"# Descompilação não disponível\n{last.get('decompilation_error_summary')}"
+        # Aplicar resumo para evitar payloads gigantes no frontend
+        c_code = summarize_c_code(c_code, flagged_indicators)
 
         # IL / Bytecode: assembly (desmontagem) ou mensagem
         disasm = last.get("disassembly_file")
@@ -255,6 +233,8 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
         "riskScore": results.get("risk_score", 0),
         "riskLevel": results.get("risk_level", ""),
         "flaggedIndicators": flagged_indicators,
+        # Funções suspeitas com ranges exatos no pseudo-C (quando existir pseudo-C da Ghidra).
+        "flaggedFunctions": flagged_functions,
     }
 
 
@@ -308,6 +288,7 @@ async def analyze_file_stream(file: UploadFile = File(...)):
             c_code = ""
             il_code = ""
             flagged_indicators: list[str] = []
+            flagged_functions: list[dict] = []
 
             if last_path.exists():
                 with open(last_path, encoding="utf-8") as f:
@@ -325,6 +306,7 @@ async def analyze_file_stream(file: UploadFile = File(...)):
 
                 report_content = _read_file_safe_local(report_path)
                 flagged_indicators = last.get("flagged_indicators") or []
+                flagged_functions = last.get("flagged_functions") or []
 
                 deobf = last.get("deobfuscated_file")
                 consolidated = last.get("consolidated_file")
@@ -337,6 +319,8 @@ async def analyze_file_stream(file: UploadFile = File(...)):
                     c_code = _read_file_safe_local(decompiled_c)
                 if not c_code and last.get("decompilation_error_summary"):
                     c_code = f"# Descompilação não disponível\n{last.get('decompilation_error_summary')}"
+                # Aplicar resumo também no modo streaming
+                c_code = summarize_c_code(c_code, flagged_indicators)
 
                 disasm = last.get("disassembly_file")
                 if disasm:
@@ -357,6 +341,8 @@ async def analyze_file_stream(file: UploadFile = File(...)):
                 "riskScore": results.get("risk_score", 0),
                 "riskLevel": results.get("risk_level", ""),
                 "flaggedIndicators": flagged_indicators,
+                # Funções suspeitas com ranges exatos no pseudo-C (quando existir pseudo-C da Ghidra).
+                "flaggedFunctions": flagged_functions,
             }
             q.put(payload)
         except FileNotFoundError as e:
@@ -416,7 +402,20 @@ async def submit_analysis(
     except Exception as e:  # noqa: BLE001
         raise HTTPException(500, f"Erro ao ler ficheiro: {e}")
 
+    logger.info(
+        "Pedido /api/analysis recebido: file=%s analysis_type=%s",
+        name,
+        analysis_type.value,
+    )
+
     job = create_job(name, contents, analysis_type)
+
+    logger.info(
+        "Job de análise submetido: id=%s type=%s status=%s",
+        job.id,
+        job.analysis_type.value,
+        job.status.value,
+    )
 
     return {
         "jobId": job.id,
@@ -425,14 +424,171 @@ async def submit_analysis(
     }
 
 
+@app.post("/api/analysis/upload_static")
+async def upload_static_analysis(payload: StaticAnalysisUpload) -> dict:
+    """Permite que um cliente (por exemplo, o WPF) publique um resultado de
+    análise estática já concluído e receba um jobId compatível com
+    /api/analysis/{jobId}.
+
+    O frontend consegue depois consumir este job exatamente como qualquer
+    outro criado via /api/analysis.
+    """
+    from analysis_jobs import AnalysisType, JobStatus  # import local para evitar ciclos
+    import hashlib
+
+    logger.info(
+        "Pedido /api/analysis/upload_static recebido: file=%s score=%s level=%s",
+        payload.fileName,
+        payload.riskScore,
+        payload.riskLevel,
+    )
+
+    job_id = str(uuid.uuid4())
+
+    static_result = {
+        "report": payload.report or "",
+        "cCode": payload.cCode or "",
+        "ilCode": payload.ilCode or "",
+        "fileName": payload.fileName,
+        "riskScore": int(payload.riskScore or 0),
+        "riskLevel": payload.riskLevel or "",
+        "flaggedIndicators": payload.flaggedIndicators or [],
+        "flaggedFunctions": payload.flaggedFunctions or [],
+    }
+
+    # Como não temos acesso direto ao binário aqui, usamos um hash sintético
+    # baseado nos campos principais apenas para fins de auditoria.
+    h = hashlib.sha256()
+    h.update((payload.fileName or "").encode("utf-8", "ignore"))
+    h.update((payload.report or "").encode("utf-8", "ignore"))
+    h.update((payload.cCode or "").encode("utf-8", "ignore"))
+    h.update((payload.ilCode or "").encode("utf-8", "ignore"))
+    sha = h.hexdigest()
+
+    # Reutilizamos a pipeline de histórico existente: primeiro insert em estado queued,
+    # depois update_results + update_status para completed.
+    job_store.insert_job(
+        job_id=job_id,
+        analysis_type=AnalysisType.STATIC.value,
+        file_name=payload.fileName,
+        sha256=sha,
+        status=JobStatus.QUEUED.value,
+    )
+    job_store.update_results(job_id, static_result, None)
+    job_store.update_status(job_id, JobStatus.COMPLETED.value, error=None)
+
+    logger.info(
+        "Resultado estático publicado via /api/analysis/upload_static: job_id=%s file=%s",
+        job_id,
+        payload.fileName,
+    )
+
+    return {
+        "jobId": job_id,
+        "analysisType": AnalysisType.STATIC.value,
+        "status": JobStatus.COMPLETED.value,
+    }
+
+
+def _get_job_output_dir(job_id: str) -> Path:
+    """Diretório de saída do job (sandbox_jobs/{job_id}/out)."""
+    return Path(config.SANDBOX_JOBS_DIR) / job_id / "out"
+
+
+@app.get("/api/analysis/{job_id}/artifacts/obfuscated_snippets", response_class=PlainTextResponse)
+async def get_obfuscated_snippets_artifact(
+    job_id: str,
+    variant: str = Query("obfuscated", description="obfuscated ou deobfuscated"),
+) -> PlainTextResponse:
+    """
+    Devolve o conteúdo do ficheiro de trechos obfuscados ou deobfuscados do job.
+    Valida que o path está dentro do output_dir do job (segurança).
+    """
+    import json
+    out_dir = _get_job_output_dir(job_id)
+    last_path = out_dir / "last_analysis.json"
+    if not last_path.exists():
+        raise HTTPException(404, "Job ou ficheiro de análise não encontrado.")
+    try:
+        with open(last_path, encoding="utf-8") as f:
+            last = json.load(f)
+    except Exception:
+        raise HTTPException(500, "Erro ao ler resultados do job.")
+    if variant == "obfuscated":
+        path_str = last.get("obfuscated_snippets_file") or last.get("obfuscated_snippets_pseudoc_file") or ""
+    elif variant == "deobfuscated":
+        path_str = last.get("obfuscated_snippets_deobfuscated_file") or last.get("obfuscated_snippets_deobfuscated_pseudoc_file") or ""
+    else:
+        raise HTTPException(400, "variant deve ser 'obfuscated' ou 'deobfuscated'.")
+
+    if path_str:
+        artifact_path = Path(path_str).resolve()
+        out_dir_resolved = out_dir.resolve()
+        if out_dir_resolved not in artifact_path.parents and artifact_path != out_dir_resolved:
+            raise HTTPException(403, "Path inválido.")
+        if artifact_path.exists():
+            try:
+                content = artifact_path.read_text(encoding="utf-8", errors="replace")
+                return PlainTextResponse(content=content, media_type="text/plain; charset=utf-8")
+            except OSError:
+                raise HTTPException(500, "Erro ao ler ficheiro.")
+
+    # Coerência com a categoria de risco "Obfuscation": se não há ficheiro de trechos mas há
+    # indicadores de ofuscação (detetados no binário pelo Deobfuscator), devolver resumo.
+    indicators = last.get("obfuscation_indicators") or []
+    if not indicators and last.get("report_path"):
+        try:
+            out_dir_resolved = out_dir.resolve()
+            report_path = Path(last["report_path"]).resolve()
+            if report_path.exists() and (out_dir_resolved in report_path.parents or report_path.parent == out_dir_resolved):
+                report_text = report_path.read_text(encoding="utf-8", errors="replace")
+                in_section = False
+                for line in report_text.splitlines():
+                    if "Indicadores de Ofuscação" in line or "Indicadores de ofuscação" in line:
+                        in_section = True
+                        continue
+                    if in_section:
+                        if not line.strip():
+                            break
+                        if line.strip().startswith("- "):
+                            indicators.append(line.strip()[2:].strip())
+                        elif line.strip().startswith("  - "):
+                            indicators.append(line.strip()[4:].strip())
+        except Exception:
+            pass
+    if indicators:
+        lines = [
+            "Indicadores de ofuscação detetados no binário (categoria de risco Obfuscation):",
+            f"Total: {len(indicators)} ocorrência(s)",
+            "",
+        ]
+        for i, ind in enumerate(indicators, 1):
+            lines.append(f"  {i}. {ind}")
+        lines.append("")
+        lines.append("Nota: Não foram extraídos trechos de código para este job (ex.: análise sem descompilação).")
+        content = "\n".join(lines)
+        return PlainTextResponse(content=content, media_type="text/plain; charset=utf-8")
+
+    raise HTTPException(404, "Ficheiro de trechos não disponível para este job.")
+
+
 @app.get("/api/analysis/{job_id}")
 async def get_analysis_status(job_id: str) -> dict:
     """
     Devolve o estado e os resultados (quando disponíveis) de um job de análise.
     """
+    logger.info("Pedido /api/analysis/%s recebido.", job_id)
     payload = get_job_payload(job_id)
     if not payload:
+        logger.warning("Pedido /api/analysis/%s: job não encontrado.", job_id)
         raise HTTPException(404, "Job não encontrado.")
+
+    logger.info(
+        "Pedido /api/analysis/%s: devolvido status=%s analysisType=%s",
+        job_id,
+        payload.get("status"),
+        payload.get("analysisType"),
+    )
     return payload
 
 

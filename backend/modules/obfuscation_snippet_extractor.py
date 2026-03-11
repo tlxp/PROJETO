@@ -1,0 +1,243 @@
+"""
+Extrai trechos de código onde foi detetada obfuscação, grava-os em ficheiro separado
+e produz uma versão deobfuscada. Pensado para código fonte (C# consolidado; depois
+pseudo-C se aplicável). Reutiliza padrões do Deobfuscator para deteção com posição.
+"""
+
+import logging
+import re
+from collections import Counter
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable, Dict, List
+
+_LOGGER = logging.getLogger(__name__)
+
+try:
+    import config as _config
+    MAX_SNIPPETS = getattr(_config, "OBFUSCATION_SNIPPETS_MAX", 50)
+    CONTEXT_LINES = getattr(_config, "OBFUSCATION_CONTEXT_LINES", 3)
+    MAX_SNIPPET_LINES = getattr(_config, "OBFUSCATION_SNIPPET_MAX_LINES", 50)
+except ImportError:
+    MAX_SNIPPETS = 50
+    CONTEXT_LINES = 3
+    MAX_SNIPPET_LINES = 50
+
+
+@dataclass
+class ObfuscationSnippet:
+    """Um trecho de código onde foi detetada obfuscação, com posição e tipo."""
+    type: str
+    description: str
+    line_start: int
+    line_end: int
+    snippet: str
+    source_file: str
+
+
+# Padrões de ofuscação (alinhados com Deobfuscator._detect_obfuscation e Base64 em fonte)
+OBFUSCATION_PATTERNS: List[tuple] = [
+    (r'[a-zA-Z]{1,2}\s*=\s*[a-zA-Z]{1,2}\s*\+\s*[a-zA-Z]{1,2}', "String concatenation obfuscation"),
+    (r'"\s*\+\s*"[^"]*"', "C# string concatenation"),
+    (r'GetFolderPath\s*\([^)]+\)\s*\+', "Path building with GetFolderPath"),
+    (r'Path\.Combine\s*\(', "Path.Combine (pode indicar paths sensíveis)"),
+    (r'chr\(0x[0-9a-fA-F]+\)', "Character encoding"),
+    (r'eval\(', "Eval usage"),
+    (r'exec\(', "Exec usage"),
+    (r'__import__', "Dynamic import"),
+    (r'getattr\(', "Dynamic attribute access"),
+    (r'Convert\.FromBase64String', "Base64 decode em código"),
+    (r'Encoding\.UTF8\.GetString', "Decoding de bytes para string"),
+    (r'"([A-Za-z0-9+/]{20,}={0,2})"', "Base64 literal in source"),
+]
+
+# Falsos positivos para Base64 (nomes .NET comuns)
+BASE64_FALSE_POSITIVES = (
+    'attribute', 'assembly', 'compiler', 'runtime', 'configuration',
+    'version', 'framework', 'compatibility', 'generated', 'compilation',
+    'refsafety', 'rules', 'requested', 'execution', 'privileges',
+    'product', 'company', 'title', 'target', 'informational', 'file',
+)
+
+
+def _line_at_offset(content: str, offset: int) -> int:
+    """Devolve o número de linha (1-based) onde está o offset no texto."""
+    if offset <= 0:
+        return 1
+    return content[:offset].count("\n") + 1
+
+
+def _extract_snippet_lines(lines: List[str], line_start: int, line_end: int) -> str:
+    """Extrai o bloco de linhas [line_start, line_end] (1-based) com limite de tamanho."""
+    start = max(0, line_start - 1)
+    end = min(len(lines), line_end)
+    window = lines[start:end]
+    if len(window) > MAX_SNIPPET_LINES:
+        window = window[:MAX_SNIPPET_LINES]
+        # Ajustar line_end para refletir o truncamento
+        end = start + len(window)
+    return "\n".join(window)
+
+
+def detect_obfuscation_with_positions(
+    source_content: str,
+    source_path: str = "",
+) -> List[ObfuscationSnippet]:
+    """
+    Deteta obfuscação no texto com posição (linhas) e extrai trechos com janela de contexto.
+    :param source_content: Conteúdo do ficheiro (ex. C# consolidado)
+    :param source_path: Caminho do ficheiro (para referência no snippet)
+    :return: Lista de ObfuscationSnippet, limitada a MAX_SNIPPETS
+    """
+    snippets: List[ObfuscationSnippet] = []
+    lines = source_content.split("\n")
+    seen: set = set()  # (line_center, type) para evitar duplicados
+
+    for pattern, description in OBFUSCATION_PATTERNS:
+        if len(snippets) >= MAX_SNIPPETS:
+            break
+        try:
+            regex = re.compile(pattern, re.IGNORECASE)
+        except re.error:
+            continue
+        for m in regex.finditer(source_content):
+            if len(snippets) >= MAX_SNIPPETS:
+                break
+            start_line = _line_at_offset(source_content, m.start())
+            end_line = _line_at_offset(source_content, m.end())
+            # Janela de contexto
+            line_center = (start_line + end_line) // 2
+            win_start = max(1, line_center - CONTEXT_LINES)
+            win_end = min(len(lines), line_center + CONTEXT_LINES)
+            key = (line_center, description)
+            if key in seen:
+                continue
+            seen.add(key)
+            # Filtrar Base64: evitar falsos positivos
+            if "Base64 literal" in description:
+                b64_match = m.group(1) if m.lastindex and m.lastindex >= 1 else ""
+                if not b64_match or "/" not in b64_match and "+" not in b64_match and not b64_match.strip().endswith("="):
+                    continue
+                if any(fp in b64_match.lower() for fp in BASE64_FALSE_POSITIVES):
+                    continue
+            snippet_text = _extract_snippet_lines(lines, win_start, win_end)
+            snippets.append(ObfuscationSnippet(
+                type="obfuscation",
+                description=description,
+                line_start=win_start,
+                line_end=win_end,
+                snippet=snippet_text,
+                source_file=source_path,
+            ))
+    return snippets
+
+
+def write_obfuscated_snippets_file(snippets: List[ObfuscationSnippet], output_path: Path) -> None:
+    """
+    Escreve o ficheiro de trechos obfuscados (original) com secções delimitadas.
+    Encoding UTF-8; erros de escrita são logados.
+    """
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    sections = []
+    for i, s in enumerate(snippets, 1):
+        sections.append(f"--- snippet {i} ---")
+        sections.append(f"type: {s.type}")
+        sections.append(f"description: {s.description}")
+        sections.append(f"line: {s.line_start}-{s.line_end}")
+        sections.append(f"source_file: {s.source_file}")
+        sections.append("")
+        sections.append(s.snippet)
+        sections.append("")
+    try:
+        output_path.write_text("\n".join(sections), encoding="utf-8", errors="replace")
+        _LOGGER.info("Trechos obfuscados guardados: %s (%d snippets)", output_path, len(snippets))
+    except OSError as e:
+        _LOGGER.exception("Erro ao escrever ficheiro de trechos obfuscados %s: %s", output_path, e)
+        raise
+
+
+def write_deobfuscated_snippets_file(
+    snippets: List[ObfuscationSnippet],
+    output_path: Path,
+    deobfuscate_fn: Callable[[str], str],
+) -> None:
+    """
+    Escreve o ficheiro de trechos já deobfuscados, no mesmo formato de secções.
+    Para cada snippet aplica deobfuscate_fn(snippet.snippet) e grava o resultado.
+    """
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    sections = []
+    for i, s in enumerate(snippets, 1):
+        deob_snippet = deobfuscate_fn(s.snippet)
+        sections.append(f"--- snippet {i} ---")
+        sections.append(f"type: {s.type}")
+        sections.append(f"description: {s.description}")
+        sections.append(f"line: {s.line_start}-{s.line_end}")
+        sections.append(f"source_file: {s.source_file}")
+        sections.append("")
+        sections.append(deob_snippet)
+        sections.append("")
+    try:
+        output_path.write_text("\n".join(sections), encoding="utf-8", errors="replace")
+        _LOGGER.info("Trechos deobfuscados guardados: %s (%d snippets)", output_path, len(snippets))
+    except OSError as e:
+        _LOGGER.exception("Erro ao escrever ficheiro de trechos deobfuscados %s: %s", output_path, e)
+        raise
+
+
+def build_snippets_summary(snippets: List[ObfuscationSnippet]) -> Dict[str, int]:
+    """Constrói um dicionário descrição -> contagem para relatório."""
+    return dict(Counter(s.description for s in snippets))
+
+
+def extract_and_write_snippets_from_content(
+    content: str,
+    source_path: str,
+    output_dir: Path,
+    stem: str,
+    deobfuscate_fn: Callable[[str], str],
+) -> tuple:
+    """
+    Deteta trechos obfuscados no conteúdo dado, grava os dois ficheiros e devolve caminhos e resumo.
+    Útil para pseudo-C (Ghidra) quando já se tem o conteúdo em memória.
+    :return: (obf_path, deob_path, summary_dict)
+    """
+    snippets = detect_obfuscation_with_positions(content, source_path=source_path)
+    if not snippets:
+        return ("", "", {})
+    obf_path = output_dir / f"{stem}.obfuscated_snippets.txt"
+    deob_path = output_dir / f"{stem}.obfuscated_snippets_deobfuscated.txt"
+    write_obfuscated_snippets_file(snippets, obf_path)
+    write_deobfuscated_snippets_file(snippets, deob_path, deobfuscate_fn)
+    return (str(obf_path), str(deob_path), build_snippets_summary(snippets))
+
+
+def extract_and_write_snippets(
+    consolidated_path: str,
+    output_dir: Path,
+    stem: str,
+    deobfuscate_fn: Callable[[str], str],
+) -> tuple:
+    """
+    Lê o ficheiro consolidado, deteta trechos obfuscados, grava os dois ficheiros
+    (obfuscado e deobfuscado) e devolve os caminhos e resumo por tipo.
+    :return: (obfuscated_snippets_file_path, deobfuscated_snippets_file_path, summary_dict)
+    """
+    path = Path(consolidated_path)
+    if not path.exists():
+        return ("", "", {})
+    try:
+        content = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as e:
+        _LOGGER.warning("Não foi possível ler ficheiro consolidado %s: %s", consolidated_path, e)
+        return ("", "", {})
+    snippets = detect_obfuscation_with_positions(content, source_path=consolidated_path)
+    if not snippets:
+        return ("", "", {})
+    obf_path = output_dir / f"{stem}.obfuscated_snippets.txt"
+    deob_path = output_dir / f"{stem}.obfuscated_snippets_deobfuscated.txt"
+    write_obfuscated_snippets_file(snippets, obf_path)
+    write_deobfuscated_snippets_file(snippets, deob_path, deobfuscate_fn)
+    return (str(obf_path), str(deob_path), build_snippets_summary(snippets))

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import enum
+import json
+import logging
 import threading
 import uuid
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import config
 from rat_analyzer import RATAnalyzer
@@ -37,6 +39,13 @@ class AnalysisResult:
     riskScore: int = 0
     riskLevel: str = ""
     flaggedIndicators: list[str] = field(default_factory=list)
+    # Novo: funções marcadas como suspeitas, com ranges exatos no pseudo-C.
+    flaggedFunctions: list[dict] = field(default_factory=list)
+    # Trechos obfuscados extraídos (caminhos para ficheiros)
+    obfuscatedSnippetsFile: str = ""
+    obfuscatedSnippetsDeobfuscatedFile: str = ""
+    # Número de indicadores de ofuscação (para mostrar botões "Ver trechos" mesmo sem ficheiros)
+    obfuscationIndicatorCount: int = 0
 
     # Campos extra para futura extensão
     dynamicReport: Optional[dict] = None
@@ -72,6 +81,11 @@ class AnalysisJob:
 
 _JOBS: Dict[str, AnalysisJob] = {}
 _JOBS_LOCK = threading.Lock()
+_LOGGER = logging.getLogger("rat_analyzer_jobs")
+
+# Limites de tamanho para o código C enviado ao frontend
+MAX_CCODE_CHARS: int = 200_000  # ~200 KB de pseudo-C no payload
+CCODE_WINDOW_RADIUS: int = 40   # ±40 linhas em volta de cada indicador
 
 
 def _ensure_jobs_dir() -> Path:
@@ -90,6 +104,7 @@ def create_job(file_name: str, contents: bytes, analysis_type: AnalysisType) -> 
     sample_path.write_bytes(contents)
 
     # Persistência/auditoria básica
+    sha: Optional[str] = None
     try:
         sha = job_store.sha256_bytes(contents)
         job_store.insert_job(
@@ -101,7 +116,7 @@ def create_job(file_name: str, contents: bytes, analysis_type: AnalysisType) -> 
         )
     except Exception:
         # Não falhar o pipeline por problemas de DB
-        pass
+        _LOGGER.exception("Falha ao registar job %s na base de dados de histórico.", job_id)
 
     output_dir = base_dir / "out"
     output_dir.mkdir(exist_ok=True)
@@ -117,6 +132,16 @@ def create_job(file_name: str, contents: bytes, analysis_type: AnalysisType) -> 
 
     with _JOBS_LOCK:
         _JOBS[job_id] = job
+
+    # Log estruturado da criação do job (visível no terminal do uvicorn).
+    _LOGGER.info(
+        "Job criado: id=%s type=%s file=%s sha256=%s base_dir=%s",
+        job_id,
+        analysis_type.value,
+        file_name,
+        sha or "<desconhecido>",
+        base_dir,
+    )
 
     # Se houver Redis configurado, enfileirar para worker RQ;
     # caso contrário, correr em thread local (modo dev).
@@ -138,6 +163,7 @@ def get_job(job_id: str) -> Optional[AnalysisJob]:
 def _run_job(job_id: str) -> None:
     job = get_job(job_id)
     if not job:
+        _LOGGER.warning("Tentativa de executar job inexistente: id=%s", job_id)
         return
 
     job.status = JobStatus.RUNNING
@@ -163,6 +189,13 @@ def _run_job(job_id: str) -> None:
             job_store.update_status(job.id, JobStatus.COMPLETED.value, error=None)
         except Exception:
             pass
+        _LOGGER.info(
+            "Job concluído com sucesso: id=%s type=%s static=%s dynamic=%s",
+            job.id,
+            job.analysis_type.value,
+            "ok" if job.static_result is not None else "none",
+            "ok" if job.dynamic_result is not None else "none",
+        )
     except Exception as exc:  # noqa: BLE001
         job.status = JobStatus.FAILED
         job.error = str(exc)
@@ -175,34 +208,143 @@ def _run_job(job_id: str) -> None:
             )
         except Exception:
             pass
+        _LOGGER.exception("Job falhou: id=%s type=%s error=%s", job.id, job.analysis_type.value, job.error)
 
 
 def get_job_payload(job_id: str) -> Optional[dict]:
     """
     Devolve payload do job. Primeiro tenta memória (jobs em execução),
-    depois cai para a DB (histórico).
+    depois cai para a DB (histórico). Caso não exista registo em
+    memória/DB (jobs antigos gerados antes da DB, por exemplo), tenta
+    reconstruir um payload mínimo a partir de `last_analysis.json` no
+    diretório sandbox do job.
     """
     j = get_job(job_id)
     if j:
+        _LOGGER.info("get_job_payload: job_id=%s encontrado em memória (status=%s)", job_id, j.status.value)
         return j.to_dict()
+    # 1) Tentar DB de histórico
     try:
         row = job_store.get_job_row(job_id)
-        if not row:
-            return None
-        # Compatibilizar com o formato do frontend (staticResult/dynamicResult já vêm)
-        return {
-            "id": row["id"],
-            "analysisType": row["analysisType"],
-            "status": row["status"],
-            "error": row.get("error"),
-            "staticResult": row.get("staticResult"),
-            "dynamicResult": row.get("dynamicResult"),
-            "fileName": row.get("fileName"),
-            "sha256": row.get("sha256"),
-            "createdAt": row.get("createdAt"),
-            "updatedAt": row.get("updatedAt"),
-        }
+        if row:
+            _LOGGER.info(
+                "get_job_payload: job_id=%s carregado da base de dados (status=%s)",
+                job_id,
+                row.get("status"),
+            )
+            # Compatibilizar com o formato do frontend (staticResult/dynamicResult já vêm)
+            return {
+                "id": row["id"],
+                "analysisType": row["analysisType"],
+                "status": row["status"],
+                "error": row.get("error"),
+                "staticResult": row.get("staticResult"),
+                "dynamicResult": row.get("dynamicResult"),
+                "fileName": row.get("fileName"),
+                "sha256": row.get("sha256"),
+                "createdAt": row.get("createdAt"),
+                "updatedAt": row.get("updatedAt"),
+            }
     except Exception:
+        # Se a DB falhar por qualquer motivo, continuamos para o fallback em disco.
+        _LOGGER.exception("get_job_payload: falha ao obter job_id=%s da base de dados", job_id)
+
+    # 2) Fallback: tentar reconstruir um resultado estático mínimo a partir de last_analysis.json
+    try:
+        base_dir = _ensure_jobs_dir() / job_id
+        out_dir = base_dir / "out"
+        last_path = out_dir / "last_analysis.json"
+        if not last_path.exists():
+            _LOGGER.warning(
+                "get_job_payload: job_id=%s não encontrado em memória/DB e sem last_analysis.json em %s",
+                job_id,
+                last_path,
+            )
+            return None
+
+        with open(last_path, encoding="utf-8") as f:
+            last = json.load(f)
+
+        report_path = last.get("report_path")
+        report_content = _read_file_safe(report_path)
+        flagged_indicators = last.get("flagged_indicators") or []
+        flagged_functions = last.get("flagged_functions") or []
+
+        # Reaproveita a mesma lógica de escolha de ficheiros de _run_static,
+        # mas sem voltar a correr a análise completa.
+        deobf = last.get("deobfuscated_file")
+        consolidated = last.get("consolidated_file")
+        decompiled_c = last.get("decompiled_c_file")
+        obf_snippets = (
+            last.get("obfuscated_snippets_file")
+            or last.get("obfuscated_snippets_pseudoc_file")
+            or ""
+        )
+        obf_snippets_deob = (
+            last.get("obfuscated_snippets_deobfuscated_file")
+            or last.get("obfuscated_snippets_deobfuscated_pseudoc_file")
+            or ""
+        )
+        obfuscation_indicators = last.get("obfuscation_indicators") or []
+
+        c_code = ""
+        if deobf:
+            c_code = _read_file_safe(deobf)
+        if not c_code and consolidated:
+            c_code = _read_file_safe(consolidated)
+        if not c_code and decompiled_c:
+            c_code = _read_file_safe(decompiled_c)
+        if not c_code and last.get("decompilation_error_summary"):
+            c_code = f"# Descompilação não disponível\n{last.get('decompilation_error_summary')}"
+        if not c_code:
+            c_code = "# Código não disponível."
+
+        summarized_c = summarize_c_code(c_code, flagged_indicators)
+
+        disasm = last.get("disassembly_file")
+        il_code = _read_file_safe(disasm, errors="replace") if disasm else ""
+        if not il_code:
+            il_code = "# Nenhum bytecode/assembly disponível para este ficheiro."
+
+        target_file = last.get("target_file") or ""
+        file_name = Path(target_file).name if target_file else "output"
+
+        static_result = {
+            "report": report_content or "# Relatório não gerado.",
+            "cCode": summarized_c,
+            "ilCode": il_code,
+            "fileName": file_name,
+            # Sem acesso ao resumo completo da análise antiga, não conseguimos
+            # recuperar o score/nível reais; fornecemos um valor neutro.
+            "riskScore": 0,
+            "riskLevel": "",
+            "flaggedIndicators": flagged_indicators,
+            "flaggedFunctions": flagged_functions,
+            "obfuscatedSnippetsFile": obf_snippets,
+            "obfuscatedSnippetsDeobfuscatedFile": obf_snippets_deob,
+            "obfuscationIndicatorCount": len(obfuscation_indicators),
+        }
+
+        payload = {
+            "id": job_id,
+            "analysisType": AnalysisType.STATIC.value,
+            "status": JobStatus.COMPLETED.value,
+            "error": None,
+            "staticResult": static_result,
+            "dynamicResult": None,
+            "fileName": file_name,
+            "sha256": None,
+            "createdAt": None,
+            "updatedAt": None,
+        }
+        _LOGGER.info(
+            "get_job_payload: job_id=%s reconstruído a partir de last_analysis.json em %s",
+            job_id,
+            last_path,
+        )
+        return payload
+    except Exception:
+        _LOGGER.exception("get_job_payload: erro inesperado ao reconstruir job_id=%s a partir de disco", job_id)
         return None
 
 
@@ -221,6 +363,9 @@ def _run_static(job: AnalysisJob) -> AnalysisResult:
     c_code = ""
     il_code = ""
     flagged_indicators: list[str] = []
+    flagged_functions: list[dict] = []
+    obf_snippets = ""
+    obf_snippets_deob = ""
 
     if last_path.exists():
         import json
@@ -231,6 +376,18 @@ def _run_static(job: AnalysisJob) -> AnalysisResult:
         report_path = last.get("report_path")
         report_content = _read_file_safe(report_path)
         flagged_indicators = last.get("flagged_indicators") or []
+        flagged_functions = last.get("flagged_functions") or []
+        obf_snippets = (
+            last.get("obfuscated_snippets_file")
+            or last.get("obfuscated_snippets_pseudoc_file")
+            or ""
+        )
+        obf_snippets_deob = (
+            last.get("obfuscated_snippets_deobfuscated_file")
+            or last.get("obfuscated_snippets_deobfuscated_pseudoc_file")
+            or ""
+        )
+        obfuscation_indicators = last.get("obfuscation_indicators") or []
 
         deobf = last.get("deobfuscated_file")
         consolidated = last.get("consolidated_file")
@@ -254,14 +411,20 @@ def _run_static(job: AnalysisJob) -> AnalysisResult:
         c_code = "# Código não disponível."
         il_code = "# Bytecode não disponível."
 
+    summarized_c = summarize_c_code(c_code, flagged_indicators)
+
     return AnalysisResult(
         report=report_content,
-        cCode=c_code,
+        cCode=summarized_c,
         ilCode=il_code,
         fileName=job.sample_path.name,
         riskScore=int(results.get("risk_score", 0)),
         riskLevel=str(results.get("risk_level", "")),
         flaggedIndicators=flagged_indicators,
+        flaggedFunctions=flagged_functions,
+        obfuscatedSnippetsFile=obf_snippets,
+        obfuscatedSnippetsDeobfuscatedFile=obf_snippets_deob,
+        obfuscationIndicatorCount=len(obfuscation_indicators),
     )
 
 
@@ -297,4 +460,64 @@ def _read_file_safe(path: Optional[str | Path], encoding: str = "utf-8", errors:
             return f.read()
     except Exception:  # noqa: BLE001
         return ""
+
+
+def _normalize_indicators(flagged_indicators: Iterable[str]) -> List[str]:
+    """Normaliza a lista de indicadores (trim, remove vazios/duplicados)."""
+    seen = set()
+    out: List[str] = []
+    for raw in flagged_indicators or []:
+        s = (raw or "").strip()
+        if not s or s in seen:
+            continue
+        seen.add(s)
+        out.append(s)
+    return out
+
+
+def _build_windows_around_indicators(lines: List[str], indicators: List[str], radius: int) -> List[Tuple[int, int]]:
+    """
+    Devolve intervalos de linhas [start, end] que cobrem janelas em volta de cada ocorrência
+    de qualquer indicador. Usa índices 0-based.
+    """
+    n = len(lines)
+    ranges: List[Tuple[int, int]] = []
+    if n == 0 or not indicators:
+        return ranges
+
+    for indicator in indicators:
+        for i, line in enumerate(lines):
+            if indicator in line:
+                start = max(0, i - radius)
+                end = min(n - 1, i + radius)
+                ranges.append((start, end))
+
+    if not ranges:
+        return []
+
+    # Fundir intervalos sobrepostos/adjacentes
+    ranges.sort()
+    merged: List[Tuple[int, int]] = []
+    cur_start, cur_end = ranges[0]
+    for s, e in ranges[1:]:
+        if s <= cur_end + 1:
+            cur_end = max(cur_end, e)
+        else:
+            merged.append((cur_start, cur_end))
+            cur_start, cur_end = s, e
+    merged.append((cur_start, cur_end))
+    return merged
+
+
+def summarize_c_code(c_code: str, flagged_indicators: Iterable[str], max_chars: int = MAX_CCODE_CHARS) -> str:
+    """
+    Devolve o pseudo-C completo, sem qualquer truncagem.
+
+    O frontend é responsável por limitar a renderização (por exemplo via
+    `maxInitialLines` ou janelas dinâmicas). Manter o código integral aqui
+    garante que nenhuma função com flag é perdida antes de chegar ao site.
+    """
+    if not c_code:
+        return c_code
+    return c_code
 
