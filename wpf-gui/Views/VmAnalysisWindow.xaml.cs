@@ -18,6 +18,8 @@ public partial class VmAnalysisWindow : Window
     private readonly CancellationTokenSource _cts = new();
     private readonly StringBuilder _logBuilder = new();
     private bool _completed;
+    private string? _runId;
+    private string? _runDir;
 
     public VmAnalysisWindow(string samplePath, bool runFirstTimeSetup)
     {
@@ -50,7 +52,7 @@ public partial class VmAnalysisWindow : Window
         }
         catch (Exception ex)
         {
-            AppendLine($"[ERRO] {ex.Message}");
+            AppendLine($"[ERRO] {ex.Message}", withTimestamp: true);
             StatusText.Text = "Falha.";
             StatusText.Foreground = (Brush)FindResource("DangerBrush");
         }
@@ -64,11 +66,12 @@ public partial class VmAnalysisWindow : Window
         }
     }
 
-    private void AppendLine(string line)
+    private void AppendLine(string line, bool withTimestamp = false)
     {
         void DoAppend()
         {
-            _logBuilder.AppendLine(line);
+            var text = withTimestamp ? $"[{DateTime.Now:HH:mm:ss}] {line}" : line;
+            _logBuilder.AppendLine(text);
             TerminalOutput.Text = _logBuilder.ToString();
             if (TerminalScrollViewer != null)
                 TerminalScrollViewer.ScrollToVerticalOffset(TerminalScrollViewer.ScrollableHeight);
@@ -99,14 +102,50 @@ public partial class VmAnalysisWindow : Window
         var scriptsPath = FindHyperVScriptsPath();
         if (string.IsNullOrEmpty(scriptsPath) || !Directory.Exists(scriptsPath))
         {
-            AppendLine("[ERRO] Pasta scripts/hyperv-sandbox não encontrada. Execute a aplicação a partir da raiz do projeto.");
+            AppendLine("[ERRO] Pasta scripts/hyperv-sandbox não encontrada. Execute a aplicação a partir da raiz do projeto.", withTimestamp: true);
             return;
         }
 
-        AppendLine($"[*] Pasta dos scripts: {scriptsPath}");
-        AppendLine($"[*] Amostra: {_samplePath}");
-        AppendLine($"[*] Primeira entrada (instalar software + snapshot): {_runFirstTimeSetup}");
-        AppendLine("");
+        _runId = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+        // Tentativa de guardar um bundle em D:\PROJETOVM\Logs\Runs\<runId>
+        try
+        {
+            _runDir = Path.Combine("D:\\PROJETOVM", "Logs", "Runs", _runId);
+            Directory.CreateDirectory(_runDir);
+            File.WriteAllText(Path.Combine(_runDir, "meta.txt"),
+                $"run_id={_runId}{Environment.NewLine}sample_path={_samplePath}{Environment.NewLine}created_at={DateTime.Now:O}{Environment.NewLine}",
+                Encoding.UTF8);
+        }
+        catch
+        {
+            _runDir = null;
+        }
+
+        AppendLine($"[*] Pasta dos scripts: {scriptsPath}", withTimestamp: true);
+        AppendLine($"[*] Amostra: {_samplePath}", withTimestamp: true);
+        AppendLine($"[*] Primeira entrada (instalar software + snapshot): {_runFirstTimeSetup}", withTimestamp: true);
+        if (!string.IsNullOrWhiteSpace(_runId))
+            AppendLine($"[*] RunId: {_runId}", withTimestamp: true);
+        if (!string.IsNullOrWhiteSpace(_runDir))
+            AppendLine($"[*] Pasta de logs: {_runDir}", withTimestamp: true);
+        AppendLine("", withTimestamp: true);
+
+        // 1) Executar setup da sandbox (cria VM, switch, estrutura) se ainda não existir
+        var setupScript = Path.Combine(scriptsPath, "01-Setup-MalwareSandbox.ps1");
+        if (File.Exists(setupScript))
+        {
+            AppendLine("[*] A executar setup da sandbox (01-Setup-MalwareSandbox.ps1)...", withTimestamp: true);
+            StatusText.Text = "Setup da sandbox Hyper-V...";
+            var exitSetup = await RunPowerShellScriptAsync(setupScript, arguments: null);
+            AppendLine("", withTimestamp: true);
+            if (exitSetup != 0)
+            {
+                AppendLine("[ERRO] Setup terminou com erros. Parei aqui para evitar passos seguintes inconsistentes. Veja a pasta de logs acima e envie o bundle.", withTimestamp: true);
+                AppendLine("", withTimestamp: true);
+                await PersistGuiLogAsync();
+                return;
+            }
+        }
 
         if (_runFirstTimeSetup)
         {
@@ -114,14 +153,17 @@ public partial class VmAnalysisWindow : Window
             var firstTimeScript = Path.Combine(scriptsPath, "05-FirstTimeVmSetup.ps1");
             if (!File.Exists(firstTimeScript))
             {
-                AppendLine($"[ERRO] Script não encontrado: {firstTimeScript}");
+                AppendLine($"[ERRO] Script não encontrado: {firstTimeScript}", withTimestamp: true);
                 return;
             }
             var exitCode1 = await RunPowerShellScriptAsync(firstTimeScript, arguments: null);
-            AppendLine("");
+            AppendLine("", withTimestamp: true);
             if (exitCode1 != 0)
             {
-                AppendLine("[AVISO] Primeira entrada terminou com erros. A continuar com a execução da amostra.");
+                AppendLine("[ERRO] Primeira entrada terminou com erros. Parei aqui (não vou correr a amostra) para não mascarar a causa. Envie o bundle da pasta de logs.", withTimestamp: true);
+                AppendLine("", withTimestamp: true);
+                await PersistGuiLogAsync();
+                return;
             }
         }
 
@@ -129,17 +171,35 @@ public partial class VmAnalysisWindow : Window
         var runSampleScript = Path.Combine(scriptsPath, "04-Run-Sample.ps1");
         if (!File.Exists(runSampleScript))
         {
-            AppendLine($"[ERRO] Script não encontrado: {runSampleScript}");
+            AppendLine($"[ERRO] Script não encontrado: {runSampleScript}", withTimestamp: true);
             return;
         }
 
-        var sampleArg = $"-SamplePath \"{_samplePath}\"";
+        var runIdArg = !string.IsNullOrWhiteSpace(_runId) ? $"-RunId \"{_runId}\"" : "";
+        var sampleArg = $"-SamplePath \"{_samplePath}\" {runIdArg}";
         var exitCode2 = await RunPowerShellScriptAsync(runSampleScript, sampleArg);
-        AppendLine("");
+        AppendLine("", withTimestamp: true);
         if (exitCode2 == 0)
-            AppendLine("[*] Análise comportamental concluída. Consulte D:\\PROJETOVM\\Reports\\ para o relatório.");
+            AppendLine("[*] Análise comportamental concluída. Consulte D:\\PROJETOVM\\Reports\\ para o relatório.", withTimestamp: true);
         else
-            AppendLine($"[*] Script terminou com código de saída: {exitCode2}");
+            AppendLine($"[*] Script terminou com código de saída: {exitCode2}", withTimestamp: true);
+
+        await PersistGuiLogAsync();
+    }
+
+    private Task PersistGuiLogAsync()
+    {
+        return Task.Run(() =>
+        {
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(_runDir))
+                {
+                    File.WriteAllText(Path.Combine(_runDir, "gui_terminal.log"), _logBuilder.ToString(), Encoding.UTF8);
+                }
+            }
+            catch { }
+        });
     }
 
     private Task<int> RunPowerShellScriptAsync(string scriptPath, string? arguments)

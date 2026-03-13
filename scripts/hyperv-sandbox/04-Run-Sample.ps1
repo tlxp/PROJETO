@@ -17,16 +17,17 @@
 #>
 #Requires -RunAsAdministrator
 
-Import-Module (Join-Path $PSScriptRoot "SandboxCommon.psm1") -ErrorAction Stop
-
 param(
     [Parameter(Mandatory = $true)]
-    [string] $SamplePath,
-    [int] $TimeoutSeconds = 120,
-    [int] $BootWaitSeconds = 60,
-    [switch] $NoInvokeCommand,
-    [int] $GlobalTimeoutSeconds = 300
+    [string]$SamplePath,
+    [string]$RunId,
+    [int]$TimeoutSeconds = 120,
+    [int]$BootWaitSeconds = 60,
+    [switch]$NoInvokeCommand,
+    [int]$GlobalTimeoutSeconds = 300
 )
+
+Import-Module (Join-Path $PSScriptRoot "SandboxCommon.psm1") -ErrorAction Stop
 
 $ErrorActionPreference = "Stop"
 
@@ -64,60 +65,68 @@ $sampleSha256 = $sampleHash.Hash
 $sampleFileName = [System.IO.Path]::GetFileName($SamplePath)
 $VMSamplePath = "C:\analysis_work\$sampleFileName"
 
-$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$ReportOutputPath = Join-Path $ReportsDir "analysis_$timestamp.txt"
+if ([string]::IsNullOrWhiteSpace($RunId)) {
+    $RunId = Get-Date -Format "yyyyMMdd_HHmmss"
+}
+$ReportOutputPath = Join-Path $ReportsDir "analysis_$RunId.txt"
 
 Ensure-DirectoryExists -Path $ReportsDir
 
 # Logging básico do host
 $LogsDir = $script:PROJETOVM_LogsPath
 Ensure-DirectoryExists -Path $LogsDir
-$HostLogPath = Join-Path $LogsDir "sandbox_run_$timestamp.log"
-$HostJsonPath = Join-Path $LogsDir "run_$timestamp.json"
-Add-Content -Path $HostLogPath -Value "==== Sandbox Run $timestamp ===="
-Add-Content -Path $HostLogPath -Value "Sample: $SamplePath"
-Add-Content -Path $HostLogPath -Value "Sample SHA256: $sampleSha256"
-Add-Content -Path $HostLogPath -Value "VM: $VMName  Snapshot: $SnapshotName"
-Add-Content -Path $HostLogPath -Value "Report: $ReportOutputPath"
+$RunsDir = Join-Path $LogsDir "Runs"
+$RunDir = Join-Path $RunsDir $RunId
+Ensure-DirectoryExists -Path $RunsDir
+Ensure-DirectoryExists -Path $RunDir
+$HostLogPath = Join-Path $RunDir "sandbox_run_$RunId.log"
+$HostJsonPath = Join-Path $RunDir "run_$RunId.json"
+function Add-LogLine { param([string]$Path, [string]$Value) Add-Content -Path $Path -Value "[$(Get-Date -Format 'HH:mm:ss')] $Value" }
+Add-LogLine -Path $HostLogPath -Value "==== Sandbox Run $RunId ===="
+Add-LogLine -Path $HostLogPath -Value "Sample: $SamplePath"
+Add-LogLine -Path $HostLogPath -Value "Sample SHA256: $sampleSha256"
+Add-LogLine -Path $HostLogPath -Value "VM: $VMName  Snapshot: $SnapshotName"
+Add-LogLine -Path $HostLogPath -Value "Report: $ReportOutputPath"
+Add-LogLine -Path $HostLogPath -Value "RunDir: $RunDir"
 
-Write-Host "=== Orquestração Sandbox Hyper-V ==="
-Write-Host "Amostra: $SamplePath"
-Write-Host "Hash SHA256: $sampleSha256"
-Write-Host "Relatório: $ReportOutputPath"
-Write-Host ""
+Write-LogHost "=== Orquestração Sandbox Hyper-V ==="
+Write-LogHost "Amostra: $SamplePath"
+Write-LogHost "Hash SHA256: $sampleSha256"
+Write-LogHost "Relatório: $ReportOutputPath"
+Write-LogHost ""
 
 # 1) Restaurar snapshot limpo
-Write-Host "[1/7] A restaurar snapshot '$SnapshotName'..."
+Write-LogHost "[1/7] A restaurar snapshot '$SnapshotName'..."
 Restore-SandboxSnapshot -VMName $VMName -SnapshotName $SnapshotName
-Write-Host "      Snapshot restaurado."
+Write-LogHost "      Snapshot restaurado."
 
 # 2) Arrancar VM
-Write-Host "[2/7] A arrancar a VM..."
+Write-LogHost "[2/7] A arrancar a VM..."
 Start-SandboxVM -VMName $VMName -BootWaitSeconds $BootWaitSeconds
 
 # 3) Ativar Guest Service para Copy-VMFile (e opcionalmente Invoke-Command)
-Write-Host "[3/7] A ativar Guest Service para transferência..."
-Enable-VMIntegrationService -VMName $VMName -Name "Guest Service Interface"
-Start-Sleep -Seconds 5
+Write-LogHost "[3/7] A ativar Guest Service para transferência..."
+Enable-SandboxGuestService -VMName $VMName
+$null = Wait-SandboxGuestServiceReady -VMName $VMName -TimeoutSeconds 120
 
 # 4) Copiar amostra para a VM
-Write-Host "[4/7] A copiar amostra para a VM..."
+Write-LogHost "[4/7] A copiar amostra para a VM..."
 $destDir = "C:\analysis_work"
-Copy-VMFile -VMName $VMName -SourcePath $SamplePath -DestinationPath $VMSamplePath -CreateFullPath -FileSource Host -ErrorAction Stop
+Copy-SandboxVMFile -VMName $VMName -SourcePath $SamplePath -DestinationPath $VMSamplePath
 # Copiar scripts de análise para a VM
 $scriptDir = Join-Path $PSScriptRoot "vm"
 $runScript = Join-Path $scriptDir "Run-MalwareAnalysis.ps1"
 $sendScript = Join-Path $scriptDir "Send-ReportViaCom.ps1"
 if (Test-Path $runScript) {
-    Copy-VMFile -VMName $VMName -SourcePath $runScript -DestinationPath "$VMScriptsPath\Run-MalwareAnalysis.ps1" -CreateFullPath -FileSource Host -ErrorAction SilentlyContinue
+    try { Copy-SandboxVMFile -VMName $VMName -SourcePath $runScript -DestinationPath "$VMScriptsPath\Run-MalwareAnalysis.ps1" } catch { }
 }
 if (Test-Path $sendScript) {
-    Copy-VMFile -VMName $VMName -SourcePath $sendScript -DestinationPath "$VMScriptsPath\Send-ReportViaCom.ps1" -CreateFullPath -FileSource Host -ErrorAction SilentlyContinue
+    try { Copy-SandboxVMFile -VMName $VMName -SourcePath $sendScript -DestinationPath "$VMScriptsPath\Send-ReportViaCom.ps1" } catch { }
 }
-Write-Host "      Amostra e scripts copiados."
+Write-LogHost "      Amostra e scripts copiados."
 
 # 5) Iniciar listener do pipe em background
-Write-Host "[5/7] A iniciar receptor do relatório (Named Pipe)..."
+Write-LogHost "[5/7] A iniciar receptor do relatório (Named Pipe)..."
 $modulePath = Join-Path $PSScriptRoot "SandboxCommon.psm1"
 $pipeJob = Start-Job -ScriptBlock {
     param($PipeName, $OutputPath, $TimeoutSeconds, $ModulePath)
@@ -126,7 +135,7 @@ $pipeJob = Start-Job -ScriptBlock {
 } -ArgumentList $PipeName, $ReportOutputPath, $TimeoutSeconds, $modulePath
 
 # 6) Executar análise na VM
-Write-Host "[6/7] A executar análise na VM..."
+Write-LogHost "[6/7] A executar análise na VM..."
 if (-not $NoInvokeCommand) {
     try {
         Invoke-Command -VMName $VMName -ScriptBlock {
@@ -136,13 +145,13 @@ if (-not $NoInvokeCommand) {
         } -ArgumentList $VMSamplePath, $TimeoutSeconds, $VMScriptsPath, $sampleSha256 -ErrorAction Stop
     }
     catch {
-        Write-Warning "Invoke-Command falhou (a VM pode não suportar Direct VM Connection). Execute manualmente na VM: Run-MalwareAnalysis.ps1 -SamplePath '$VMSamplePath' -TimeoutSeconds $TimeoutSeconds"
-        Write-Host "      À espera do relatório via pipe ($($TimeoutSeconds + 30) s)..."
+        Write-LogWarning "Invoke-Command falhou (a VM pode não suportar Direct VM Connection). Execute manualmente na VM: Run-MalwareAnalysis.ps1 -SamplePath '$VMSamplePath' -TimeoutSeconds $TimeoutSeconds"
+        Write-LogHost "      À espera do relatório via pipe ($($TimeoutSeconds + 30) s)..."
         $null = Wait-Job $pipeJob -Timeout ($TimeoutSeconds + 60)
     }
 } else {
-    Write-Host "      Modo manual: execute na VM: .\Run-MalwareAnalysis.ps1 -SamplePath '$VMSamplePath' -TimeoutSeconds $TimeoutSeconds"
-    Write-Host "      À espera do relatório via pipe..."
+    Write-LogHost "      Modo manual: execute na VM: .\Run-MalwareAnalysis.ps1 -SamplePath '$VMSamplePath' -TimeoutSeconds $TimeoutSeconds"
+    Write-LogHost "      À espera do relatório via pipe..."
     $null = Wait-Job $pipeJob -Timeout ($TimeoutSeconds + 120)
 }
 
@@ -156,36 +165,37 @@ if ($waitSec -gt 0) {
 }
 $pipeResult = Receive-Job $pipeJob
 Remove-Job $pipeJob -Force -ErrorAction SilentlyContinue
-Add-Content -Path $HostLogPath -Value "Pipe lines received: $pipeResult"
+Add-LogLine -Path $HostLogPath -Value "Pipe lines received: $pipeResult"
 if (Test-Path $ReportOutputPath) {
-    Write-Host "      Relatório recebido: $ReportOutputPath"
-    Add-Content -Path $HostLogPath -Value "Report received successfully."
+    Write-LogHost "      Relatório recebido: $ReportOutputPath"
+    Add-LogLine -Path $HostLogPath -Value "Report received successfully."
 } else {
-    Write-Warning "      Relatório não recebido no tempo esperado. Verifique se na VM o script enviou via COM1."
-    Add-Content -Path $HostLogPath -Value "Report NOT received within expected time."
+    Write-LogWarning "      Relatório não recebido no tempo esperado. Verifique se na VM o script enviou via COM1."
+    Add-LogLine -Path $HostLogPath -Value "Report NOT received within expected time."
 }
 
 # 7) Parar VM e restaurar snapshot
-Write-Host "[7/7] A parar a VM e a restaurar snapshot..."
+Write-LogHost "[7/7] A parar a VM e a restaurar snapshot..."
 Stop-SandboxVM -VMName $VMName
 Start-Sleep -Seconds 5
 Restore-SandboxSnapshot -VMName $VMName -SnapshotName $SnapshotName
-Write-Host "      VM restaurada ao estado limpo."
+Write-LogHost "      VM restaurada ao estado limpo."
 
-Add-Content -Path $HostLogPath -Value "VM stopped and snapshot restored."
+Add-LogLine -Path $HostLogPath -Value "VM stopped and snapshot restored."
 
 # Desativar Guest Service Interface após a execução para reduzir superfície de ataque
 try {
     Disable-VMIntegrationService -VMName $VMName -Name "Guest Service Interface" -ErrorAction SilentlyContinue
-    Add-Content -Path $HostLogPath -Value "Guest Service Interface disabled after run."
+    Add-LogLine -Path $HostLogPath -Value "Guest Service Interface disabled after run."
 } catch {
-    Add-Content -Path $HostLogPath -Value "Failed to disable Guest Service Interface: $_"
+    Add-LogLine -Path $HostLogPath -Value "Failed to disable Guest Service Interface: $_"
 }
 
 # JSON estruturado do run
 $analysisEnd = Get-Date
 $status = if (Test-Path $ReportOutputPath) { "ok" } else { "failed" }
 $jsonData = @{
+    run_id         = $RunId
     sample_path    = $SamplePath
     sample_sha256  = $sampleSha256
     vm_name        = $VMName
@@ -200,5 +210,5 @@ try {
     $jsonData | ConvertTo-Json -Depth 4 | Set-Content -Path $HostJsonPath -Encoding UTF8
 } catch { }
 
-Write-Host ""
-Write-Host "Concluído. Relatório: $ReportOutputPath"
+Write-LogHost ""
+Write-LogHost "Concluído. Relatório: $ReportOutputPath"

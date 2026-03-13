@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -48,6 +49,21 @@ public partial class MainDashboardView : UserControl
 
         _selectedFilePath = files[0];
         ShowOptions = true;
+    }
+
+    private void SelectFileButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Selecionar ficheiro para análise",
+            Filter = "Executáveis e ficheiros|*.exe;*.dll;*.zip|Todos os ficheiros (*.*)|*.*",
+            FilterIndex = 1
+        };
+        if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.FileName))
+        {
+            _selectedFilePath = dialog.FileName;
+            ShowOptions = true;
+        }
     }
 
     private async void StaticAnalysis_Click(object sender, RoutedEventArgs e)
@@ -330,12 +346,39 @@ public partial class MainDashboardView : UserControl
             return;
         }
 
+        if (!IsRunningAsAdministrator())
+        {
+            MessageBox.Show(
+                "A análise comportamental em VM requer direitos de administrador (Hyper-V e scripts PowerShell).\n\n" +
+                "Feche esta aplicação e execute-a como Administrador:\n" +
+                "• Clique direito em RatAnalyzer.Desktop.exe → \"Executar como administrador\"\n" +
+                "• Ou abra o PowerShell como Administrador e execute: dotnet run",
+                "Elevação necessária",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
         var runFirstTimeSetup = FirstTimeVmCheckBox?.IsChecked == true;
         var vmWindow = new VmAnalysisWindow(_selectedFilePath, runFirstTimeSetup)
         {
             Owner = Window.GetWindow(this)
         };
         vmWindow.Show();
+    }
+
+    private static bool IsRunningAsAdministrator()
+    {
+        try
+        {
+            using var identity = WindowsIdentity.GetCurrent();
+            var principal = new WindowsPrincipal(identity);
+            return principal.IsInRole(WindowsBuiltInRole.Administrator);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private sealed class SubmitResponse
