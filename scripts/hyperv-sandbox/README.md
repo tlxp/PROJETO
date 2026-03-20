@@ -51,6 +51,12 @@ D:\PROJETOVM\
    ```
    - Se o Hyper-V não estiver ativo, o script ativa-o e pede **reinício**; após reiniciar, execute o script novamente.
    - O script cria `D:\PROJETOVM`, a VM `MalwareSandbox`, o switch interno `SandboxSwitch`, atribui 192.168.100.1/24 ao adaptador do host (se existir), configura COM1→Named Pipe e cria o snapshot `CleanState` (se a VM estiver desligada).
+   - Se a VM `MalwareSandbox` e/ou o VHDX `Sandbox.vhdx` já existirem, o script pergunta se quer **eliminar e reinstalar de raiz**.
+   - Para reinstalar **sem pedir confirmação** (opção usada pela GUI quando deteta recursos existentes), execute:
+     ```powershell
+     .\01-Setup-MalwareSandbox.ps1 -ForceReinstall
+     ```
+   - Quando o setup é iniciado pela GUI WPF (`wpf-gui/Views/VmAnalysisWindow.xaml.cs`), é feita uma pré-checagem e é apresentado um pop-up para confirmar a reinstalação.
 4. Instale o **Windows** na VM (ligar DVD/ISO, arrancar, concluir instalação).
 5. Dentro da VM: desative rede pública; opcionalmente configure IP estático (ex.: 192.168.100.10/24, gateway 192.168.100.1).
 6. (Opcional mas recomendado) Instale **Sysmon** na VM com configuração personalizada:

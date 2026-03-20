@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -134,9 +135,35 @@ public partial class VmAnalysisWindow : Window
         var setupScript = Path.Combine(scriptsPath, "01-Setup-MalwareSandbox.ps1");
         if (File.Exists(setupScript))
         {
+            // Preflight: se já existir VM/VHD, pedir confirmação na GUI (Read-Host não funciona na app)
+            var preflight = await GetSetupPreflightAsync(scriptsPath);
+            var setupArgs = (string?)null;
+            if (preflight != null && (preflight.VmExists || preflight.VhdExists))
+            {
+                var msg =
+                    "Foram detetados recursos existentes do sandbox Hyper-V:\n\n" +
+                    $"- VM: {preflight.VmName} (existe: {preflight.VmExists})\n" +
+                    $"- Disco: {preflight.VhdPath} (existe: {preflight.VhdExists})\n\n" +
+                    "Pretende ELIMINAR e reinstalar tudo de raiz?";
+                var confirm = MessageBox.Show(
+                    msg,
+                    "Reinstalar sandbox?",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+
+                if (confirm != MessageBoxResult.Yes)
+                {
+                    AppendLine("[*] Setup cancelado pelo utilizador (existiam recursos já criados).", withTimestamp: true);
+                    await PersistGuiLogAsync();
+                    return;
+                }
+
+                setupArgs = "-ForceReinstall";
+            }
+
             AppendLine("[*] A executar setup da sandbox (01-Setup-MalwareSandbox.ps1)...", withTimestamp: true);
             StatusText.Text = "Setup da sandbox Hyper-V...";
-            var exitSetup = await RunPowerShellScriptAsync(setupScript, arguments: null);
+            var exitSetup = await RunPowerShellScriptAsync(setupScript, setupArgs);
             AppendLine("", withTimestamp: true);
             if (exitSetup != 0)
             {
@@ -245,6 +272,65 @@ public partial class VmAnalysisWindow : Window
 
             process.WaitForExit();
             return process.ExitCode;
+        }, _cts.Token);
+    }
+
+    private sealed record SetupPreflight(string VmName, bool VmExists, string VhdPath, bool VhdExists);
+
+    private Task<SetupPreflight?> GetSetupPreflightAsync(string scriptsPath)
+    {
+        return Task.Run(() =>
+        {
+            try
+            {
+                var configPath = Path.Combine(scriptsPath, "_Config.ps1");
+                if (!File.Exists(configPath))
+                    return null;
+
+                // Dot-source da config para usar os mesmos caminhos/nome de VM do projeto.
+                var command =
+                    "& { " +
+                    $"  . \"{configPath}\"; " +
+                    "  $vmName = $script:PROJETOVM_VMName; " +
+                    "  $vm = Get-VM -Name $vmName -ErrorAction SilentlyContinue; " +
+                    "  $vhdPath = Join-Path $script:PROJETOVM_VMPath \"Sandbox.vhdx\"; " +
+                    "  $obj = [pscustomobject]@{ VmName = $vmName; VmExists = [bool]$vm; VhdPath = $vhdPath; VhdExists = (Test-Path $vhdPath) }; " +
+                    "  $obj | ConvertTo-Json -Compress " +
+                    "} ";
+
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "powershell.exe",
+                    Arguments = $"-NoProfile -ExecutionPolicy Bypass -Command \"{command}\"",
+                    WorkingDirectory = scriptsPath,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8
+                };
+
+                using var process = new Process { StartInfo = psi };
+                process.Start();
+                var stdout = process.StandardOutput.ReadToEnd();
+                process.WaitForExit();
+                if (process.ExitCode != 0)
+                    return null;
+
+                stdout = stdout?.Trim();
+                if (string.IsNullOrWhiteSpace(stdout))
+                    return null;
+
+                return JsonSerializer.Deserialize<SetupPreflight>(stdout, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+            }
+            catch
+            {
+                return null;
+            }
         }, _cts.Token);
     }
 

@@ -39,6 +39,18 @@ programa/obj/
 wpf-gui/bin/
 wpf-gui/obj/
 
+# .NET (genérico) – ajuda a evitar commits de build em qualquer projeto
+**/bin/
+**/obj/
+
+# Visual Studio / IDE files
+.vs/
+*.user
+*.suo
+*.csproj.user
+*.userosscache
+*.sln.docstates
+
 # Sandbox – jobs e base de dados de análise (dados de runtime)
 sandbox_jobs/
 

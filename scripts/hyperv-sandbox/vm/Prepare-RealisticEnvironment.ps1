@@ -68,6 +68,7 @@ catch {
 if ($InstallCommonSoftware) {
     Write-Host "A instalar software comum via winget (pode demorar)..."
     $packages = @(
+        "Microsoft.WindowsADK",
         "Google.Chrome",
         "7zip.7zip",
         "Microsoft.VisualStudioCode",
