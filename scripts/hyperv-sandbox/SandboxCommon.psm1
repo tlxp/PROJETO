@@ -1,4 +1,4 @@
-﻿param(
+param(
     [switch] $DryRun
 )
 
@@ -331,6 +331,49 @@ function New-Windows10UnattendXml {
     )
     # Nota: chave gen-rica para instalar Windows 10 Pro (n-o ativa). Ajuda a sele--o de edi--o.
     $productKey = "VK7JG-NPHTM-C97JM-9MPGT-3V66T"
+
+    # Ajustar layout de disco para corresponder ao tipo de boot da VM:
+    # - Gen1 (BIOS/Legacy): MBR (2 partições primárias)
+    # - Gen2 (UEFI): GPT + EFI System + MSR
+    $osPartitionId = if ($VMGeneration -eq 2) { 3 } else { 2 }
+    $diskConfigurationBlock = if ($VMGeneration -eq 2) {
+        @"
+      <DiskConfiguration>
+        <Disk wcm:action="add" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+          <DiskID>0</DiskID>
+          <WillWipeDisk>true</WillWipeDisk>
+          <CreatePartitions>
+            <CreatePartition wcm:action="add"><Order>1</Order><Type>EFI</Type><Size>100</Size></CreatePartition>
+            <CreatePartition wcm:action="add"><Order>2</Order><Type>MSR</Type><Size>16</Size></CreatePartition>
+            <CreatePartition wcm:action="add"><Order>3</Order><Type>Primary</Type><Extend>true</Extend></CreatePartition>
+          </CreatePartitions>
+          <ModifyPartitions>
+            <ModifyPartition wcm:action="add"><Order>1</Order><PartitionID>1</PartitionID><Format>FAT32</Format><Label>SYSTEM</Label></ModifyPartition>
+            <ModifyPartition wcm:action="add"><Order>2</Order><PartitionID>2</PartitionID></ModifyPartition>
+            <ModifyPartition wcm:action="add"><Order>3</Order><PartitionID>3</PartitionID><Format>NTFS</Format><Label>Windows</Label><Letter>C</Letter></ModifyPartition>
+          </ModifyPartitions>
+        </Disk>
+      </DiskConfiguration>
+"@
+    } else {
+        @"
+      <DiskConfiguration>
+        <Disk wcm:action="add" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+          <DiskID>0</DiskID>
+          <WillWipeDisk>true</WillWipeDisk>
+          <CreatePartitions>
+            <CreatePartition wcm:action="add"><Order>1</Order><Type>Primary</Type><Size>100</Size></CreatePartition>
+            <CreatePartition wcm:action="add"><Order>2</Order><Type>Primary</Type><Extend>true</Extend></CreatePartition>
+          </CreatePartitions>
+          <ModifyPartitions>
+            <ModifyPartition wcm:action="add"><Order>1</Order><PartitionID>1</PartitionID><Format>FAT32</Format><Label>SYSTEM</Label><Active>true</Active></ModifyPartition>
+            <ModifyPartition wcm:action="add"><Order>2</Order><PartitionID>2</PartitionID><Format>NTFS</Format><Label>Windows</Label><Letter>C</Letter></ModifyPartition>
+          </ModifyPartitions>
+        </Disk>
+      </DiskConfiguration>
+"@
+    }
+
     return @"
 <?xml version="1.0" encoding="utf-8"?>
 <unattend xmlns="urn:schemas-microsoft-com:unattend">
@@ -357,26 +400,11 @@ function New-Windows10UnattendXml {
           </InstallFrom>
           <InstallTo>
             <DiskID>0</DiskID>
-            <PartitionID>3</PartitionID>
+            <PartitionID>$osPartitionId</PartitionID>
           </InstallTo>
         </OSImage>
       </ImageInstall>
-      <DiskConfiguration>
-        <Disk wcm:action="add" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
-          <DiskID>0</DiskID>
-          <WillWipeDisk>true</WillWipeDisk>
-          <CreatePartitions>
-            <CreatePartition wcm:action="add"><Order>1</Order><Type>EFI</Type><Size>100</Size></CreatePartition>
-            <CreatePartition wcm:action="add"><Order>2</Order><Type>MSR</Type><Size>16</Size></CreatePartition>
-            <CreatePartition wcm:action="add"><Order>3</Order><Type>Primary</Type><Extend>true</Extend></CreatePartition>
-          </CreatePartitions>
-          <ModifyPartitions>
-            <ModifyPartition wcm:action="add"><Order>1</Order><PartitionID>1</PartitionID><Format>FAT32</Format><Label>SYSTEM</Label></ModifyPartition>
-            <ModifyPartition wcm:action="add"><Order>2</Order><PartitionID>2</PartitionID></ModifyPartition>
-            <ModifyPartition wcm:action="add"><Order>3</Order><PartitionID>3</PartitionID><Format>NTFS</Format><Label>Windows</Label><Letter>C</Letter></ModifyPartition>
-          </ModifyPartitions>
-        </Disk>
-      </DiskConfiguration>
+      $diskConfigurationBlock
     </component>
   </settings>
 
@@ -416,7 +444,8 @@ function New-Windows10UnattendXml {
         <SynchronousCommand wcm:action="add" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
           <Order>1</Order>
           <Description>Enable PowerShell remoting</Description>
-          <CommandLine>powershell -NoProfile -ExecutionPolicy Bypass -Command "Enable-PSRemoting -Force"</CommandLine>
+          <!-- Marker para debug: confirma que o autounattend foi efetivamente aplicado no guest -->
+          <CommandLine>powershell -NoProfile -ExecutionPolicy Bypass -Command "Set-Content -Path 'C:\unattend_applied.txt' -Value ('Applied:' + (Get-Date).ToString('o') + ' Host:' + $env:COMPUTERNAME + ' User: ${UserName}'); Enable-PSRemoting -Force"</CommandLine>
         </SynchronousCommand>
       </FirstLogonCommands>
     </component>
@@ -429,24 +458,49 @@ function Wait-VMHeartbeatOk {
     param(
         [Parameter(Mandatory = $true)][string] $VMName,
         [int] $TimeoutSeconds = 2400,
-        [string] $LogPath
+        [string] $LogPath,
+        [int] $LogIntervalSeconds = 5
     )
     if ($script:DryRun) { return $true }
     $start = Get-Date
     $deadline = $start.AddSeconds($TimeoutSeconds)
-    Write-SandboxLog -Message "A aguardar Heartbeat da VM '$VMName' (timeout ${TimeoutSeconds}s)..." -LogPath $LogPath -Level "INFO"
+    Write-SandboxLog -Message "A aguardar Heartbeat da VM '$VMName' (timeout ${TimeoutSeconds}s, intervalo ${LogIntervalSeconds}s)..." -LogPath $LogPath -Level "INFO"
+
+    $lastPrimary = $null
+    $lastSecondary = $null
     while ((Get-Date) -lt $deadline) {
         try {
             $hb = Get-VMIntegrationService -VMName $VMName -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*Heartbeat*" -or $_.Id -like "*Heartbeat*" } | Select-Object -First 1
-            if ($hb -and $hb.PrimaryStatusDescription -eq "OK") {
+
+            if (-not $hb) {
                 $elapsed = [int]((Get-Date) - $start).TotalSeconds
-                Write-SandboxLog -Message "Heartbeat da VM '$VMName' ficou OK ap-s ${elapsed}s." -LogPath $LogPath -Level "INFO"
-                return $true
+                Write-SandboxLog -Message "Heartbeat: servico de integracao nao encontrado (ainda). elapsed=${elapsed}s" -LogPath $LogPath -Level "INFO"
+            } else {
+                $primary = $hb.PrimaryStatusDescription
+                $secondary = $null
+                try { $secondary = $hb.SecondaryStatusDescription } catch { }
+
+                if ($primary -ne $lastPrimary -or $secondary -ne $lastSecondary) {
+                    $elapsed = [int]((Get-Date) - $start).TotalSeconds
+                    Write-SandboxLog -Message "Heartbeat status mudou: Primary='$primary' Secondary='$secondary' (elapsed=${elapsed}s)" -LogPath $LogPath -Level "INFO"
+                    $lastPrimary = $primary
+                    $lastSecondary = $secondary
+                } else {
+                    $elapsed = [int]((Get-Date) - $start).TotalSeconds
+                    Write-SandboxLog -Message "Heartbeat: Primary='$primary' Secondary='$secondary' (elapsed=${elapsed}s)" -LogPath $LogPath -Level "INFO"
+                }
+
+                if ($primary -eq "OK") {
+                    $elapsed = [int]((Get-Date) - $start).TotalSeconds
+                    Write-SandboxLog -Message "Heartbeat da VM '$VMName' ficou OK após ${elapsed}s." -LogPath $LogPath -Level "INFO"
+                    return $true
+                }
             }
         } catch { }
         $remaining = [int]($deadline - (Get-Date)).TotalSeconds
-        Write-SandboxLog -Message "Heartbeat ainda n-o est- OK para a VM '$VMName'. Tempo restante aproximado: ${remaining}s." -LogPath $LogPath -Level "INFO"
-        Start-Sleep -Seconds 15
+        Write-SandboxLog -Message "Heartbeat ainda nao OK. Tempo restante aproximado: ${remaining}s." -LogPath $LogPath -Level "INFO"
+
+        Start-Sleep -Seconds $LogIntervalSeconds
     }
     Write-SandboxLog -Message "Timeout - espera do Heartbeat da VM '$VMName' ap-s ${TimeoutSeconds}s." -LogPath $LogPath -Level "WARN"
     return $false
