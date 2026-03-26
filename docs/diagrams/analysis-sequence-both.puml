@@ -1,0 +1,51 @@
+@startuml
+title Analise Combinada (Estatica + Dinamica) - Sequencia detalhada
+
+autonumber
+actor "Utilizador" as U
+participant "Frontend React" as FE
+participant "API Backend" as API
+participant "Jobs de Analise" as JOBS
+participant "RAT Analyzer" as RAT
+participant "Orquestrador de VM" as VMO
+participant "Driver de VM" as DRV
+participant "Agente de VM" as AGENT
+database "Armazenamento de Jobs" as DB
+
+U -> FE: Carregar ficheiro + escolher ambas
+FE -> API: POST /api/analysis?analysis_type=both
+API -> JOBS: create_job(file,both)
+JOBS -> DB: insert queued
+FE <-- API: {jobId,status=queued}
+
+JOBS -> DB: update_status(running)
+
+group etapa estatica
+JOBS -> RAT: _run_static(job)
+RAT --> JOBS: staticResult
+end
+
+group etapa dinamica
+JOBS -> VMO: _run_dynamic(job)
+VMO -> DRV: run(job)
+alt hyperv/proxmox
+DRV -> AGENT: upload + run + report
+AGENT --> DRV: comportamento
+else stub
+DRV --> VMO: comportamento sintetico
+end
+VMO --> JOBS: dynamicResult
+end
+
+JOBS -> DB: update_results(staticResult,dynamicResult)
+JOBS -> DB: update_status(completed|failed)
+
+loop consulta periodica (polling)
+FE -> API: GET /api/analysis/{jobId}
+API -> JOBS: get_job_payload(jobId)
+JOBS -> DB: get_job_row(jobId)
+API <-- JOBS: status + staticResult + dynamicResult
+FE <-- API: resposta final
+end
+
+@enduml

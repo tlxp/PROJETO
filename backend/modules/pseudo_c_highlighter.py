@@ -235,6 +235,136 @@ def _parse_pseudo_c_functions(c_source: str) -> List[Dict[str, Any]]:
     return results
 
 
+def _stable_func_id(name: str, start_line: int, end_line: int) -> str:
+    return f"{name}:{int(start_line)}-{int(end_line)}"
+
+
+def _score_function_by_indicators(
+    func_name: str,
+    body_text: str,
+    indicators: List[str],
+) -> Dict[str, Any]:
+    """
+    Pipeline de deteção de funções suspeitas:
+      - atribui score por matches (import/indicadores) e padrões (keylogging, persistência, rede, I/O)
+      - devolve razões e severidade (CRÍTICO/ALTO/MÉDIO/BAIXO)
+    """
+    name = (func_name or "").strip()
+    text = body_text or ""
+    inds = [i for i in indicators if isinstance(i, str) and i.strip()]
+
+    # Pesos por indicadores clássicos (Windows API) — mantemos simples e explicável.
+    token_weights: Dict[str, int] = {
+        # keylogging / input
+        "GetAsyncKeyState": 35,
+        "GetKeyState": 18,
+        "SetWindowsHookEx": 40,
+        "GetForegroundWindow": 10,
+        # persistência (registo)
+        "RegOpenKeyExA": 20,
+        "RegOpenKeyExW": 20,
+        "RegSetValueExA": 25,
+        "RegSetValueExW": 25,
+        "RegCreateKeyExA": 22,
+        "RegCreateKeyExW": 22,
+        # rede / C2
+        "InternetOpenA": 18,
+        "InternetOpenW": 18,
+        "InternetOpenUrlA": 25,
+        "InternetOpenUrlW": 25,
+        "WinHttpOpen": 18,
+        "WinHttpConnect": 22,
+        "WinHttpSendRequest": 25,
+        "URLDownloadToFile": 22,
+        "WSAStartup": 10,
+        "connect": 18,
+        "send": 14,
+        "recv": 14,
+        # ficheiros
+        "CreateFileA": 16,
+        "CreateFileW": 16,
+        "WriteFile": 18,
+        "ReadFile": 10,
+        "DeleteFileA": 14,
+        "DeleteFileW": 14,
+        # execução / injeção (pode variar conforme binário)
+        "CreateProcessA": 20,
+        "CreateProcessW": 20,
+        "ShellExecuteA": 18,
+        "ShellExecuteW": 18,
+        "VirtualAlloc": 25,
+        "WriteProcessMemory": 35,
+        "CreateRemoteThread": 40,
+    }
+
+    # Padrões por strings comuns (ex.: chave Run, URL) — peso baixo/moderado.
+    pattern_weights: List[Tuple[str, int, str]] = [
+        (r"CurrentVersion\\Run", 28, "Persistência via chave Run (registo)"),
+        (r"http://", 18, "Possível comunicação HTTP"),
+        (r"https://", 18, "Possível comunicação HTTPS"),
+    ]
+
+    matched: List[str] = []
+    reasons: List[str] = []
+    score = 0
+
+    # 1) Nome suspeito (heurístico leve, só como bump)
+    lowered = name.lower()
+    if any(k in lowered for k in ("key", "keystroke", "hook", "persist", "exfil", "c2", "steal")):
+        score += 8
+        reasons.append("Nome da função sugere comportamento suspeito")
+
+    # 2) Matches exatos por tokens (preferir o que vem da análise estática)
+    for tok in inds:
+        w = token_weights.get(tok)
+        if w:
+            matched.append(tok)
+            score += w
+
+    # 3) Padrões no corpo (regex simples)
+    import re
+
+    for pat, w, desc in pattern_weights:
+        if re.search(pat, text, flags=re.IGNORECASE):
+            score += w
+            reasons.append(desc)
+
+    # 4) Sinais adicionais por presença no corpo mesmo sem vir na lista (fallback)
+    for tok, w in token_weights.items():
+        if tok in matched:
+            continue
+        if tok and tok in text:
+            matched.append(tok)
+            score += max(6, int(w * 0.5))
+
+    matched_unique: List[str] = []
+    seen: Set[str] = set()
+    for m in matched:
+        if m not in seen:
+            seen.add(m)
+            matched_unique.append(m)
+
+    # Severidade
+    if score >= 75:
+        severity = "CRÍTICO"
+    elif score >= 45:
+        severity = "ALTO"
+    elif score >= 22:
+        severity = "MÉDIO"
+    else:
+        severity = "BAIXO"
+
+    if matched_unique:
+        reasons.insert(0, "Indicadores: " + ", ".join(matched_unique[:10]) + ("…" if len(matched_unique) > 10 else ""))
+
+    return {
+        "score": int(score),
+        "severity": severity,
+        "matchedIndicators": matched_unique,
+        "reasons": reasons[:8],
+    }
+
+
 def build_flagged_functions(
     c_source: str,
     analysis_results: Dict,
@@ -317,13 +447,29 @@ def build_flagged_functions(
                 seen_ind.add(s)
                 unique_inds.append(s)
 
+        # Novo pipeline: score + razões
+        scored = _score_function_by_indicators(name, body_text, unique_inds)
+
         flagged_funcs.append(
             {
                 "name": name,
+                "id": _stable_func_id(name, int(func.get("startLine", 1)), int(func.get("endLine", 1))),
                 "startLine": int(func.get("startLine", 1)),
                 "endLine": int(func.get("endLine", 1)),
                 "indicators": unique_inds,
+                "score": scored.get("score", 0),
+                "severity": scored.get("severity", "BAIXO"),
+                "reasons": scored.get("reasons", []),
             }
         )
 
+    # Ordenar: mais grave primeiro, depois por score/linha
+    sev_rank = {"CRÍTICO": 0, "ALTO": 1, "MÉDIO": 2, "BAIXO": 3}
+    flagged_funcs.sort(
+        key=lambda f: (
+            sev_rank.get(str(f.get("severity") or "BAIXO").upper(), 9),
+            -int(f.get("score") or 0),
+            int(f.get("startLine") or 0),
+        )
+    )
     return flagged_funcs

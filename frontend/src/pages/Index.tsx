@@ -34,9 +34,13 @@ export type AnalysisResult = {
   /** Funções suspeitas com ranges exatos no pseudo-C (vindo do backend). */
   flaggedFunctions?: {
     name: string;
+    id?: string;
     startLine: number;
     endLine: number;
     indicators?: string[];
+    score?: number;
+    severity?: string;
+    reasons?: string[];
   }[];
   /** Caminho do ficheiro com trechos obfuscados extraídos (quando existir). */
   obfuscatedSnippetsFile?: string;
@@ -143,10 +147,16 @@ function buildAnalysisResultFromJob(job: unknown, fallbackFileName?: string): An
             const rf = asRecord(f) ?? {};
             return {
               name: typeof rf.name === "string" ? rf.name : "",
+              id: typeof rf.id === "string" ? rf.id : undefined,
               startLine: typeof rf.startLine === "number" ? rf.startLine : 0,
               endLine: typeof rf.endLine === "number" ? rf.endLine : 0,
               indicators: Array.isArray(rf.indicators)
                 ? (rf.indicators as unknown[]).filter((x): x is string => typeof x === "string")
+                : [],
+              score: typeof rf.score === "number" ? rf.score : undefined,
+              severity: typeof rf.severity === "string" ? rf.severity : undefined,
+              reasons: Array.isArray(rf.reasons)
+                ? (rf.reasons as unknown[]).filter((x): x is string => typeof x === "string")
                 : [],
             };
           })
@@ -193,10 +203,16 @@ function buildAnalysisResultFromJob(job: unknown, fallbackFileName?: string): An
             const rf = asRecord(f) ?? {};
             return {
               name: typeof rf.name === "string" ? rf.name : "",
+              id: typeof rf.id === "string" ? rf.id : undefined,
               startLine: typeof rf.startLine === "number" ? rf.startLine : 0,
               endLine: typeof rf.endLine === "number" ? rf.endLine : 0,
               indicators: Array.isArray(rf.indicators)
                 ? (rf.indicators as unknown[]).filter((x): x is string => typeof x === "string")
+                : [],
+              score: typeof rf.score === "number" ? rf.score : undefined,
+              severity: typeof rf.severity === "string" ? rf.severity : undefined,
+              reasons: Array.isArray(rf.reasons)
+                ? (rf.reasons as unknown[]).filter((x): x is string => typeof x === "string")
                 : [],
             };
           })
@@ -552,6 +568,10 @@ const Index = () => {
   const [externalJobLoaded, setExternalJobLoaded] = useState(false);
   const [lastExternalJobId, setLastExternalJobId] = useState<string | null>(null);
   const [resultJobId, setResultJobId] = useState<string | null>(null);
+  const [activeCFunctionId, setActiveCFunctionId] = useState<string | null>(null);
+  const [activeFlaggedFunctionIndex, setActiveFlaggedFunctionIndex] = useState<number>(0);
+  const [flaggedFunctionsOrder, setFlaggedFunctionsOrder] = useState<"code" | "severity">("code");
+  const suppressAutoScrollRef = useRef(false);
   const [snippetModal, setSnippetModal] = useState<{
     open: boolean;
     title: string;
@@ -935,12 +955,12 @@ const Index = () => {
       flaggedIndicators: ["GetAsyncKeyState", "CreateFileA", "WriteFile", "RegOpenKeyExA", "RegSetValueExA", "InternetOpenA", "InternetOpenUrlA", "get_c2_url", "exfil_data"],
       obfuscationIndicatorCount: 2,
       flaggedFunctions: [
-        { name: "read_config", startLine: 5, endLine: 20, indicators: [] },
-        { name: "get_c2_url", startLine: 24, endLine: 32, indicators: ["String concatenation obfuscation"] },
-        { name: "capture_keystrokes", startLine: 36, endLine: 45, indicators: ["GetAsyncKeyState"] },
-        { name: "persist_registry", startLine: 48, endLine: 55, indicators: ["RegOpenKeyExA", "RegSetValueExA"] },
-        { name: "suspicious_function", startLine: 57, endLine: 65, indicators: ["CreateFileA", "WriteFile"] },
-        { name: "exfil_data", startLine: 67, endLine: 73, indicators: ["InternetOpenA", "InternetOpenUrlA"] },
+        { name: "read_config", id: "read_config:5-20", startLine: 5, endLine: 20, indicators: [], score: 6, severity: "BAIXO", reasons: ["I/O simples (leitura de config)"] },
+        { name: "get_c2_url", id: "get_c2_url:24-32", startLine: 24, endLine: 32, indicators: ["String concatenation obfuscation"], score: 28, severity: "MÉDIO", reasons: ["Construção de URL de forma ofuscada (concatenação)"] },
+        { name: "capture_keystrokes", id: "capture_keystrokes:36-45", startLine: 36, endLine: 45, indicators: ["GetAsyncKeyState"], score: 86, severity: "CRÍTICO", reasons: ["Keylogging via GetAsyncKeyState"] },
+        { name: "persist_registry", id: "persist_registry:48-55", startLine: 48, endLine: 55, indicators: ["RegOpenKeyExA", "RegSetValueExA"], score: 74, severity: "ALTO", reasons: ["Persistência via registo (Run)"] },
+        { name: "suspicious_function", id: "suspicious_function:57-65", startLine: 57, endLine: 65, indicators: ["CreateFileA", "WriteFile"], score: 46, severity: "ALTO", reasons: ["Escrita suspeita em ficheiro (log)"] },
+        { name: "exfil_data", id: "exfil_data:67-73", startLine: 67, endLine: 73, indicators: ["InternetOpenA", "InternetOpenUrlA"], score: 58, severity: "ALTO", reasons: ["Comunicação externa via WinInet"] },
       ],
     };
     setFile(null);
@@ -1039,6 +1059,27 @@ const Index = () => {
                 riskLevel: typeof r.riskLevel === "string" ? r.riskLevel : "",
                 flaggedIndicators: Array.isArray(r.flaggedIndicators)
                   ? (r.flaggedIndicators as unknown[]).filter((x): x is string => typeof x === "string")
+                  : [],
+                flaggedFunctions: Array.isArray(r.flaggedFunctions)
+                  ? (r.flaggedFunctions as unknown[])
+                      .filter((x): x is Record<string, unknown> => !!x && typeof x === "object")
+                      .map((f) => {
+                        const rf = asRecord(f) ?? {};
+                        return {
+                          name: typeof rf.name === "string" ? rf.name : "",
+                          id: typeof rf.id === "string" ? rf.id : undefined,
+                          startLine: typeof rf.startLine === "number" ? rf.startLine : 0,
+                          endLine: typeof rf.endLine === "number" ? rf.endLine : 0,
+                          indicators: Array.isArray(rf.indicators)
+                            ? (rf.indicators as unknown[]).filter((x): x is string => typeof x === "string")
+                            : [],
+                          score: typeof rf.score === "number" ? rf.score : undefined,
+                          severity: typeof rf.severity === "string" ? rf.severity : undefined,
+                          reasons: Array.isArray(rf.reasons)
+                            ? (rf.reasons as unknown[]).filter((x): x is string => typeof x === "string")
+                            : [],
+                        };
+                      })
                   : [],
               };
               setAnalysisResult(data);
@@ -1207,6 +1248,123 @@ const Index = () => {
     setOverviewCategoryIndex(0);
   }, [result?.report]);
 
+  const flaggedFunctionsSorted = useMemo(() => {
+    const src = (result?.flaggedFunctions ?? []).filter((f) => f && f.startLine > 0 && f.endLine > 0);
+    const arr = [...src];
+    if (flaggedFunctionsOrder === "severity") {
+      // Score maior primeiro; em empate, mantém ordem no código (startLine).
+      return arr.sort((a, b) => {
+        const sa = typeof a.score === "number" ? a.score : Number.NEGATIVE_INFINITY;
+        const sb = typeof b.score === "number" ? b.score : Number.NEGATIVE_INFINITY;
+        return (sb - sa) || (a.startLine - b.startLine) || (a.endLine - b.endLine);
+      });
+    }
+    return arr.sort((a, b) => a.startLine - b.startLine || a.endLine - b.endLine);
+  }, [result?.flaggedFunctions, flaggedFunctionsOrder]);
+
+  // Ao mudar a ordenação, mantém a função ativa (se existir) selecionada na nova lista.
+  useEffect(() => {
+    if (!activeCFunctionId || !flaggedFunctionsSorted.length) return;
+    const idx = flaggedFunctionsSorted.findIndex((f) => {
+      const fid = (f.id && f.id.trim()) || `${f.name}:${f.startLine}-${f.endLine}`;
+      return fid === activeCFunctionId;
+    });
+    if (idx >= 0 && idx !== activeFlaggedFunctionIndex) {
+      suppressAutoScrollRef.current = true; // não saltar no código só por reordenação
+      setActiveFlaggedFunctionIndex(idx);
+    }
+  }, [activeCFunctionId, activeFlaggedFunctionIndex, flaggedFunctionsSorted]);
+
+  const getFlaggedFunctionIndexForLine = useCallback(
+    (line: number): number => {
+      if (!flaggedFunctionsSorted.length) return -1;
+      let bestIdx = -1;
+      let bestLen = Number.POSITIVE_INFINITY;
+      let bestStart = -1;
+      for (let i = 0; i < flaggedFunctionsSorted.length; i++) {
+        const f = flaggedFunctionsSorted[i];
+        if (line < f.startLine || line > f.endLine) continue;
+        const len = Math.max(0, f.endLine - f.startLine);
+        // Escolhe a função mais "específica" (range menor). Em empate, escolhe a de start mais próximo (maior).
+        if (len < bestLen || (len === bestLen && f.startLine > bestStart)) {
+          bestIdx = i;
+          bestLen = len;
+          bestStart = f.startLine;
+        }
+      }
+      return bestIdx;
+    },
+    [flaggedFunctionsSorted]
+  );
+
+  // Quando chega um novo resultado, começa na 1ª função flagged (se existir)
+  useEffect(() => {
+    if (flaggedFunctionsSorted.length === 0) {
+      setActiveFlaggedFunctionIndex(0);
+      setActiveCFunctionId(null);
+      return;
+    }
+    setActiveFlaggedFunctionIndex(0);
+    const f0 = flaggedFunctionsSorted[0];
+    const fid0 = (f0.id && f0.id.trim()) || `${f0.name}:${f0.startLine}-${f0.endLine}`;
+    setActiveCFunctionId(fid0);
+  }, [flaggedFunctionsSorted]);
+
+  const activeFlaggedFunction = flaggedFunctionsSorted.length
+    ? flaggedFunctionsSorted[
+        Math.min(
+          Math.max(0, activeFlaggedFunctionIndex),
+          Math.max(0, flaggedFunctionsSorted.length - 1)
+        )
+      ]
+    : null;
+
+  const activeCDisplayRange = useMemo(() => {
+    if (!activeFlaggedFunction) return undefined;
+    return [
+      {
+        start: Math.max(1, activeFlaggedFunction.startLine),
+        end: Math.max(activeFlaggedFunction.startLine, activeFlaggedFunction.endLine),
+      },
+    ];
+  }, [activeFlaggedFunction]);
+
+  const selectFlaggedFunction = useCallback(
+    (idx: number, opts?: { scroll?: boolean }) => {
+      const scroll = opts?.scroll !== false;
+      if (!flaggedFunctionsSorted.length) return;
+      const clamped =
+        ((idx % flaggedFunctionsSorted.length) + flaggedFunctionsSorted.length) %
+        flaggedFunctionsSorted.length;
+      const f = flaggedFunctionsSorted[clamped];
+
+      // Se for atualização vinda do scroll, não queremos saltar para o topo da função.
+      suppressAutoScrollRef.current = !scroll;
+
+      setActiveFlaggedFunctionIndex(clamped);
+      const fid = (f.id && f.id.trim()) || `${f.name}:${f.startLine}-${f.endLine}`;
+      setActiveCFunctionId(fid);
+
+      if (scroll && (expandedPanel === "c" || expandedPanel === null)) {
+        setWindowFocusLine(null);
+        setScrollToLine(f.startLine);
+      }
+    },
+    [expandedPanel, flaggedFunctionsSorted]
+  );
+
+  // Quando a função ativa muda (por clique/setas), faz foco; quando muda por scroll, não mexe no scroll.
+  useEffect(() => {
+    if (!activeFlaggedFunction) return;
+    if (suppressAutoScrollRef.current) {
+      suppressAutoScrollRef.current = false;
+      return;
+    }
+    if (expandedPanel !== "c" && expandedPanel !== null) return;
+    setWindowFocusLine(null);
+    setScrollToLine(activeFlaggedFunction.startLine);
+  }, [activeFlaggedFunction, expandedPanel]);
+
   const cDisplayRanges = useMemo(
     () =>
       getCDisplayRanges(
@@ -1218,7 +1376,19 @@ const Index = () => {
       ),
     [result?.cCode, result?.flaggedFunctions]
   );
-  const flaggedFuncs = result?.flaggedFunctions ?? [];
+  const cFunctionHighlights = useMemo(() => {
+    const src = (result?.flaggedFunctions ?? []).filter((f) => f && f.startLine > 0 && f.endLine > 0);
+    return src.map((f) => ({
+      id: (f.id && f.id.trim()) || `${f.name}:${f.startLine}-${f.endLine}`,
+      name: f.name,
+      startLine: f.startLine,
+      endLine: f.endLine,
+      severity: f.severity,
+      score: f.score,
+      indicators: f.indicators,
+      reasons: f.reasons,
+    }));
+  }, [result?.flaggedFunctions]);
 
   const baseDownloadName = useMemo(
     () => (result?.fileName ?? file?.name ?? "output").replace(/\.[^.]+$/, "") || "output",
@@ -1726,15 +1896,56 @@ const Index = () => {
               {/* 3 Colunas: C, IL e Relatório. A barra "Funções suspeitas" só aparece em fullscreen (painel C expandido). */}
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-3" style={{ height: "calc(100vh - 200px)" }}>
                 <div className="flex flex-col min-h-0">
+                  {flaggedFunctionsSorted.length > 0 && (
+                    <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-border bg-card/70 px-3 py-2 text-[11px] font-mono">
+                      <span className="text-muted-foreground">
+                        Funções suspeitas:{" "}
+                        <span className="text-foreground font-semibold">
+                          {activeFlaggedFunctionIndex + 1}/{flaggedFunctionsSorted.length}
+                        </span>
+                        {activeFlaggedFunction?.name ? (
+                          <span className="text-muted-foreground">
+                            {" "}
+                            · {activeFlaggedFunction.name}
+                          </span>
+                        ) : null}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            selectFlaggedFunction(activeFlaggedFunctionIndex - 1, { scroll: true })
+                          }
+                          className="rounded border border-border bg-card px-1.5 py-0.5 text-muted-foreground hover:bg-secondary/70 hover:text-foreground disabled:opacity-40"
+                          aria-label="Função suspeita anterior"
+                          disabled={flaggedFunctionsSorted.length <= 1}
+                        >
+                          <ChevronLeft className="h-3 w-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            selectFlaggedFunction(activeFlaggedFunctionIndex + 1, { scroll: true })
+                          }
+                          className="rounded border border-border bg-card px-1.5 py-0.5 text-muted-foreground hover:bg-secondary/70 hover:text-foreground disabled:opacity-40"
+                          aria-label="Próxima função suspeita"
+                          disabled={flaggedFunctionsSorted.length <= 1}
+                        >
+                          <ChevronRight className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <CodePanel
                     title="Código C"
                     language="C"
                     code={result?.cCode ?? ""}
                     icon={<Code2 className="h-3.5 w-3.5 text-primary" />}
                     scrollToLine={scrollToLine}
-                    displayLineRanges={cDisplayRanges ?? undefined}
+                    displayLineRanges={(flaggedFunctionsSorted.length > 0 ? activeCDisplayRange : undefined) ?? undefined}
                     highlightedLineRange={highlightedLineRange}
                     flaggedIndicators={result?.flaggedIndicators ?? undefined}
+                    functionHighlights={cFunctionHighlights}
                     downloadFileName={result?.cCode != null ? `${baseDownloadName}.c` : undefined}
                     maxInitialLines={800}
                     showDisplayRangesNotice
@@ -1860,9 +2071,7 @@ const Index = () => {
                       <div className="flex-1 overflow-auto p-2">
                         {expandedPanel === "c" ? (
                           (() => {
-                            const hasRanges = cDisplayRanges && cDisplayRanges.length > 0;
-
-                            if (!hasRanges) {
+                            if (flaggedFunctionsSorted.length === 0) {
                               return (
                                 <p className="text-xs text-muted-foreground">
                                   Nenhuma função suspeita identificada.
@@ -1870,28 +2079,96 @@ const Index = () => {
                               );
                             }
 
-                            const flaggedFuncs = result?.flaggedFunctions ?? [];
                             return (
-                              <ul className="space-y-1">
-                                {flaggedFuncs.map((f, idx) => (
-                                  <li key={`${f.name}-${f.startLine}-${f.endLine}-${idx}`}>
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-card/60 px-2 py-1.5 text-[11px] font-mono text-muted-foreground">
+                                  <span className="select-none">Ordem</span>
+                                  <select
+                                    value={flaggedFunctionsOrder}
+                                    onChange={(e) => setFlaggedFunctionsOrder(e.target.value as "code" | "severity")}
+                                    className="rounded border border-border bg-card px-2 py-1 text-[11px] text-foreground"
+                                    aria-label="Ordenação das funções suspeitas"
+                                  >
+                                    <option value="code">Chegada no código</option>
+                                    <option value="severity">Severidade (score)</option>
+                                  </select>
+                                </div>
+                                <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-card/60 px-2 py-1.5 text-[11px] font-mono text-muted-foreground">
+                                  <span>
+                                    {activeFlaggedFunctionIndex + 1}/{flaggedFunctionsSorted.length}
+                                  </span>
+                                  <div className="flex items-center gap-1">
                                     <button
                                       type="button"
-                                      onClick={() => setScrollToLine(f.startLine)}
-                                      className="w-full rounded-md px-2 py-1.5 text-left text-[11px] text-foreground transition-colors hover:bg-secondary/80 flex flex-col items-start gap-0.5"
+                                      onClick={() =>
+                                        selectFlaggedFunction(activeFlaggedFunctionIndex - 1, { scroll: true })
+                                      }
+                                      className="rounded border border-border bg-card px-1.5 py-0.5 text-muted-foreground hover:bg-secondary/70 hover:text-foreground disabled:opacity-40"
+                                      aria-label="Função anterior"
+                                      disabled={flaggedFunctionsSorted.length <= 1}
+                                    >
+                                      <ChevronLeft className="h-3 w-3" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        selectFlaggedFunction(activeFlaggedFunctionIndex + 1, { scroll: true })
+                                      }
+                                      className="rounded border border-border bg-card px-1.5 py-0.5 text-muted-foreground hover:bg-secondary/70 hover:text-foreground disabled:opacity-40"
+                                      aria-label="Próxima função"
+                                      disabled={flaggedFunctionsSorted.length <= 1}
+                                    >
+                                      <ChevronRight className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                </div>
+                                <ul className="space-y-1">
+                                  {flaggedFunctionsSorted.map((f, idx) => (
+                                  <li key={`${f.id ?? ""}-${f.name}-${f.startLine}-${f.endLine}-${idx}`}>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        selectFlaggedFunction(idx, { scroll: true });
+                                      }}
+                                      className={`w-full rounded-md px-2 py-1.5 text-left text-[11px] text-foreground transition-colors hover:bg-secondary/80 flex flex-col items-start gap-0.5 ${
+                                        activeCFunctionId &&
+                                        activeCFunctionId === ((f.id && f.id.trim()) || `${f.name}:${f.startLine}-${f.endLine}`)
+                                          ? "bg-primary/10 border border-primary/30"
+                                          : "border border-transparent"
+                                      }`}
                                     >
                                       <span className="font-medium">
                                         {idx + 1}. {f.name || "função suspeita"} (linhas {f.startLine}–{f.endLine})
                                       </span>
-                                      {f.indicators && f.indicators.length > 0 && (
+                                      {(typeof f.score === "number" || f.severity) && (
                                         <span className="text-[10px] text-muted-foreground">
-                                          Flags: {Array.from(new Set(f.indicators)).join(", ")}
+                                          {f.severity ? `Severidade: ${f.severity}` : null}
+                                          {f.severity && typeof f.score === "number" ? " · " : null}
+                                          {typeof f.score === "number" ? `Score: ${f.score}` : null}
                                         </span>
                                       )}
+                                      {f.indicators && f.indicators.length > 0 && (
+                                        <span className="text-[10px] text-muted-foreground">
+                                          Indicadores: {Array.from(new Set(f.indicators)).join(", ")}
+                                        </span>
+                                      )}
+                                      {f.reasons && f.reasons.length > 0 && (() => {
+                                        const firstNonIndicators = f.reasons.find((r) => {
+                                          const t = (r ?? "").toString().trim();
+                                          if (!t) return false;
+                                          return !/^indicadores?\s*:/i.test(t);
+                                        });
+                                        return firstNonIndicators ? (
+                                          <span className="text-[10px] text-muted-foreground">
+                                            {firstNonIndicators}
+                                          </span>
+                                        ) : null;
+                                      })()}
                                     </button>
                                   </li>
                                 ))}
                               </ul>
+                              </div>
                             );
                           })()
                         ) : expandedPanel === "report" ? (
@@ -1938,10 +2215,23 @@ const Index = () => {
                           icon={<Code2 className="h-3.5 w-3.5 text-primary" />}
                           scrollToLine={scrollToLine}
                           compactHeader
-                          displayLineRanges={cDisplayRanges ?? undefined}
+                          displayLineRanges={(flaggedFunctionsSorted.length > 0 ? activeCDisplayRange : undefined) ?? undefined}
                           highlightedLineRange={highlightedLineRange}
-                          permanentHighlightRanges={cDisplayRanges ?? undefined}
+                          permanentHighlightRanges={(flaggedFunctionsSorted.length > 0 ? activeCDisplayRange : undefined) ?? undefined}
                           flaggedIndicators={result?.flaggedIndicators ?? undefined}
+                          functionHighlights={cFunctionHighlights}
+                          onViewportLineChange={(line) => {
+                            // Mantém a seleção da sidebar coerente com o que está no viewport,
+                            // mas sem fazer auto-scroll (senão "salta" durante o scroll).
+                            const idx = getFlaggedFunctionIndexForLine(line);
+                            if (idx >= 0 && idx !== activeFlaggedFunctionIndex) {
+                              selectFlaggedFunction(idx, { scroll: false });
+                            } else if (idx >= 0) {
+                              const f = flaggedFunctionsSorted[idx];
+                              const fid = (f.id && f.id.trim()) || `${f.name}:${f.startLine}-${f.endLine}`;
+                              setActiveCFunctionId(fid);
+                            }
+                          }}
                           selectedWord={selectedWord ?? undefined}
                           onWordSelect={expandedPanel === "c" ? handleWordSelect : undefined}
                           downloadFileName={result?.cCode != null ? `${baseDownloadName}.c` : undefined}

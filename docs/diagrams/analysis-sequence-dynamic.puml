@@ -1,0 +1,48 @@
+@startuml
+title Analise Dinamica - Sequencia detalhada
+
+autonumber
+actor "Utilizador" as U
+participant "Frontend React" as FE
+participant "API Backend" as API
+participant "Jobs de Analise" as JOBS
+participant "Orquestrador de VM" as VMO
+participant "Driver de VM" as DRV
+participant "Agente de VM" as AGENT
+database "Armazenamento de Jobs" as DB
+
+U -> FE: Carregar ficheiro + escolher dinamica
+FE -> API: POST /api/analysis?analysis_type=dynamic
+API -> JOBS: create_job(file,dynamic)
+JOBS -> DB: insert queued
+API <-- JOBS: jobId
+FE <-- API: {jobId,status=queued}
+
+JOBS -> DB: update_status(running)
+JOBS -> VMO: _run_dynamic(job)
+VMO -> DRV: run(job)
+
+alt driver=stub
+DRV --> VMO: resumo + comportamento sintetico
+else driver=hyperv/proxmox
+DRV -> AGENT: GET /api/health
+DRV -> AGENT: POST /api/upload
+DRV -> AGENT: POST /api/run
+DRV -> AGENT: GET /api/report
+AGENT --> DRV: comportamento JSON
+DRV --> VMO: resumo + comportamento real
+end
+
+VMO --> JOBS: dynamicResult
+JOBS -> DB: update_results(dynamicResult)
+JOBS -> DB: update_status(completed|failed)
+
+loop polling no frontend
+FE -> API: GET /api/analysis/{jobId}
+API -> JOBS: get_job_payload(jobId)
+JOBS -> DB: get_job_row(jobId)
+API <-- JOBS: status + dynamicResult
+FE <-- API: resposta
+end
+
+@enduml

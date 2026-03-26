@@ -91,6 +91,54 @@ class Deobfuscator:
         'refsafety', 'rules', 'requested', 'execution', 'privileges',
         'product', 'company', 'title', 'target', 'informational', 'file',
     )
+
+    def _is_probable_base64_literal(self, s: str) -> bool:
+        if not s or not isinstance(s, str):
+            return False
+        s = s.strip()
+        if len(s) < 20 or len(s) > 4096:
+            return False
+        if not re.fullmatch(r"[A-Za-z0-9+/=]+", s):
+            return False
+        # Evita strings "normais" com slash (ex.: debug/path) que não são Base64 real.
+        classes = 0
+        if any(c.islower() for c in s):
+            classes += 1
+        if any(c.isupper() for c in s):
+            classes += 1
+        if any(c.isdigit() for c in s):
+            classes += 1
+        if "+" in s or "/" in s:
+            classes += 1
+        if "=" in s:
+            classes += 1
+        if classes < 3:
+            return False
+        low = s.lower()
+        if any(fp in low for fp in self.BASE64_DOTNET_FALSE_POSITIVES):
+            return False
+        return True
+
+    def _decode_base64_to_readable_text(self, s: str) -> str | None:
+        if not self._is_probable_base64_literal(s):
+            return None
+        try:
+            padded = s + ("=" * ((4 - (len(s) % 4)) % 4))
+            raw = base64.b64decode(padded, validate=True)
+        except Exception:
+            return None
+        if len(raw) < 4:
+            return None
+        try:
+            decoded = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+        printable = sum(1 for c in decoded if c.isprintable() or c in '\n\r\t')
+        if len(decoded) == 0 or printable / len(decoded) < 0.85:
+            return None
+        if not any(c.isalpha() for c in decoded):
+            return None
+        return decoded
     
     def _detect_base64_strings(self, text: str) -> List[str]:
         """Detecta e decodifica strings Base64"""
@@ -102,30 +150,12 @@ class Deobfuscator:
         matches = re.findall(base64_pattern, text)
         
         for match in matches[:20]:  # Limitar a 20 resultados
-            # Excluir falsos positivos: Base64 real usa + ou / ou termina em =
-            # Nomes .NET são só A-Za-z0-9 sem +/=
-            if '/' not in match and '+' not in match and not match.strip().endswith('='):
-                continue
-            # Excluir strings que parecem nomes de tipos .NET
-            low = match.lower()
-            if any(fp in low for fp in self.BASE64_DOTNET_FALSE_POSITIVES):
-                continue
-            try:
-                # Tentar decodificar
-                decoded = base64.b64decode(match + '==')  # Adicionar padding se necessário
-                decoded_str = decoded.decode('utf-8', errors='ignore')
-                # Ignorar se o resultado for maioritariamente não imprimível (lixo)
-                printable = sum(1 for c in decoded_str if c.isprintable() or c in '\n\r\t')
-                if len(decoded_str) > 0 and printable / len(decoded_str) < 0.7:
-                    continue
-                # Verificar se parece ser uma string útil (não apenas caracteres aleatórios)
-                if len(decoded_str) > 3 and any(c.isalnum() for c in decoded_str):
-                    base64_strings.append({
-                        'encoded': match[:50],
-                        'decoded': decoded_str[:100]
-                    })
-            except Exception:
-                pass
+            decoded_str = self._decode_base64_to_readable_text(match)
+            if decoded_str:
+                base64_strings.append({
+                    'encoded': match[:50],
+                    'decoded': decoded_str[:100]
+                })
         
         return base64_strings
     
@@ -385,19 +415,13 @@ class Deobfuscator:
                 decoded_parts = []
                 for m in base64_literal.finditer(line):
                     b64 = m.group(1)
-                    if any(fp in b64.lower() for fp in self.BASE64_DOTNET_FALSE_POSITIVES):
-                        continue
-                    try:
-                        raw = base64.b64decode(b64 + "==")
-                        decoded = raw.decode("utf-8", errors="replace")
-                        if len(decoded) > 2 and sum(1 for c in decoded if c.isprintable() or c in "\n\r\t") / max(len(decoded), 1) >= 0.6:
-                            safe = decoded.replace("*/", "* /").replace("//", "/ /")[:150]
-                            if len(decoded) > 150:
-                                safe += "..."
-                            decoded_parts.append(safe)
-                            base64_decoded += 1
-                    except Exception:
-                        pass
+                    decoded = self._decode_base64_to_readable_text(b64)
+                    if decoded:
+                        safe = decoded.replace("*/", "* /").replace("//", "/ /")[:150]
+                        if len(decoded) > 150:
+                            safe += "..."
+                        decoded_parts.append(safe)
+                        base64_decoded += 1
                 if decoded_parts:
                     comment = "  // Decoded Base64: " + " | ".join(f'"{p}"' for p in decoded_parts[:3])
                     if len(decoded_parts) > 3:
@@ -429,18 +453,12 @@ class Deobfuscator:
             decoded_parts = []
             for m in base64_literal.finditer(line):
                 b64 = m.group(1)
-                if any(fp in b64.lower() for fp in self.BASE64_DOTNET_FALSE_POSITIVES):
-                    continue
-                try:
-                    raw = base64.b64decode(b64 + "==")
-                    decoded = raw.decode("utf-8", errors="replace")
-                    if len(decoded) > 2 and sum(1 for c in decoded if c.isprintable() or c in "\n\r\t") / max(len(decoded), 1) >= 0.6:
-                        safe = decoded.replace("*/", "* /").replace("//", "/ /")[:150]
-                        if len(decoded) > 150:
-                            safe += "..."
-                        decoded_parts.append(safe)
-                except Exception:
-                    pass
+                decoded = self._decode_base64_to_readable_text(b64)
+                if decoded:
+                    safe = decoded.replace("*/", "* /").replace("//", "/ /")[:150]
+                    if len(decoded) > 150:
+                        safe += "..."
+                    decoded_parts.append(safe)
             if decoded_parts:
                 comment = "  // Decoded Base64: " + " | ".join(f'"{p}"' for p in decoded_parts[:3])
                 if len(decoded_parts) > 3:

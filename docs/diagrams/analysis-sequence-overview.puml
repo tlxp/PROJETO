@@ -1,0 +1,82 @@
+@startuml
+title RAT Analyzer - Sequencia integrada (estatica, dinamica, ambas)
+
+autonumber
+skinparam responseMessageBelowArrow true
+
+actor "Utilizador" as U
+participant "Frontend React" as FE
+participant "WPF Desktop" as WPF
+participant "API Backend (FastAPI)" as API
+participant "Jobs de Analise" as JOBS
+participant "RAT Analyzer" as RAT
+participant "Orquestrador de VM" as VMO
+participant "Driver de VM\n(stub|hyperv|proxmox)" as DRV
+participant "Agente de VM" as AGENT
+database "Armazenamento de Jobs\n(SQLite + sandbox_jobs)" as DB
+
+group Web estatica por streaming
+U -> FE: Carregar ficheiro + modo estatica
+FE -> API: POST /api/analyze_stream
+API -> RAT: analyze(file)
+RAT --> API: relatorio + cCode + ilCode + pontuacao
+API --> FE: NDJSON logs + resultado
+end
+
+group Pipeline de jobs (estatica|dinamica|ambas)
+U -> FE: Carregar ficheiro + modo dinamica/ambas/estatica
+FE -> API: POST /api/analysis?analysis_type=...
+API -> JOBS: create_job(...)
+JOBS -> DB: insert_job(status=queued)
+JOBS --> API: jobId
+API --> FE: {jobId,status}
+
+loop consulta periodica (polling)
+FE -> API: GET /api/analysis/{jobId}
+API -> JOBS: get_job_payload(jobId)
+JOBS -> DB: get_job_row(jobId)
+JOBS --> API: status + staticResult? + dynamicResult?
+API --> FE: resposta
+end
+end
+
+group Execucao interna
+JOBS -> DB: update_status(running)
+alt estatica
+JOBS -> RAT: _run_static()
+RAT --> JOBS: staticResult
+else dinamica
+JOBS -> VMO: _run_dynamic()
+VMO -> DRV: run(job)
+alt hyperv/proxmox
+DRV -> AGENT: upload/run/report
+AGENT --> DRV: comportamento json
+else stub
+DRV --> VMO: comportamento sintetico
+end
+VMO --> JOBS: dynamicResult
+else ambas
+JOBS -> RAT: _run_static()
+RAT --> JOBS: staticResult
+JOBS -> VMO: _run_dynamic()
+VMO -> DRV: run(job)
+DRV --> VMO: saida dinamica
+VMO --> JOBS: dynamicResult
+end
+JOBS -> DB: update_results(...)
+JOBS -> DB: update_status(completed|failed)
+end
+
+group WPF publicar resultado estatico
+U -> WPF: Arrastar e largar + Analise Estatica
+WPF -> API: POST /api/analyze
+API -> RAT: analyze(file)
+RAT --> API: resultado da analise estatica
+API --> WPF: resposta estatica
+WPF -> API: POST /api/analysis/upload_static
+API -> DB: insert/update job completed
+API --> WPF: {jobId}
+WPF -> FE: abrir /resultados?jobId=...
+end
+
+@enduml

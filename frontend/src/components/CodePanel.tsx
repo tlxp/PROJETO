@@ -7,6 +7,17 @@ export type DisplayLineRange = { start: number; end: number };
 /** Bloco foldável: linha que abre com "{" até à linha que fecha com "}". */
 export type FoldBlock = { startLine: number; endLine: number };
 
+export type FunctionHighlight = {
+  id: string;
+  name: string;
+  startLine: number;
+  endLine: number;
+  severity?: string;
+  score?: number;
+  indicators?: string[];
+  reasons?: string[];
+};
+
 type Row =
   | { type: "code"; lineNumber: number; line: string }
   | { type: "gap"; start: number; end: number }
@@ -41,6 +52,10 @@ interface CodePanelProps {
   highlightedLineRange?: { start: number; end: number } | null;
   /** Intervalos das funções suspeitas: destaque permanente apenas na primeira e última linha de cada. */
   permanentHighlightRanges?: DisplayLineRange[] | null;
+  /** Destaques de funções (ex.: suspeitas): aplica highlight ao corpo inteiro e permite tooltips/seleção. */
+  functionHighlights?: FunctionHighlight[] | null;
+  /** Notifica a linha "atual" no viewport (para sincronizar a barra lateral). */
+  onViewportLineChange?: (line: number) => void;
   /** Mostrar a mensagem de aviso quando só estão visíveis funções com flag. */
   showDisplayRangesNotice?: boolean;
   /** Keywords/indicadores que levaram à suspeição (ex.: GetAsyncKeyState) — destacados no texto como maliciosos. */
@@ -89,6 +104,8 @@ const CodePanel: React.FC<CodePanelProps> = ({
   windowChunkLines = 400,
   highlightedLineRange,
   permanentHighlightRanges,
+  functionHighlights,
+  onViewportLineChange,
   flaggedIndicators,
   selectedWord,
   onWordSelect,
@@ -97,6 +114,7 @@ const CodePanel: React.FC<CodePanelProps> = ({
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showAll, setShowAll] = useState(false);
+  const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
   const [windowStart, setWindowStart] = useState<number | null>(null);
   const [windowEnd, setWindowEnd] = useState<number | null>(null);
   const [collapsedFoldStarts, setCollapsedFoldStarts] = useState<Set<number>>(new Set());
@@ -104,9 +122,44 @@ const CodePanel: React.FC<CodePanelProps> = ({
   const rowHeightRef = useRef<number | null>(null);
   const pendingScrollAdjustPxRef = useRef<number>(0);
   const lastShiftAtRef = useRef<number>(0);
+  const lastViewportNotifyAtRef = useRef<number>(0);
+  const lastViewportLineRef = useRef<number | null>(null);
 
   const lines = useMemo(() => code.split("\n"), [code]);
   const totalLines = lines.length;
+
+  const hasFlaggedFunctions = (functionHighlights?.length ?? 0) > 0;
+  const currentFlaggedRange =
+    displayLineRanges && displayLineRanges.length > 0
+      ? displayLineRanges[0]
+      : null;
+
+  const buildDownloadName = useCallback(
+    (variant: "full" | "flagged_current" | "flagged_all") => {
+      const name = downloadFileName ?? "output.txt";
+      const dot = name.lastIndexOf(".");
+      const base = dot > 0 ? name.slice(0, dot) : name;
+      const ext = dot > 0 ? name.slice(dot) : "";
+      if (variant === "full") return name;
+      if (variant === "flagged_current") return `${base}.flagged-current${ext || ".txt"}`;
+      return `${base}.flagged-all${ext || ".txt"}`;
+    },
+    [downloadFileName]
+  );
+
+  const extractRangesText = useCallback(
+    (ranges: { start: number; end: number }[]) => {
+      const out: string[] = [];
+      for (const r of ranges) {
+        const start = Math.max(1, Math.floor(r.start));
+        const end = Math.max(start, Math.floor(r.end));
+        const chunk = lines.slice(start - 1, end).join("\n");
+        if (chunk.trim().length) out.push(chunk);
+      }
+      return out.join("\n\n");
+    },
+    [lines]
+  );
 
   const foldBlocks = useMemo(() => getFoldBlocks(lines), [lines]);
   const blockEndByStart = useMemo(
@@ -237,10 +290,78 @@ const CodePanel: React.FC<CodePanelProps> = ({
 
   const shouldLimit = !isWindowMode && !displayLineRanges?.length && !showAll && totalLines > maxInitialLines;
 
+  const functionHighlightRanges = useMemo(() => {
+    const ranges =
+      (functionHighlights ?? [])
+        .filter((f) => f && typeof f.startLine === "number" && typeof f.endLine === "number")
+        .map((f) => ({
+          start: Math.max(1, Math.floor(f.startLine)),
+          end: Math.max(1, Math.floor(f.endLine)),
+          f,
+        }))
+        .filter((r) => r.start <= r.end)
+        .sort((a, b) => a.start - b.start || a.end - b.end) ?? [];
+    return ranges;
+  }, [functionHighlights]);
+
+  const getFunctionForLine = useCallback(
+    (lineNumber: number): FunctionHighlight | null => {
+      if (!functionHighlightRanges.length) return null;
+      // Como está ordenado por start, fazemos uma busca linear curta a partir do fim provável.
+      // (normalmente há poucas funções com flag).
+      for (let i = functionHighlightRanges.length - 1; i >= 0; i--) {
+        const r = functionHighlightRanges[i];
+        if (lineNumber < r.start) continue;
+        if (lineNumber >= r.start && lineNumber <= r.end) return r.f;
+        break;
+      }
+      // fallback
+      for (let i = 0; i < functionHighlightRanges.length; i++) {
+        const r = functionHighlightRanges[i];
+        if (lineNumber < r.start) break;
+        if (lineNumber >= r.start && lineNumber <= r.end) return r.f;
+      }
+      return null;
+    },
+    [functionHighlightRanges]
+  );
+
   const handleScroll = useCallback(() => {
-    if (!isWindowMode || windowStart == null || windowEnd == null) return;
     const el = scrollRef.current;
     if (!el) return;
+
+    // Notificar linha aproximada no viewport (throttle) — útil para sincronizar lista lateral
+    if (onViewportLineChange && rowHeightRef.current) {
+      const now = Date.now();
+      if (now - lastViewportNotifyAtRef.current > 120) {
+        const rowH = rowHeightRef.current ?? 18;
+        const approxIdx = Math.max(0, Math.floor((el.scrollTop + el.clientHeight * 0.35) / rowH));
+        let pickedLine: number | null = null;
+        let seen = 0;
+        for (let i = 0; i < foldedRows.length; i++) {
+          const r = foldedRows[i];
+          if (r.type !== "code") continue;
+          if (seen === approxIdx) {
+            pickedLine = r.lineNumber;
+            break;
+          }
+          seen++;
+        }
+        if (pickedLine == null) {
+          const last = [...foldedRows].reverse().find((r) => r.type === "code") as
+            | { type: "code"; lineNumber: number; line: string }
+            | undefined;
+          pickedLine = last?.lineNumber ?? null;
+        }
+        if (pickedLine != null && pickedLine !== lastViewportLineRef.current) {
+          lastViewportLineRef.current = pickedLine;
+          lastViewportNotifyAtRef.current = now;
+          onViewportLineChange(pickedLine);
+        }
+      }
+    }
+
+    if (!isWindowMode || windowStart == null || windowEnd == null) return;
     if (totalLines <= windowSize) return;
 
     const now = Date.now();
@@ -276,7 +397,9 @@ const CodePanel: React.FC<CodePanelProps> = ({
       }
     }
   }, [
+    foldedRows,
     isWindowMode,
+    onViewportLineChange,
     totalLines,
     windowChunkLines,
     windowEnd,
@@ -316,15 +439,49 @@ const CodePanel: React.FC<CodePanelProps> = ({
     }
   }, [scrollToLine, foldedRows]);
 
-  const handleDownload = useCallback(() => {
-    if (!downloadFileName) return;
-    const blob = new Blob([code], { type: "text/plain;charset=utf-8" });
+  const doDownload = useCallback((text: string, fileName: string) => {
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = downloadFileName;
+    a.download = fileName;
     a.click();
     URL.revokeObjectURL(a.href);
-  }, [code, downloadFileName]);
+  }, []);
+
+  const handleDownload = useCallback(() => {
+    if (!downloadFileName) return;
+    setDownloadDialogOpen(true);
+  }, [downloadFileName]);
+
+  const downloadFull = useCallback(() => {
+    if (!downloadFileName) return;
+    doDownload(code, buildDownloadName("full"));
+    setDownloadDialogOpen(false);
+  }, [buildDownloadName, code, doDownload, downloadFileName]);
+
+  const downloadCurrentFlagged = useCallback(() => {
+    if (!downloadFileName) return;
+    if (!hasFlaggedFunctions || !currentFlaggedRange) return;
+    const text = extractRangesText([currentFlaggedRange]);
+    doDownload(text, buildDownloadName("flagged_current"));
+    setDownloadDialogOpen(false);
+  }, [
+    buildDownloadName,
+    currentFlaggedRange,
+    doDownload,
+    downloadFileName,
+    extractRangesText,
+    hasFlaggedFunctions,
+  ]);
+
+  const downloadAllFlagged = useCallback(() => {
+    if (!downloadFileName) return;
+    if (!hasFlaggedFunctions) return;
+    const ranges = (functionHighlights ?? []).map((f) => ({ start: f.startLine, end: f.endLine }));
+    const text = extractRangesText(ranges);
+    doDownload(text, buildDownloadName("flagged_all"));
+    setDownloadDialogOpen(false);
+  }, [buildDownloadName, doDownload, downloadFileName, extractRangesText, functionHighlights, hasFlaggedFunctions]);
 
   return (
     <motion.div
@@ -375,6 +532,75 @@ const CodePanel: React.FC<CodePanelProps> = ({
           )}
         </span>
       </div>
+
+      {downloadDialogOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Opções de download"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setDownloadDialogOpen(false);
+          }}
+        >
+          <div className="w-full max-w-md rounded-lg border border-border bg-card shadow-lg">
+            <div className="border-b border-border px-4 py-3">
+              <div className="font-mono text-xs font-semibold text-muted-foreground">Descarregar</div>
+              <div className="mt-1 text-sm text-foreground">O que quer descarregar?</div>
+            </div>
+            <div className="space-y-2 px-4 py-3">
+              <button
+                type="button"
+                onClick={downloadFull}
+                className="w-full rounded-md border border-border bg-secondary/40 px-3 py-2 text-left text-[12px] text-foreground hover:bg-secondary/70 transition-colors"
+              >
+                Código todo
+              </button>
+              <button
+                type="button"
+                onClick={downloadCurrentFlagged}
+                disabled={!hasFlaggedFunctions || !currentFlaggedRange}
+                className={`w-full rounded-md border px-3 py-2 text-left text-[12px] transition-colors ${
+                  !hasFlaggedFunctions || !currentFlaggedRange
+                    ? "border-border/60 bg-muted/40 text-muted-foreground cursor-not-allowed"
+                    : "border-border bg-secondary/40 text-foreground hover:bg-secondary/70"
+                }`}
+                title={
+                  !hasFlaggedFunctions
+                    ? "Sem funções flagged"
+                    : !currentFlaggedRange
+                      ? "Nenhuma função flagged ativa"
+                      : "Descarregar apenas a função flagged atual"
+                }
+              >
+                Função flagged atual
+              </button>
+              <button
+                type="button"
+                onClick={downloadAllFlagged}
+                disabled={!hasFlaggedFunctions}
+                className={`w-full rounded-md border px-3 py-2 text-left text-[12px] transition-colors ${
+                  !hasFlaggedFunctions
+                    ? "border-border/60 bg-muted/40 text-muted-foreground cursor-not-allowed"
+                    : "border-border bg-secondary/40 text-foreground hover:bg-secondary/70"
+                }`}
+                title={!hasFlaggedFunctions ? "Sem funções flagged" : "Descarregar todas as funções flagged"}
+              >
+                Todas as funções flagged
+              </button>
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-3">
+              <button
+                type="button"
+                onClick={() => setDownloadDialogOpen(false)}
+                className="rounded-md border border-border bg-card px-3 py-1.5 text-[12px] text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Code area */}
       <div
@@ -458,22 +684,40 @@ const CodePanel: React.FC<CodePanelProps> = ({
                 permanentHighlightRanges.some(
                   (r) => lineNumber === r.start || lineNumber === r.end
                 );
+              const fn = getFunctionForLine(lineNumber);
+              const isInHighlightedFunction = fn != null;
+              const isFlaggedFunctionEdge =
+                fn != null && (lineNumber === fn.startLine || lineNumber === fn.endLine);
               const isHoveredBlockEdge =
                 hoveredBlock != null &&
                 (lineNumber === hoveredBlock.start || lineNumber === hoveredBlock.end);
               const rowHighlightClass = isTargetLine
                 ? "bg-amber-500/35 border-l-2 border-amber-500"
-                : isPermanentEdge
+                : isFlaggedFunctionEdge
+                  ? "bg-destructive/15 border-l-2 border-destructive/80"
+                  : isPermanentEdge
                   ? "bg-destructive/15 border-l-2 border-destructive"
                   : isHoveredBlockEdge
                     ? "bg-primary/15 border-l-2 border-primary/80"
                     : "";
+              const fnTitle =
+                fn
+                  ? [
+                      fn.name ? `Função: ${fn.name}` : "Função suspeita",
+                      fn.severity ? `Severidade: ${fn.severity}` : null,
+                      typeof fn.score === "number" ? `Score: ${fn.score}` : null,
+                      fn.reasons && fn.reasons.length ? `Razões: ${fn.reasons.join(" · ")}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join("\n")
+                  : undefined;
               return (
                 <tr
                   key={`${lineNumber}-${idx}`}
                   data-line={lineNumber}
                   ref={setRowHeightRef}
                   className={`transition-colors ${rowHighlightClass || "hover:bg-code-line/50"}`}
+                  title={fnTitle}
                   onMouseEnter={() => {
                     if (!isFoldableLanguage) return;
                     if (line.includes("{")) {

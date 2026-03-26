@@ -61,7 +61,7 @@ Com isto, o utilizador passa a ter um **fluxo integrado**:
 
 ## Requisitos
 
-- Python 3.7+
+- Python 3.10+
 - Bibliotecas Python (ver `backend/requirements.txt`)
 
 ## Instalação
@@ -70,7 +70,7 @@ Com isto, o utilizador passa a ter um **fluxo integrado**:
 
 2. Instale as dependências:
 ```bash
-pip install -r requirements.txt
+pip install -r backend/requirements.txt
 ```
 
 3. **Nota sobre YARA**: Para usar o scanner YARA, é necessário instalar a biblioteca YARA no sistema:
@@ -90,7 +90,7 @@ A aplicação **Drop & Analyze** é uma interface web em React que se liga a est
 
 1. Inicie o backend (servidor Python que expõe a API).
 2. Na pasta `frontend`, execute `npm i` e `npm run dev`.
-3. Abra o URL indicado (ex.: http://localhost:5173) e arraste ficheiros para analisar.
+3. Abra o URL indicado (ex.: http://localhost:8080) e arraste ficheiros para analisar.
 
 Consulte `frontend/README.md` para mais detalhes.
 
@@ -152,27 +152,30 @@ Apaga: `__pycache__/`, `.pytest_cache`, `*.pyc`/`*.pyo`, `programa/bin/`, `progr
 
 ```
 PROJETO/
-├── config.py                # Configuração central (caminhos do projeto)
-├── rat_analyzer.py          # Entrada CLI – análise de .exe/.dll
-├── rat_analyzer_gui.py      # Entrada GUI – arrastar .cs, compilar e analisar
-├── modules/                 # Módulos do analisador
-│   ├── __init__.py
-│   ├── static_analyzer.py   # Análise estática (imports, strings, evasão)
-│   ├── yara_scanner.py      # Scanner YARA
-│   ├── deobfuscator.py      # Deobfuscação básica
-│   ├── dotnet_decompiler.py # Descompilação .NET (ILSpy)
-│   ├── risk_scorer.py       # Cálculo de score de risco
-│   └── report_generator.py  # Geração de relatórios
-├── yara_rules/              # Regras YARA (.yar)
-├── reports/                 # Relatórios gerados (criada automaticamente)
-├── decompiled/              # Código C# descompilado (ILSpy)
-├── programa/                # Projeto .NET de exemplo para testes
+├── backend/                 # API FastAPI + pipeline de análise
+│   ├── api.py               # Endpoints /api/analyze, /api/analyze_stream, /api/analysis
+│   ├── analysis_jobs.py     # Jobs static|dynamic|both
+│   ├── config.py            # Configuração central (paths, DB, sandbox_jobs)
+│   ├── modules/             # Módulos (static analyzer, yara, deobfuscator, decompilers, etc.)
+│   └── vm_drivers/          # Drivers dinâmicos (stub, hyperv, proxmox)
 ├── frontend/                # Interface web (React/Vite) – ver frontend/README.md
-├── requirements.txt
+├── wpf-gui/                 # App desktop WPF (.NET 8)
+├── vm-agent/                # Agent HTTP para correr dentro da VM sandbox
+├── scripts/hyperv-sandbox/  # Scripts PowerShell de automação Hyper-V
+├── sandbox_jobs/            # Jobs e artefactos (SQLite + outputs por job)
 └── README.md
 ```
 
-Os caminhos `reports/`, `decompiled/` e `yara_rules/` estão definidos em `config.py`; pode alterá-los aí se precisar.
+Os paths de `sandbox_jobs/`, base de dados e diretórios de saída são definidos em `backend/config.py`.
+
+## Diagramas PUML (sequência)
+
+Os diagramas de sequência atualizados estão em `docs/diagrams/`:
+
+- `analysis-sequence-overview.puml` (visão integrada)
+- `analysis-sequence-static.puml` (fluxo estático)
+- `analysis-sequence-dynamic.puml` (fluxo dinâmico)
+- `analysis-sequence-both.puml` (fluxo combinado)
 
 ## Módulos
 
@@ -238,16 +241,17 @@ Para deobfuscação mais avançada, pode integrar:
 Coloque ficheiros `.yar` no directório `yara_rules/`. O scanner compilará automaticamente todas as regras.
 
 ### Ajustar Pesos do Score
-Edite `modules/risk_scorer.py` para ajustar os pesos dos diferentes fatores.
+Edite `backend/modules/risk_scorer.py` para ajustar os pesos dos diferentes fatores.
 
 ### Adicionar Padrões de Detecção
-- **Imports suspeitos**: Edite `SUSPICIOUS_IMPORTS` em `static_analyzer.py`
-- **Funções suspeitas**: Edite `SUSPICIOUS_FUNCTIONS` em `static_analyzer.py`
-- **Padrões C&C**: Edite `C2_PATTERNS` em `static_analyzer.py`
+- **Imports suspeitos**: Edite `SUSPICIOUS_IMPORTS` em `backend/modules/static_analyzer.py`
+- **Funções suspeitas**: Edite `SUSPICIOUS_FUNCTIONS` em `backend/modules/static_analyzer.py`
+- **Padrões C&C**: Edite `C2_PATTERNS` em `backend/modules/static_analyzer.py`
 
 ## Limitações
 
-- Análise estática apenas (não executa o ficheiro)
+- Análise dinâmica depende de infraestrutura de sandbox (VM + vm-agent + configuração de variáveis)
+- O driver `stub` (default) não executa o ficheiro; serve apenas para validar o fluxo end-to-end
 - Deobfuscação básica (pode não funcionar com ofuscação avançada)
 - Requer instalação de YARA no sistema
 - Regras YARA básicas incluídas (recomenda-se adicionar mais)
@@ -256,7 +260,7 @@ Edite `modules/risk_scorer.py` para ajustar os pesos dos diferentes fatores.
 
 - [ ] Integração com IDA (descompilação; Ghidra já integrado)
 - [ ] Deobfuscação avançada
-- [ ] Análise comportamental em sandbox real (Hyper-V/Proxmox; stub e scripts já existem)
+- [ ] Telemetria dinâmica avançada no vm-agent (Sysmon/ETW/hooking) e enriquecimento automático de `dynamicReport`
 - [ ] Suporte para mais formatos de ficheiro
 - [ ] Base de dados de assinaturas de malware conhecido
 - [ ] Análise de rede (tráfego C&C)

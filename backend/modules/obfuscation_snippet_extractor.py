@@ -6,6 +6,7 @@ pseudo-C se aplicável). Reutiliza padrões do Deobfuscator para deteção com p
 
 import logging
 import re
+import base64
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -58,6 +59,58 @@ BASE64_FALSE_POSITIVES = (
     'refsafety', 'rules', 'requested', 'execution', 'privileges',
     'product', 'company', 'title', 'target', 'informational', 'file',
 )
+
+
+def _is_probable_base64_literal(s: str) -> bool:
+    """Heurística conservadora para reduzir falsos positivos de Base64."""
+    if not s or not isinstance(s, str):
+        return False
+    s = s.strip()
+    if len(s) < 20 or len(s) > 4096:
+        return False
+    if not re.fullmatch(r"[A-Za-z0-9+/=]+", s):
+        return False
+    # Exigir diversidade mínima de classes para evitar strings "normais" com slash.
+    classes = 0
+    if any(c.islower() for c in s):
+        classes += 1
+    if any(c.isupper() for c in s):
+        classes += 1
+    if any(c.isdigit() for c in s):
+        classes += 1
+    if "+" in s or "/" in s:
+        classes += 1
+    if "=" in s:
+        classes += 1
+    if classes < 3:
+        return False
+    low = s.lower()
+    if any(fp in low for fp in BASE64_FALSE_POSITIVES):
+        return False
+    return True
+
+
+def _decode_base64_text_if_readable(s: str) -> str | None:
+    """Decodifica Base64 apenas quando resultar em texto UTF-8 legível."""
+    if not _is_probable_base64_literal(s):
+        return None
+    try:
+        padded = s + ("=" * ((4 - (len(s) % 4)) % 4))
+        raw = base64.b64decode(padded, validate=True)
+    except Exception:
+        return None
+    if len(raw) < 4:
+        return None
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    printable = sum(1 for c in text if c.isprintable() or c in "\n\r\t")
+    if len(text) == 0 or printable / len(text) < 0.85:
+        return None
+    if not any(c.isalpha() for c in text):
+        return None
+    return text
 
 
 def _line_at_offset(content: str, offset: int) -> int:
@@ -116,9 +169,8 @@ def detect_obfuscation_with_positions(
             # Filtrar Base64: evitar falsos positivos
             if "Base64 literal" in description:
                 b64_match = m.group(1) if m.lastindex and m.lastindex >= 1 else ""
-                if not b64_match or "/" not in b64_match and "+" not in b64_match and not b64_match.strip().endswith("="):
-                    continue
-                if any(fp in b64_match.lower() for fp in BASE64_FALSE_POSITIVES):
+                decoded_preview = _decode_base64_text_if_readable(b64_match)
+                if not decoded_preview:
                     continue
             snippet_text = _extract_snippet_lines(lines, win_start, win_end)
             snippets.append(ObfuscationSnippet(

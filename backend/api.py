@@ -434,7 +434,10 @@ async def upload_static_analysis(payload: StaticAnalysisUpload) -> dict:
     outro criado via /api/analysis.
     """
     from analysis_jobs import AnalysisType, JobStatus  # import local para evitar ciclos
+    from modules.deobfuscator import Deobfuscator
+    from modules.obfuscation_snippet_extractor import extract_and_write_snippets_from_content
     import hashlib
+    import json
 
     logger.info(
         "Pedido /api/analysis/upload_static recebido: file=%s score=%s level=%s",
@@ -445,6 +448,45 @@ async def upload_static_analysis(payload: StaticAnalysisUpload) -> dict:
 
     job_id = str(uuid.uuid4())
 
+    out_dir = _get_job_output_dir(job_id)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    base_name = Path(payload.fileName or "analysis").stem or "analysis"
+    report_path = out_dir / f"{base_name}.report.txt"
+    c_code_path = out_dir / f"{base_name}.c.txt"
+    il_code_path = out_dir / f"{base_name}.il.txt"
+
+    try:
+        report_path.write_text(payload.report or "", encoding="utf-8", errors="replace")
+    except OSError:
+        logger.warning("Falha ao guardar report.txt para job_id=%s", job_id)
+    try:
+        c_code_path.write_text(payload.cCode or "", encoding="utf-8", errors="replace")
+    except OSError:
+        logger.warning("Falha ao guardar cCode para job_id=%s", job_id)
+    try:
+        il_code_path.write_text(payload.ilCode or "", encoding="utf-8", errors="replace")
+    except OSError:
+        logger.warning("Falha ao guardar ilCode para job_id=%s", job_id)
+
+    obf_snippets = ""
+    obf_snippets_deob = ""
+    obf_summary: dict[str, int] = {}
+    if payload.cCode and payload.cCode.strip():
+        try:
+            deob = Deobfuscator()
+            obf_snippets, obf_snippets_deob, obf_summary = extract_and_write_snippets_from_content(
+                content=payload.cCode,
+                source_path=str(c_code_path),
+                output_dir=out_dir,
+                stem=base_name,
+                deobfuscate_fn=deob.deobfuscate_content,
+            )
+        except Exception:
+            logger.exception("Falha ao extrair snippets de ofuscação em upload_static (job_id=%s).", job_id)
+
+    obfuscation_indicator_count = int(sum(obf_summary.values())) if obf_summary else 0
+
     static_result = {
         "report": payload.report or "",
         "cCode": payload.cCode or "",
@@ -454,7 +496,36 @@ async def upload_static_analysis(payload: StaticAnalysisUpload) -> dict:
         "riskLevel": payload.riskLevel or "",
         "flaggedIndicators": payload.flaggedIndicators or [],
         "flaggedFunctions": payload.flaggedFunctions or [],
+        "obfuscatedSnippetsFile": obf_snippets,
+        "obfuscatedSnippetsDeobfuscatedFile": obf_snippets_deob,
+        "obfuscationIndicatorCount": obfuscation_indicator_count,
     }
+
+    last_analysis_payload = {
+        "target_file": payload.fileName or "",
+        "report_path": str(report_path),
+        "decompiled_c_file": str(c_code_path),
+        "disassembly_file": str(il_code_path),
+        "flagged_indicators": payload.flaggedIndicators or [],
+        "flagged_functions": payload.flaggedFunctions or [],
+        "obfuscated_snippets_file": obf_snippets,
+        "obfuscated_snippets_deobfuscated_file": obf_snippets_deob,
+        "obfuscated_snippets_pseudoc_file": "",
+        "obfuscated_snippets_deobfuscated_pseudoc_file": "",
+        "obfuscation_snippets_summary": obf_summary,
+        # Mantemos vazio para permitir fallback por parsing de relatório
+        # quando não existirem snippets.
+        "obfuscation_indicators": [],
+    }
+    try:
+        last_path = out_dir / "last_analysis.json"
+        last_path.write_text(
+            json.dumps(last_analysis_payload, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+            errors="replace",
+        )
+    except OSError:
+        logger.warning("Falha ao guardar last_analysis.json para job_id=%s", job_id)
 
     # Como não temos acesso direto ao binário aqui, usamos um hash sintético
     # baseado nos campos principais apenas para fins de auditoria.
@@ -532,6 +603,39 @@ async def get_obfuscated_snippets_artifact(
                 return PlainTextResponse(content=content, media_type="text/plain; charset=utf-8")
             except OSError:
                 raise HTTPException(500, "Erro ao ler ficheiro.")
+
+    # Fallback inteligente:
+    # Se não houver ficheiro de snippets em disco, tentar reconstruí-los on-demand
+    # a partir do cCode armazenado no payload do job (memória/DB).
+    try:
+        payload = get_job_payload(job_id) or {}
+        static_result = payload.get("staticResult") if isinstance(payload, dict) else {}
+        if isinstance(static_result, dict):
+            c_code = static_result.get("cCode") or ""
+            file_name = static_result.get("fileName") or "analysis"
+            if isinstance(c_code, str) and c_code.strip():
+                from modules.deobfuscator import Deobfuscator
+                from modules.obfuscation_snippet_extractor import extract_and_write_snippets_from_content
+
+                stem = Path(str(file_name)).stem or "analysis"
+                deob = Deobfuscator()
+                obf_path, deob_path, _summary = extract_and_write_snippets_from_content(
+                    content=c_code,
+                    source_path=str(out_dir / f"{stem}.c.txt"),
+                    output_dir=out_dir,
+                    stem=stem,
+                    deobfuscate_fn=deob.deobfuscate_content,
+                )
+
+                rebuilt = obf_path if variant == "obfuscated" else deob_path
+                if rebuilt:
+                    rebuilt_path = Path(rebuilt).resolve()
+                    out_dir_resolved = out_dir.resolve()
+                    if out_dir_resolved in rebuilt_path.parents and rebuilt_path.exists():
+                        content = rebuilt_path.read_text(encoding="utf-8", errors="replace")
+                        return PlainTextResponse(content=content, media_type="text/plain; charset=utf-8")
+    except Exception:
+        logger.exception("Fallback de reconstrução de snippets falhou para job_id=%s", job_id)
 
     # Coerência com a categoria de risco "Obfuscation": se não há ficheiro de trechos mas há
     # indicadores de ofuscação (detetados no binário pelo Deobfuscator), devolver resumo.

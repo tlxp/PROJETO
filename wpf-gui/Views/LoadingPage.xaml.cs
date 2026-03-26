@@ -90,10 +90,8 @@ public partial class LoadingPage : Page
         AddLog("[INFO] A verificar dev server do frontend...");
         await EnsureFrontendRunningAsync();
 
-        StatusText.Text = "Frontend pronto. A abrir interface web...";
-
-        AddLog($"[INFO] A abrir frontend em {FrontendUrl} ...");
-        TryOpenFrontend();
+        StatusText.Text = "Frontend pronto.";
+        AddLog("[OK] Frontend pronto.");
 
         await Task.Delay(800);
 
@@ -102,7 +100,7 @@ public partial class LoadingPage : Page
 
     /// <summary>
     /// Executa a sequência completa de arranque: verifica/inicia backend (porta 8000),
-    /// verifica/inicia frontend (porta 8080) e abre o browser. Usado pela LoadingView
+    /// verifica/inicia frontend (porta 8080). Usado pela LoadingView
     /// para que o WPF abra as portas ao iniciar. Ao fechar, ShutdownManager liberta-as.
     /// </summary>
     public static async Task RunFullStartupSequenceAsync(Action<string>? addLog = null)
@@ -125,8 +123,8 @@ public partial class LoadingPage : Page
         addLog?.Invoke("[INFO] Backend pronto. A iniciar frontend...");
         await EnsureFrontendRunningAsync();
         addLog?.Invoke("[OK] Frontend pronto.");
-        addLog?.Invoke("[INFO] A abrir interface web em http://localhost:8080 ...");
-        OpenFrontendInBrowser(addLog);
+        // Não abrir automaticamente o browser no arranque.
+        // A interface web deve ser aberta por ação explícita do utilizador (ex.: clicar em "Análise estática").
     }
 
     private static void OpenFrontendInBrowser(Action<string>? addLog)
