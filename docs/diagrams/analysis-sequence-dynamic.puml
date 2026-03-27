@@ -1,5 +1,5 @@
 @startuml
-title Analise Dinamica - Sequencia detalhada
+title Analise Dinamica - Sequencia resumida
 
 autonumber
 actor "Utilizador" as U
@@ -14,35 +14,26 @@ database "Armazenamento de Jobs" as DB
 U -> FE: Carregar ficheiro + escolher dinamica
 FE -> API: POST /api/analysis?analysis_type=dynamic
 API -> JOBS: create_job(file,dynamic)
-JOBS -> DB: insert queued
-API <-- JOBS: jobId
-FE <-- API: {jobId,status=queued}
+JOBS -> DB: Registar job (queued/running)
+JOBS -> VMO: Executar analise dinamica
+VMO -> DRV: Escolher e executar driver
 
-JOBS -> DB: update_status(running)
-JOBS -> VMO: _run_dynamic(job)
-VMO -> DRV: run(job)
-
-alt driver=stub
-DRV --> VMO: resumo + comportamento sintetico
-else driver=hyperv/proxmox
-DRV -> AGENT: GET /api/health
-DRV -> AGENT: POST /api/upload
-DRV -> AGENT: POST /api/run
-DRV -> AGENT: GET /api/report
-AGENT --> DRV: comportamento JSON
-DRV --> VMO: resumo + comportamento real
+alt Driver real (Hyper-V/Proxmox)
+DRV -> AGENT: Upload, execucao e recolha de relatorio
+AGENT --> DRV: Comportamento observado
+else Driver stub
+DRV --> VMO: Comportamento sintetico
 end
 
-VMO --> JOBS: dynamicResult
-JOBS -> DB: update_results(dynamicResult)
-JOBS -> DB: update_status(completed|failed)
+VMO --> JOBS: Resultado dinamico
+JOBS -> DB: Guardar resultado e estado final
 
-loop polling no frontend
+loop Polling do frontend
 FE -> API: GET /api/analysis/{jobId}
-API -> JOBS: get_job_payload(jobId)
-JOBS -> DB: get_job_row(jobId)
-API <-- JOBS: status + dynamicResult
-FE <-- API: resposta
+API -> DB: Ler estado e resultado do job
+API --> FE: Estado + dynamicResult
 end
+
+FE --> U: Mostrar resumo comportamental e detalhes dinamicos
 
 @enduml

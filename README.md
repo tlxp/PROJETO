@@ -168,14 +168,13 @@ PROJETO/
 
 Os paths de `sandbox_jobs/`, base de dados e diretórios de saída são definidos em `backend/config.py`.
 
-## Diagramas PUML (sequência)
+## Diagramas PUML
 
-Os diagramas de sequência atualizados estão em `docs/diagrams/`:
+Os diagramas atualizados estão em `docs/diagrams/`:
 
 - `analysis-sequence-overview.puml` (visão integrada)
-- `analysis-sequence-static.puml` (fluxo estático)
-- `analysis-sequence-dynamic.puml` (fluxo dinâmico)
-- `analysis-sequence-both.puml` (fluxo combinado)
+- `analysis-activity-static.puml` (atividade da análise estática)
+- `analysis-activity-dynamic.puml` (atividade da análise dinâmica em VM)
 
 ## Módulos
 

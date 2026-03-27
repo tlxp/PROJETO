@@ -1,0 +1,28 @@
+@startuml
+title Analise Dinamica (VM) - Diagrama de Atividade
+
+start
+:Utilizador carrega ficheiro;
+:Frontend cria job dinamico;
+:Backend regista job e passa para running;
+:Orquestrador seleciona driver de VM;
+
+if (Driver real configurado?) then (sim)
+  :Preparar ambiente de VM;
+  :Enviar amostra para agente de VM;
+  :Executar amostra com timeout;
+  :Recolher comportamento (processos, ficheiros, rede, registo);
+else (nao - stub)
+  :Gerar comportamento sintetico (stub);
+endif
+
+:Guardar dynamicResult e estado final do job;
+
+repeat
+  :Frontend consulta estado por jobId;
+repeat while (Job concluido?) is (nao)
+
+:Frontend apresenta resumo comportamental;
+stop
+
+@enduml
