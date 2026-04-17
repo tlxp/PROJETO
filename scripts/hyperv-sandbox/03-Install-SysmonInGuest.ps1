@@ -47,6 +47,8 @@ $configScript = Join-Path $PSScriptRoot "_Config.ps1"
 if (Test-Path $configScript) { . $configScript }
 
 $VMName = $script:PROJETOVM_VMName
+$GuestUser = $script:PROJETOVM_GuestUser
+$GuestPassword = $script:PROJETOVM_GuestPassword
 
 if (-not (Test-Path $SysmonExePath)) {
     throw "SysmonExePath não encontrado: $SysmonExePath"
@@ -65,6 +67,10 @@ Write-Host "Binário Sysmon (host): $SysmonExePath"
 Write-Host "Configuração (host):   $SysmonConfigPath"
 Write-Host ""
 
+# Credenciais para PowerShell Direct (sem popup)
+$secure = ConvertTo-SecureString $GuestPassword -AsPlainText -Force
+$cred = [pscredential]::new($GuestUser, $secure)
+
 # 1) Ligar VM (se ainda não estiver ligada)
 if ($vm.State -ne "Running") {
     Write-Host "[1/5] A arrancar a VM..."
@@ -73,12 +79,12 @@ if ($vm.State -ne "Running") {
     Write-Host "[1/5] VM já se encontra ligada."
 }
 
-Write-Host "      A aguardar $BootWaitSeconds s pelo arranque do Windows..."
-Start-Sleep -Seconds $BootWaitSeconds
+Write-Host "      A aguardar PowerShell Direct (verificação a cada 10s, sem timeout)..."
+$null = Wait-VMPowerShellDirectReady -VMName $VMName -Credential $cred -TimeoutSeconds 0 -LogPath $null -LogIntervalSeconds 10
 
 # 2) Ativar Guest Service Interface para Copy-VMFile / Invoke-Command
 Write-Host "[2/5] A ativar Guest Service Interface na VM..."
-Enable-VMIntegrationService -VMName $VMName -Name "Guest Service Interface" -ErrorAction SilentlyContinue | Out-Null
+Enable-SandboxGuestService -VMName $VMName
 Start-Sleep -Seconds 5
 
 # 3) Copiar Sysmon e configuração para a VM
@@ -94,7 +100,7 @@ Write-Host "      Sysmon e configuração copiados para $guestSysmonDir."
 # 4) Instalar Sysmon dentro da VM
 Write-Host "[4/5] A instalar Sysmon dentro da VM..."
 try {
-    Invoke-Command -VMName $VMName -ScriptBlock {
+    Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
         param($exePath, $configPath)
         if (-not (Test-Path $exePath)) {
             throw "Sysmon não encontrado dentro da VM em: $exePath"

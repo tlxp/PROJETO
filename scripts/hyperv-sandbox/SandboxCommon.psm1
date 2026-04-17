@@ -506,26 +506,107 @@ function Wait-VMHeartbeatOk {
     return $false
 }
 
+function Wait-VMPowerShellDirectReady {
+    param(
+        [Parameter(Mandatory = $true)][string] $VMName,
+        [Parameter(Mandatory = $true)][pscredential] $Credential,
+        # TimeoutSeconds:
+        # - >0  : timeout normal
+        # - <=0 : sem timeout (espera indefinidamente)
+        [int] $TimeoutSeconds = 0,
+        [string] $LogPath,
+        [int] $LogIntervalSeconds = 10
+    )
+    if ($script:DryRun) { return $true }
+
+    $start = Get-Date
+    $deadline = $null
+    if ($TimeoutSeconds -gt 0) { $deadline = $start.AddSeconds($TimeoutSeconds) }
+    $timeoutLabel = if ($TimeoutSeconds -gt 0) { "${TimeoutSeconds}s" } else { "sem timeout" }
+    Write-SandboxLog -Message "A aguardar PowerShell Direct na VM '$VMName' (timeout: $timeoutLabel, intervalo ${LogIntervalSeconds}s)..." -LogPath $LogPath -Level "INFO"
+
+    $lastErr = $null
+    while ($true) {
+        if ($deadline -and (Get-Date) -ge $deadline) { break }
+        try {
+            # PowerShell Direct (Invoke-Command -VMName) não depende de rede/WinRM.
+            # Ele normalmente só começa a funcionar quando o Windows convidado já arrancou e aceita logon com as credenciais.
+            $null = Invoke-Command -VMName $VMName -Credential $Credential -ScriptBlock { 1 } -ErrorAction Stop
+
+            $elapsed = [int]((Get-Date) - $start).TotalSeconds
+            Write-SandboxLog -Message "PowerShell Direct OK na VM '$VMName' após ${elapsed}s." -LogPath $LogPath -Level "INFO"
+            return $true
+        } catch {
+            $msg = $($_.Exception.Message)
+            if ($msg -ne $lastErr) {
+                $elapsed = [int]((Get-Date) - $start).TotalSeconds
+                Write-SandboxLog -Message "PowerShell Direct ainda indisponível: $msg (elapsed=${elapsed}s)" -LogPath $LogPath -Level "INFO"
+                $lastErr = $msg
+            }
+        }
+
+        if ($deadline) {
+            $remaining = [int]($deadline - (Get-Date)).TotalSeconds
+            Write-SandboxLog -Message "PowerShell Direct ainda não OK. Tempo restante aproximado: ${remaining}s." -LogPath $LogPath -Level "INFO"
+        } else {
+            $elapsed = [int]((Get-Date) - $start).TotalSeconds
+            Write-SandboxLog -Message "PowerShell Direct ainda não OK (elapsed=${elapsed}s)." -LogPath $LogPath -Level "INFO"
+        }
+        Start-Sleep -Seconds $LogIntervalSeconds
+    }
+
+    Write-SandboxLog -Message "Timeout - espera do PowerShell Direct na VM '$VMName' após ${TimeoutSeconds}s." -LogPath $LogPath -Level "WARN"
+    return $false
+}
+
 function Get-SandboxGuestServiceName {
     param([string] $VMName)
+
+    function _Normalize-Ascii {
+        param([AllowNull()][string] $s)
+        if ([string]::IsNullOrWhiteSpace($s)) { return "" }
+        try {
+            $formD = $s.Normalize([Text.NormalizationForm]::FormD)
+            $sb = New-Object System.Text.StringBuilder
+            foreach ($ch in $formD.ToCharArray()) {
+                $uc = [Globalization.CharUnicodeInfo]::GetUnicodeCategory($ch)
+                if ($uc -ne [Globalization.UnicodeCategory]::NonSpacingMark) {
+                    [void]$sb.Append($ch)
+                }
+            }
+            return $sb.ToString().ToLowerInvariant()
+        } catch {
+            return ($s.ToLowerInvariant())
+        }
+    }
+
     try {
         $services = Get-VMIntegrationService -VMName $VMName -ErrorAction Stop
-        # 1) Preferir o Id (mais est-vel que o Name em idiomas diferentes)
-        $svc = $services | Where-Object {
-            ($_.Id -like "*Guest*Service*") -or ($_.Id -like "*Guest*Interface*") -or ($_.Id -like "*Guest*")
-        } | Select-Object -First 1
 
+        # 1) Preferir match estável por Id/Description quando possível (alguns hosts expõem Ids como GUID).
+        $svc = $services | Where-Object {
+            ($_.Id -is [string] -and (($_.Id -like "*Guest*Service*") -or ($_.Id -like "*Guest*Interface*"))) -or
+            ($_.Description -is [string] -and (($_.Description -like "*Guest Service*") -or ($_.Description -like "*Guest Service Interface*")))
+        } | Select-Object -First 1
         if ($svc) { return $svc.Name }
 
-        # 2) Fallback por Name/Description (heur-stico)
-        $svc = $services | Where-Object {
-            ($_.Name -like "*Guest Service*") -or
-            ($_.Name -like "*Servi-o*Convidado*") -or
-            ($_.Name -like "*Guest*Interface*") -or
-            ($_.Name -like "*Convidado*Interface*") -or
-            ($_.Description -like "*Guest Service*") -or
-            ($_.Description -like "*convidad*service*") -or
-            ($_.Description -like "*Guest Service Interface*")
+        # 2) Fallback robusto por nome/descrição, ignorando acentos/idioma
+        $targets = @(
+            "guest service interface",
+            "guest services",
+            "interface de servico convidado",
+            "servico convidado",
+            "servicos de convidado"
+        )
+
+        $svc = $services | ForEach-Object {
+            $n = _Normalize-Ascii $_.Name
+            $d = _Normalize-Ascii $_.Description
+            $hit = $false
+            foreach ($t in $targets) {
+                if ($n -like "*$t*" -or $d -like "*$t*") { $hit = $true; break }
+            }
+            if ($hit) { $_ }
         } | Select-Object -First 1
 
         if ($svc) { return $svc.Name }
@@ -651,7 +732,11 @@ function Set-SandboxHostIpIfNeeded {
 function Start-SandboxVM {
     param(
         [string] $VMName,
-        [int]    $BootWaitSeconds = 60
+        [int]    $BootWaitSeconds = 60,
+        [switch] $WaitForPowerShellDirect,
+        [pscredential] $Credential,
+        [int]    $PowerShellDirectTimeoutSeconds = 0,
+        [string] $LogPath
     )
     $vm = Get-VM -Name $VMName -ErrorAction SilentlyContinue
     if (-not $vm) {
@@ -664,10 +749,22 @@ function Start-SandboxVM {
             Start-VM -Name $VMName | Out-Null
         }
     }
-    if (-not $script:DryRun) {
-        Write-LogHost "A aguardar $BootWaitSeconds s pelo arranque da VM..."
-        Start-Sleep -Seconds $BootWaitSeconds
+
+    if ($script:DryRun) { return }
+
+    # Espera pelo arranque: com credenciais usa PowerShell Direct (mesma lógica que -WaitForPowerShellDirect)
+    $usePsDirect = ($WaitForPowerShellDirect -or $Credential)
+    if ($usePsDirect) {
+        if (-not $Credential) {
+            throw "Start-SandboxVM: espera por PowerShell Direct requer -Credential (ou use apenas -BootWaitSeconds sem credenciais)."
+        }
+        Write-LogHost "A aguardar arranque da VM (PowerShell Direct, verificação a cada 10s)..."
+        $null = Wait-VMPowerShellDirectReady -VMName $VMName -Credential $Credential -TimeoutSeconds $PowerShellDirectTimeoutSeconds -LogPath $LogPath -LogIntervalSeconds 10
+        return
     }
+
+    Write-LogHost "A aguardar $BootWaitSeconds s pelo arranque da VM (sem credenciais: espera fixa)..."
+    Start-Sleep -Seconds $BootWaitSeconds
 }
 
 function Wait-SandboxGuestServiceReady {
@@ -761,17 +858,22 @@ function New-SandboxNamedPipeServer {
         [int]    $OutBufferSize = 4096
     )
     $pipeSecurity = New-Object System.IO.Pipes.PipeSecurity
+
+    # Usar SID do grupo Builtin\Administrators para funcionar em qualquer idioma (ex.: "Administradores").
+    $adminSid = New-Object System.Security.Principal.SecurityIdentifier("S-1-5-32-544")
+    $adminNtAccount = $adminSid.Translate([System.Security.Principal.NTAccount])
     $adminRule = New-Object System.IO.Pipes.PipeAccessRule(
-        "Administrators",
+        $adminNtAccount.Value,
         [System.IO.Pipes.PipeAccessRights]::FullControl,
         [System.Security.AccessControl.AccessControlType]::Allow
     )
     $pipeSecurity.AddAccessRule($adminRule)
 
+    # maxNumberOfServerInstances > 1 evita ERROR_PIPE_BUSY se houver tentativas sobrepostas com o mesmo nome
     $pipe = New-Object System.IO.Pipes.NamedPipeServerStream(
         $PipeName,
         [System.IO.Pipes.PipeDirection]::In,
-        1,
+        16,
         [System.IO.Pipes.PipeTransmissionMode]::Byte,
         [System.IO.Pipes.PipeOptions]::None,
         $InBufferSize,
@@ -820,6 +922,127 @@ function Receive-SandboxReportFromPipe {
             try { $pipe.Close() } catch { }
         }
     }
+}
+
+
+###############################################################################
+# Funcoes de gestao de switch externo (internet temporaria para setup inicial)
+###############################################################################
+
+function Get-ExternalVMSwitch {
+    <#
+    .SYNOPSIS
+        Devolve o primeiro VMSwitch do tipo External disponivel no host.
+        Exclui o SandboxSwitch (isolado) e switches sem adaptador fisico associado.
+    #>
+    param(
+        [string] $ExcludeSwitchName = ""
+    )
+    $switches = Get-VMSwitch -ErrorAction SilentlyContinue |
+                Where-Object { ($_.SwitchType -eq "External") -or ($_.Name -eq "Default Switch") }
+
+    # Ordenar: External primeiro, depois Default Switch
+    $switches = $switches | Sort-Object @{ Expression = { if ($_.SwitchType -eq "External") { 0 } else { 1 } } }, Name
+
+    if ($ExcludeSwitchName) {
+        $switches = $switches | Where-Object { $_.Name -ne $ExcludeSwitchName }
+    }
+
+    return ($switches | Select-Object -First 1)
+}
+
+function Add-SandboxInternetAdapter {
+    <#
+    .SYNOPSIS
+        Adiciona um adaptador de rede temporario ligado a um switch externo (internet) na VM.
+        Devolve o nome do switch externo usado, ou $null se nao encontrado.
+    .PARAMETER VMName
+        Nome da VM.
+    .PARAMETER ExternalSwitchName
+        (Opcional) Nome especifico do switch externo. Se vazio, usa o primeiro externo disponivel.
+    .PARAMETER AdapterName
+        Nome logico do adaptador criado na VM (para identificacao futura).
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $VMName,
+        [string] $ExternalSwitchName = "",
+        [string] $AdapterName = "TempInternet",
+        [string] $ExcludeSwitchName = ""
+    )
+    if ($script:DryRun) {
+        Write-LogHost "[DRY-RUN] Adicionaria adaptador '$AdapterName' com internet na VM '$VMName'."
+        return "DryRunSwitch"
+    }
+
+    $switchToUse = $null
+    if (-not [string]::IsNullOrWhiteSpace($ExternalSwitchName)) {
+        $switchToUse = Get-VMSwitch -Name $ExternalSwitchName -ErrorAction SilentlyContinue
+        if (-not $switchToUse) {
+            Write-LogWarning "Switch externo especificado '$ExternalSwitchName' nao encontrado."
+        }
+    }
+
+    if (-not $switchToUse) {
+        $switchToUse = Get-ExternalVMSwitch -ExcludeSwitchName $ExcludeSwitchName
+    }
+
+    if (-not $switchToUse) {
+        Write-LogWarning "Nenhum switch externo (internet) encontrado no host. A instalacao prosseguira sem internet."
+        return $null
+    }
+
+    # Verificar se o adaptador temporario ja existe
+    $existing = Get-VMNetworkAdapter -VMName $VMName -Name $AdapterName -ErrorAction SilentlyContinue
+    if ($existing) {
+        Write-LogHost "Adaptador '$AdapterName' ja existe na VM '$VMName'. A reutilizar."
+        return $switchToUse.Name
+    }
+
+    Add-VMNetworkAdapter -VMName $VMName -Name $AdapterName -SwitchName $switchToUse.Name -ErrorAction Stop | Out-Null
+    Write-LogHost "Adaptador '$AdapterName' adicionado na VM '$VMName' -> switch '$($switchToUse.Name)'."
+    return $switchToUse.Name
+}
+
+function Remove-SandboxInternetAdapter {
+    <#
+    .SYNOPSIS
+        Remove o adaptador de rede temporario de internet da VM.
+        Nao falha se o adaptador nao existir.
+    .PARAMETER VMName
+        Nome da VM.
+    .PARAMETER AdapterName
+        Nome logico do adaptador a remover.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $VMName,
+        [string] $AdapterName = "TempInternet"
+    )
+    if ($script:DryRun) {
+        Write-LogHost "[DRY-RUN] Removeria adaptador '$AdapterName' da VM '$VMName'."
+        return
+    }
+
+    $adapter = Get-VMNetworkAdapter -VMName $VMName -Name $AdapterName -ErrorAction SilentlyContinue
+    if (-not $adapter) {
+        Write-LogHost "Adaptador '$AdapterName' nao encontrado na VM '$VMName' (ja removido ou nunca adicionado)."
+        return
+    }
+
+    Remove-VMNetworkAdapter -VMName $VMName -Name $AdapterName -ErrorAction SilentlyContinue | Out-Null
+    Write-LogHost "Adaptador '$AdapterName' removido da VM '$VMName'. Internet cortada."
+}
+
+function Test-SandboxInternetAdapterExists {
+    <#
+    .SYNOPSIS
+        Verifica se o adaptador temporario de internet existe na VM.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $VMName,
+        [string] $AdapterName = "TempInternet"
+    )
+    $a = Get-VMNetworkAdapter -VMName $VMName -Name $AdapterName -ErrorAction SilentlyContinue
+    return ($null -ne $a)
 }
 
 Export-ModuleMember -Function * -Variable DryRun

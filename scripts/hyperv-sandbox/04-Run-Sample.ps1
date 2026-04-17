@@ -11,7 +11,7 @@
 .PARAMETER TimeoutSeconds
     Tempo máximo de execução do sample dentro da VM.
 .PARAMETER BootWaitSeconds
-    Tempo de espera após arranque da VM antes de copiar/executar.
+    Reservado (o arranque usa espera por PowerShell Direct com credenciais do _Config.ps1, sem sleep fixo).
 .PARAMETER NoInvokeCommand
     Se definido, não usa Invoke-Command na VM; copia o sample e espera. Execução manual na VM.
 #>
@@ -42,6 +42,8 @@ $SnapshotName = $script:PROJETOVM_SnapshotName
 $PipeName = $script:PROJETOVM_PipeName
 $ReportsDir = $script:PROJETOVM_ReportsPath
 $VMScriptsPath = "C:\analysis_work"
+$GuestUser = $script:PROJETOVM_GuestUser
+$GuestPassword = $script:PROJETOVM_GuestPassword
 
 if (-not (Test-Path $SamplePath)) {
     Write-Error "Amostra não encontrada: $SamplePath"
@@ -95,14 +97,28 @@ Write-LogHost "Hash SHA256: $sampleSha256"
 Write-LogHost "Relatório: $ReportOutputPath"
 Write-LogHost ""
 
+# Credenciais para PowerShell Direct (evita popup e melhora diagnóstico)
+$secure = ConvertTo-SecureString $GuestPassword -AsPlainText -Force
+$cred = [pscredential]::new($GuestUser, $secure)
+
 # 1) Restaurar snapshot limpo
 Write-LogHost "[1/7] A restaurar snapshot '$SnapshotName'..."
+Stop-SandboxVM -VMName $VMName
 Restore-SandboxSnapshot -VMName $VMName -SnapshotName $SnapshotName
 Write-LogHost "      Snapshot restaurado."
 
-# 2) Arrancar VM
+# 1.5) Pipe único por run (evita erro 'instâncias ocupadas' em execuções repetidas)
+$RunPipeName = ($PipeName + "_" + $RunId) -replace "[^A-Za-z0-9_\-\.]", "_"
+try {
+    Set-VMComPort -VMName $VMName -Number 1 -Path "\\.\pipe\$RunPipeName"
+    Add-LogLine -Path $HostLogPath -Value "COM1 pipe set to: \\.\pipe\$RunPipeName"
+} catch {
+    Add-LogLine -Path $HostLogPath -Value "Failed to set VM COM1 pipe: $_"
+}
+
+# 2) Arrancar VM (espera pelo arranque = PowerShell Direct, sem sleep fixo)
 Write-LogHost "[2/7] A arrancar a VM..."
-Start-SandboxVM -VMName $VMName -BootWaitSeconds $BootWaitSeconds
+Start-SandboxVM -VMName $VMName -Credential $cred -PowerShellDirectTimeoutSeconds 0 -LogPath $HostLogPath
 
 # 3) Ativar Guest Service para Copy-VMFile (e opcionalmente Invoke-Command)
 Write-LogHost "[3/7] A ativar Guest Service para transferência..."
@@ -111,7 +127,6 @@ $null = Wait-SandboxGuestServiceReady -VMName $VMName -TimeoutSeconds 120
 
 # 4) Copiar amostra para a VM
 Write-LogHost "[4/7] A copiar amostra para a VM..."
-$destDir = "C:\analysis_work"
 Copy-SandboxVMFile -VMName $VMName -SourcePath $SamplePath -DestinationPath $VMSamplePath
 # Copiar scripts de análise para a VM
 $scriptDir = Join-Path $PSScriptRoot "vm"
@@ -132,20 +147,22 @@ $pipeJob = Start-Job -ScriptBlock {
     param($PipeName, $OutputPath, $TimeoutSeconds, $ModulePath)
     Import-Module $ModulePath -ErrorAction Stop
     return (Receive-SandboxReportFromPipe -PipeName $PipeName -OutputPath $OutputPath -TimeoutSeconds ($TimeoutSeconds + 60))
-} -ArgumentList $PipeName, $ReportOutputPath, $TimeoutSeconds, $modulePath
+} -ArgumentList $RunPipeName, $ReportOutputPath, $TimeoutSeconds, $modulePath
 
 # 6) Executar análise na VM
 Write-LogHost "[6/7] A executar análise na VM..."
 if (-not $NoInvokeCommand) {
     try {
-        Invoke-Command -VMName $VMName -ScriptBlock {
+        # PSDirect já foi validado em Start-SandboxVM ao aguardar o arranque
+        Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
             param($SamplePath, $TimeoutSec, $ScriptPath, $SampleSha256)
             Set-Location $ScriptPath
             & ".\Run-MalwareAnalysis.ps1" -SamplePath $SamplePath -TimeoutSeconds $TimeoutSec -SampleHash $SampleSha256
         } -ArgumentList $VMSamplePath, $TimeoutSeconds, $VMScriptsPath, $sampleSha256 -ErrorAction Stop
     }
     catch {
-        Write-LogWarning "Invoke-Command falhou (a VM pode não suportar Direct VM Connection). Execute manualmente na VM: Run-MalwareAnalysis.ps1 -SamplePath '$VMSamplePath' -TimeoutSeconds $TimeoutSeconds"
+        Write-LogWarning "Invoke-Command falhou: $($_.Exception.Message)"
+        Write-LogWarning "Execute manualmente na VM: Run-MalwareAnalysis.ps1 -SamplePath '$VMSamplePath' -TimeoutSeconds $TimeoutSeconds"
         Write-LogHost "      À espera do relatório via pipe ($($TimeoutSeconds + 30) s)..."
         $null = Wait-Job $pipeJob -Timeout ($TimeoutSeconds + 60)
     }
@@ -185,7 +202,7 @@ Add-LogLine -Path $HostLogPath -Value "VM stopped and snapshot restored."
 
 # Desativar Guest Service Interface após a execução para reduzir superfície de ataque
 try {
-    Disable-VMIntegrationService -VMName $VMName -Name "Guest Service Interface" -ErrorAction SilentlyContinue
+    Disable-SandboxGuestService -VMName $VMName
     Add-LogLine -Path $HostLogPath -Value "Guest Service Interface disabled after run."
 } catch {
     Add-LogLine -Path $HostLogPath -Value "Failed to disable Guest Service Interface: $_"
