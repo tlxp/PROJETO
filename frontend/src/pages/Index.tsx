@@ -39,6 +39,7 @@ export type AnalysisResult = {
     endLine: number;
     indicators?: string[];
     score?: number;
+    scoreRaw?: number;
     severity?: string;
     reasons?: string[];
   }[];
@@ -154,6 +155,7 @@ function buildAnalysisResultFromJob(job: unknown, fallbackFileName?: string): An
                 ? (rf.indicators as unknown[]).filter((x): x is string => typeof x === "string")
                 : [],
               score: typeof rf.score === "number" ? rf.score : undefined,
+              scoreRaw: typeof rf.scoreRaw === "number" ? rf.scoreRaw : undefined,
               severity: typeof rf.severity === "string" ? rf.severity : undefined,
               reasons: Array.isArray(rf.reasons)
                 ? (rf.reasons as unknown[]).filter((x): x is string => typeof x === "string")
@@ -210,6 +212,7 @@ function buildAnalysisResultFromJob(job: unknown, fallbackFileName?: string): An
                 ? (rf.indicators as unknown[]).filter((x): x is string => typeof x === "string")
                 : [],
               score: typeof rf.score === "number" ? rf.score : undefined,
+              scoreRaw: typeof rf.scoreRaw === "number" ? rf.scoreRaw : undefined,
               severity: typeof rf.severity === "string" ? rf.severity : undefined,
               reasons: Array.isArray(rf.reasons)
                 ? (rf.reasons as unknown[]).filter((x): x is string => typeof x === "string")
@@ -1074,6 +1077,7 @@ const Index = () => {
                             ? (rf.indicators as unknown[]).filter((x): x is string => typeof x === "string")
                             : [],
                           score: typeof rf.score === "number" ? rf.score : undefined,
+                          scoreRaw: typeof rf.scoreRaw === "number" ? rf.scoreRaw : undefined,
                           severity: typeof rf.severity === "string" ? rf.severity : undefined,
                           reasons: Array.isArray(rf.reasons)
                             ? (rf.reasons as unknown[]).filter((x): x is string => typeof x === "string")
@@ -2144,7 +2148,10 @@ const Index = () => {
                                         <span className="text-[10px] text-muted-foreground">
                                           {f.severity ? `Severidade: ${f.severity}` : null}
                                           {f.severity && typeof f.score === "number" ? " · " : null}
-                                          {typeof f.score === "number" ? `Score: ${f.score}` : null}
+                                          {typeof f.score === "number" ? `Score (0-100): ${f.score}/100` : null}
+                                          {typeof f.scoreRaw === "number" && typeof f.score === "number" && f.scoreRaw > 100
+                                            ? ` · bruto: ${f.scoreRaw}`
+                                            : null}
                                         </span>
                                       )}
                                       {f.indicators && f.indicators.length > 0 && (

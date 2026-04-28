@@ -201,8 +201,10 @@ Analisa ficheiros PE sem executá-los:
 ### Risk Scorer
 Calcula score de risco baseado em:
 - Imports suspeitos (15 pontos)
-- Funções suspeitas (20 pontos)
-- Strings C&C (25 pontos)
+- Funções suspeitas (18 pontos)
+- Strings C&C (20 pontos)
+- Indicadores de stealer (15 pontos)
+- Indicadores de persistência (10 pontos)
 - Técnicas de evasão (15 pontos)
 - Matches YARA (20 pontos)
 - Indicadores de packer (10 pontos)

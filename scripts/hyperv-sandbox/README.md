@@ -20,9 +20,9 @@ scripts/hyperv-sandbox/
 ├── 02-Host-ReceiveReport.ps1    # Host: recebe relatório no pipe, grava em D:\PROJETOVM\Reports
 ├── 03-Install-SysmonInGuest.ps1 # Host: instala Sysmon dentro da VM (após Windows instalado)
 ├── 04-Run-Sample.ps1            # Host: orquestração (restore, start, copy, run, receive, restore)
-├── 05-FirstTimeVmSetup.ps1      # Host: primeira entrada — instala software (winget) na VM e cria snapshot
+├── 05-FirstTimeVmSetup.ps1      # Host: primeira entrada — valida guest, garante isolamento e cria snapshot
 ├── vm/
-│   ├── Prepare-RealisticEnvironment.ps1  # VM: hostname, user, serviços, BIOS, winget (opcional)
+│   ├── Prepare-RealisticEnvironment.ps1  # VM: prepara ambiente "realista" (sem instalar apps)
 │   ├── Run-MalwareAnalysis.ps1   # VM: baseline → executa sample → diff → relatório → COM1
 │   └── Send-ReportViaCom.ps1    # VM: envia C:\analysis.txt via COM1
 └── README.md

@@ -24,23 +24,25 @@
     Tempo de espera após arrancar a VM para garantir que o Windows está pronto.
 
 .EXAMPLE
-    .\03-Install-SysmonInGuest.ps1 `
-        -SysmonExePath "D:\Tools\Sysmon\Sysmon64.exe" `
-        -SysmonConfigPath "D:\Tools\Sysmon\sysmon-config.xml"
+    .\03-Install-SysmonInGuest.ps1
 #>
 #Requires -RunAsAdministrator
 
 param(
-    [Parameter(Mandatory = $true)]
-    [string] $SysmonExePath,
+    # Se omitido, o script tenta detetar automaticamente e/ou descarregar Sysmon.
+    [string] $SysmonExePath = "",
 
-    [Parameter(Mandatory = $true)]
-    [string] $SysmonConfigPath,
+    # Se omitido, o script tenta detetar automaticamente e/ou obter uma config default.
+    [string] $SysmonConfigPath = "",
 
     [int] $BootWaitSeconds = 60
 )
 
 $ErrorActionPreference = "Stop"
+
+# Recarregar sempre o módulo (evita cache com versões antigas durante troubleshooting)
+try { Remove-Module SandboxCommon -ErrorAction SilentlyContinue } catch {}
+Import-Module (Join-Path $PSScriptRoot "SandboxCommon.psm1") -Force -DisableNameChecking -ErrorAction Stop
 
 # Carregar configuração (D:\PROJETOVM)
 $configScript = Join-Path $PSScriptRoot "_Config.ps1"
@@ -50,11 +52,105 @@ $VMName = $script:PROJETOVM_VMName
 $GuestUser = $script:PROJETOVM_GuestUser
 $GuestPassword = $script:PROJETOVM_GuestPassword
 
-if (-not (Test-Path $SysmonExePath)) {
-    throw "SysmonExePath não encontrado: $SysmonExePath"
+function Download-FileRobust {
+    param(
+        [Parameter(Mandatory = $true)][string] $Url,
+        [Parameter(Mandatory = $true)][string] $DestinationPath,
+        [int] $Retries = 3
+    )
+
+    $lastErr = $null
+    for ($i = 1; $i -le $Retries; $i++) {
+        try {
+            if (Test-Path -LiteralPath $DestinationPath) {
+                Remove-Item -LiteralPath $DestinationPath -Force -ErrorAction SilentlyContinue
+            }
+            Invoke-WebRequest -Uri $Url -OutFile $DestinationPath -UseBasicParsing -ErrorAction Stop
+            if (-not (Test-Path -LiteralPath $DestinationPath)) {
+                throw "Download terminou mas o ficheiro não existe: $DestinationPath"
+            }
+            return
+        } catch {
+            $lastErr = $_.Exception.Message
+            if ($i -lt $Retries) { Start-Sleep -Seconds ([Math]::Min(10, 2 * $i)) }
+        }
+    }
+    throw "Falha ao descarregar após ${Retries} tentativas. URL=$Url. Erro: $lastErr"
 }
-if (-not (Test-Path $SysmonConfigPath)) {
-    throw "SysmonConfigPath não encontrado: $SysmonConfigPath"
+
+function Resolve-SysmonExePath {
+    param([string] $PreferredPath)
+
+    if (-not [string]::IsNullOrWhiteSpace($PreferredPath) -and (Test-Path -LiteralPath $PreferredPath)) {
+        return (Resolve-Path -LiteralPath $PreferredPath).Path
+    }
+
+    $candidates = @(
+        "D:\Tools\Sysmon\Sysmon64.exe",
+        "D:\Tools\Sysmon\Sysmon.exe",
+        (Join-Path $script:PROJETOVM_BasePath "Tools\Sysmon\Sysmon64.exe"),
+        (Join-Path $PSScriptRoot "tools\sysmon\Sysmon64.exe"),
+        (Join-Path $PSScriptRoot "Sysmon64.exe")
+    )
+    foreach ($c in $candidates) {
+        if ($c -and (Test-Path -LiteralPath $c)) { return (Resolve-Path -LiteralPath $c).Path }
+    }
+
+    # Download Sysmon.zip do Sysinternals e extrair
+    $tmpDir = Join-Path $env:TEMP ("Sysmon_" + [Guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
+    $zipPath = Join-Path $tmpDir "Sysmon.zip"
+    Write-Host "Sysmon não encontrado localmente. A descarregar do Sysinternals..."
+    Download-FileRobust -Url "https://download.sysinternals.com/files/Sysmon.zip" -DestinationPath $zipPath -Retries 3
+    Expand-Archive -LiteralPath $zipPath -DestinationPath $tmpDir -Force
+
+    $exe = @(
+        (Join-Path $tmpDir "Sysmon64.exe"),
+        (Join-Path $tmpDir "Sysmon.exe")
+    ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+
+    if (-not $exe) {
+        throw "Sysmon.zip descarregado mas não foi possível localizar Sysmon64.exe no ZIP."
+    }
+    return $exe
+}
+
+function Resolve-SysmonConfigPath {
+    param([string] $PreferredPath, [string] $SysmonExeResolved)
+
+    if (-not [string]::IsNullOrWhiteSpace($PreferredPath) -and (Test-Path -LiteralPath $PreferredPath)) {
+        return (Resolve-Path -LiteralPath $PreferredPath).Path
+    }
+
+    $candidates = @(
+        "D:\Tools\Sysmon\sysmon-config.xml",
+        "D:\Tools\Sysmon\sysmonconfig.xml",
+        (Join-Path $script:PROJETOVM_BasePath "Tools\Sysmon\sysmon-config.xml"),
+        (Join-Path $PSScriptRoot "tools\sysmon\sysmon-config.xml"),
+        (Join-Path $PSScriptRoot "sysmon-config.xml")
+    )
+    foreach ($c in $candidates) {
+        if ($c -and (Test-Path -LiteralPath $c)) { return (Resolve-Path -LiteralPath $c).Path }
+    }
+
+    # Tentar obter uma config bem conhecida; se falhar, gerar uma config mínima.
+    $tmpDir = Split-Path -Parent $SysmonExeResolved
+    $cfgPath = Join-Path $tmpDir "sysmon-config.xml"
+    try {
+        Write-Host "Config Sysmon não encontrada. A descarregar uma config default..."
+        Download-FileRobust -Url "https://raw.githubusercontent.com/SwiftOnSecurity/sysmon-config/master/sysmonconfig-export.xml" -DestinationPath $cfgPath -Retries 3
+        return $cfgPath
+    } catch {
+        Write-Warning "Não foi possível descarregar config default. A gerar config mínima: $($_.Exception.Message)"
+        @"
+<Sysmon schemaversion="4.90">
+  <HashAlgorithms>*</HashAlgorithms>
+  <EventFiltering>
+  </EventFiltering>
+</Sysmon>
+"@ | Set-Content -LiteralPath $cfgPath -Encoding UTF8 -Force
+        return $cfgPath
+    }
 }
 
 $vm = Get-VM -Name $VMName -ErrorAction SilentlyContinue
@@ -62,25 +158,30 @@ if (-not $vm) {
     throw "VM '$VMName' não encontrada. Execute primeiro 01-Setup-MalwareSandbox.ps1 e instale o Windows na VM."
 }
 
+$SysmonExePath = Resolve-SysmonExePath -PreferredPath $SysmonExePath
+$SysmonConfigPath = Resolve-SysmonConfigPath -PreferredPath $SysmonConfigPath -SysmonExeResolved $SysmonExePath
+
 Write-Host "=== Instalação do Sysmon na VM '$VMName' ==="
 Write-Host "Binário Sysmon (host): $SysmonExePath"
 Write-Host "Configuração (host):   $SysmonConfigPath"
 Write-Host ""
 
 # Credenciais para PowerShell Direct (sem popup)
-$secure = ConvertTo-SecureString $GuestPassword -AsPlainText -Force
-$cred = [pscredential]::new($GuestUser, $secure)
+$credCandidates = New-SandboxCredentialCandidates -UserName $GuestUser -Password $GuestPassword -ComputerName $VMName
+$cred = $credCandidates | Select-Object -First 1
 
 # 1) Ligar VM (se ainda não estiver ligada)
 if ($vm.State -ne "Running") {
     Write-Host "[1/5] A arrancar a VM..."
-    Start-VM -Name $VMName | Out-Null
+    $psOk = Start-SandboxVM -VMName $VMName -CredentialCandidates $credCandidates -PowerShellDirectTimeoutSeconds 0
+    if ($psOk -is [pscredential]) { $cred = $psOk }
 } else {
     Write-Host "[1/5] VM já se encontra ligada."
 }
 
 Write-Host "      A aguardar PowerShell Direct (verificação a cada 10s, sem timeout)..."
-$null = Wait-VMPowerShellDirectReady -VMName $VMName -Credential $cred -TimeoutSeconds 0 -LogPath $null -LogIntervalSeconds 10
+$psOk2 = Wait-VMPowerShellDirectReady -VMName $VMName -CredentialCandidates $credCandidates -TimeoutSeconds 0 -LogPath $null -LogIntervalSeconds 10
+if ($psOk2 -is [pscredential]) { $cred = $psOk2 }
 
 # 2) Ativar Guest Service Interface para Copy-VMFile / Invoke-Command
 Write-Host "[2/5] A ativar Guest Service Interface na VM..."
@@ -93,8 +194,8 @@ $guestSysmonDir   = "C:\tools\sysmon"
 $guestSysmonExe   = Join-Path $guestSysmonDir "Sysmon64.exe"
 $guestSysmonConfig = Join-Path $guestSysmonDir "sysmon-config.xml"
 
-Copy-VMFile -VMName $VMName -SourcePath $SysmonExePath -DestinationPath $guestSysmonExe -FileSource Host -CreateFullPath -ErrorAction Stop
-Copy-VMFile -VMName $VMName -SourcePath $SysmonConfigPath -DestinationPath $guestSysmonConfig -FileSource Host -CreateFullPath -ErrorAction Stop
+Copy-SandboxVMFile -VMName $VMName -SourcePath $SysmonExePath -DestinationPath $guestSysmonExe
+Copy-SandboxVMFile -VMName $VMName -SourcePath $SysmonConfigPath -DestinationPath $guestSysmonConfig
 Write-Host "      Sysmon e configuração copiados para $guestSysmonDir."
 
 # 4) Instalar Sysmon dentro da VM

@@ -506,10 +506,46 @@ function Wait-VMHeartbeatOk {
     return $false
 }
 
+function New-SandboxCredentialCandidates {
+    param(
+        [Parameter(Mandatory = $true)][string] $UserName,
+        [Parameter(Mandatory = $true)][string] $Password,
+        [string] $ComputerName
+    )
+    $secure = ConvertTo-SecureString $Password -AsPlainText -Force
+
+    $userNames = New-Object System.Collections.Generic.List[string]
+    if (-not [string]::IsNullOrWhiteSpace($UserName)) {
+        $userNames.Add($UserName)
+    }
+
+    # Se não houver domínio explícito, tentar variações comuns para conta local.
+    $hasQualifier = ($UserName -match "\\") -or ($UserName -match "@")
+    if (-not $hasQualifier) {
+        $userNames.Add(".\$UserName")
+        if (-not [string]::IsNullOrWhiteSpace($ComputerName)) {
+            $userNames.Add("$ComputerName\$UserName")
+        }
+    }
+
+    # Remover duplicados preservando ordem
+    $seen = @{}
+    $final = @()
+    foreach ($u in $userNames) {
+        if (-not $seen.ContainsKey($u)) {
+            $seen[$u] = $true
+            $final += $u
+        }
+    }
+
+    return @($final | ForEach-Object { [pscredential]::new($_, $secure) })
+}
+
 function Wait-VMPowerShellDirectReady {
     param(
         [Parameter(Mandatory = $true)][string] $VMName,
-        [Parameter(Mandatory = $true)][pscredential] $Credential,
+        [pscredential] $Credential,
+        [pscredential[]] $CredentialCandidates,
         # TimeoutSeconds:
         # - >0  : timeout normal
         # - <=0 : sem timeout (espera indefinidamente)
@@ -518,6 +554,15 @@ function Wait-VMPowerShellDirectReady {
         [int] $LogIntervalSeconds = 10
     )
     if ($script:DryRun) { return $true }
+
+    $candidates = @()
+    if ($CredentialCandidates -and $CredentialCandidates.Count -gt 0) {
+        $candidates = @($CredentialCandidates)
+    } elseif ($Credential) {
+        $candidates = @($Credential)
+    } else {
+        throw "Wait-VMPowerShellDirectReady: forneça -Credential ou -CredentialCandidates."
+    }
 
     $start = Get-Date
     $deadline = $null
@@ -529,13 +574,20 @@ function Wait-VMPowerShellDirectReady {
     while ($true) {
         if ($deadline -and (Get-Date) -ge $deadline) { break }
         try {
-            # PowerShell Direct (Invoke-Command -VMName) não depende de rede/WinRM.
-            # Ele normalmente só começa a funcionar quando o Windows convidado já arrancou e aceita logon com as credenciais.
-            $null = Invoke-Command -VMName $VMName -Credential $Credential -ScriptBlock { 1 } -ErrorAction Stop
+            foreach ($cand in $candidates) {
+                try {
+                    # PowerShell Direct (Invoke-Command -VMName) não depende de rede/WinRM.
+                    # Ele normalmente só começa a funcionar quando o Windows convidado já arrancou e aceita logon com as credenciais.
+                    $null = Invoke-Command -VMName $VMName -Credential $cand -ScriptBlock { 1 } -ErrorAction Stop
 
-            $elapsed = [int]((Get-Date) - $start).TotalSeconds
-            Write-SandboxLog -Message "PowerShell Direct OK na VM '$VMName' após ${elapsed}s." -LogPath $LogPath -Level "INFO"
-            return $true
+                    $elapsed = [int]((Get-Date) - $start).TotalSeconds
+                    Write-SandboxLog -Message "PowerShell Direct OK na VM '$VMName' após ${elapsed}s (user='$($cand.UserName)')." -LogPath $LogPath -Level "INFO"
+                    return $cand
+                } catch {
+                    $msg = $($_.Exception.Message)
+                    $lastErr = $msg
+                }
+            }
         } catch {
             $msg = $($_.Exception.Message)
             if ($msg -ne $lastErr) {
@@ -550,13 +602,14 @@ function Wait-VMPowerShellDirectReady {
             Write-SandboxLog -Message "PowerShell Direct ainda não OK. Tempo restante aproximado: ${remaining}s." -LogPath $LogPath -Level "INFO"
         } else {
             $elapsed = [int]((Get-Date) - $start).TotalSeconds
-            Write-SandboxLog -Message "PowerShell Direct ainda não OK (elapsed=${elapsed}s)." -LogPath $LogPath -Level "INFO"
+            $uList = ($candidates | ForEach-Object { $_.UserName }) -join ", "
+            Write-SandboxLog -Message "PowerShell Direct ainda não OK (elapsed=${elapsed}s). Tentando users: $uList" -LogPath $LogPath -Level "INFO"
         }
         Start-Sleep -Seconds $LogIntervalSeconds
     }
 
     Write-SandboxLog -Message "Timeout - espera do PowerShell Direct na VM '$VMName' após ${TimeoutSeconds}s." -LogPath $LogPath -Level "WARN"
-    return $false
+    return $null
 }
 
 function Get-SandboxGuestServiceName {
@@ -735,6 +788,7 @@ function Start-SandboxVM {
         [int]    $BootWaitSeconds = 60,
         [switch] $WaitForPowerShellDirect,
         [pscredential] $Credential,
+        [pscredential[]] $CredentialCandidates,
         [int]    $PowerShellDirectTimeoutSeconds = 0,
         [string] $LogPath
     )
@@ -753,14 +807,13 @@ function Start-SandboxVM {
     if ($script:DryRun) { return }
 
     # Espera pelo arranque: com credenciais usa PowerShell Direct (mesma lógica que -WaitForPowerShellDirect)
-    $usePsDirect = ($WaitForPowerShellDirect -or $Credential)
+    $usePsDirect = ($WaitForPowerShellDirect -or $Credential -or ($CredentialCandidates -and $CredentialCandidates.Count -gt 0))
     if ($usePsDirect) {
-        if (-not $Credential) {
-            throw "Start-SandboxVM: espera por PowerShell Direct requer -Credential (ou use apenas -BootWaitSeconds sem credenciais)."
+        if (-not $Credential -and (-not $CredentialCandidates -or $CredentialCandidates.Count -eq 0)) {
+            throw "Start-SandboxVM: espera por PowerShell Direct requer -Credential ou -CredentialCandidates (ou use apenas -BootWaitSeconds sem credenciais)."
         }
         Write-LogHost "A aguardar arranque da VM (PowerShell Direct, verificação a cada 10s)..."
-        $null = Wait-VMPowerShellDirectReady -VMName $VMName -Credential $Credential -TimeoutSeconds $PowerShellDirectTimeoutSeconds -LogPath $LogPath -LogIntervalSeconds 10
-        return
+        return (Wait-VMPowerShellDirectReady -VMName $VMName -Credential $Credential -CredentialCandidates $CredentialCandidates -TimeoutSeconds $PowerShellDirectTimeoutSeconds -LogPath $LogPath -LogIntervalSeconds 10)
     }
 
     Write-LogHost "A aguardar $BootWaitSeconds s pelo arranque da VM (sem credenciais: espera fixa)..."
@@ -873,13 +926,58 @@ function New-SandboxNamedPipeServer {
     $pipe = New-Object System.IO.Pipes.NamedPipeServerStream(
         $PipeName,
         [System.IO.Pipes.PipeDirection]::In,
-        16,
+        254,
         [System.IO.Pipes.PipeTransmissionMode]::Byte,
         [System.IO.Pipes.PipeOptions]::None,
         $InBufferSize,
         $OutBufferSize,
         $pipeSecurity
     )
+    return $pipe
+}
+
+function New-SandboxNamedPipeServerEnhanced {
+    param(
+        [string] $PipeName,
+        [int]    $InBufferSize = 65536,  # Buffer maior para chunks
+        [int]    $OutBufferSize = 65536
+    )
+
+    $pipeSecurity = New-Object System.IO.Pipes.PipeSecurity
+
+    # Adicionar regras de acesso para Administradores e SYSTEM
+    $adminSid = New-Object System.Security.Principal.SecurityIdentifier("S-1-5-32-544")
+    $adminAccount = $adminSid.Translate([System.Security.Principal.NTAccount])
+    $adminRule = New-Object System.IO.Pipes.PipeAccessRule(
+        $adminAccount.Value,
+        [System.IO.Pipes.PipeAccessRights]::FullControl,
+        [System.Security.AccessControl.AccessControlType]::Allow
+    )
+    $pipeSecurity.AddAccessRule($adminRule)
+
+    $systemSid = New-Object System.Security.Principal.SecurityIdentifier("S-1-5-18")
+    $systemAccount = $systemSid.Translate([System.Security.Principal.NTAccount])
+    $systemRule = New-Object System.IO.Pipes.PipeAccessRule(
+        $systemAccount.Value,
+        [System.IO.Pipes.PipeAccessRights]::FullControl,
+        [System.Security.AccessControl.AccessControlType]::Allow
+    )
+    $pipeSecurity.AddAccessRule($systemRule)
+
+    # PipeOptions::None (não Asynchronous): o modo async é incompatível com StreamReader.ReadLine()
+    # síncrono — provoca bloqueios indefinidos ou leituras vazias quando o pipe usa COM1 no Hyper-V.
+    # maxNumberOfServerInstances = 1: só a VM se liga a este pipe por run.
+    $pipe = New-Object System.IO.Pipes.NamedPipeServerStream(
+        $PipeName,
+        [System.IO.Pipes.PipeDirection]::InOut,
+        1,
+        [System.IO.Pipes.PipeTransmissionMode]::Byte,
+        [System.IO.Pipes.PipeOptions]::None,
+        $InBufferSize,
+        $OutBufferSize,
+        $pipeSecurity
+    )
+
     return $pipe
 }
 
@@ -892,157 +990,151 @@ function Receive-SandboxReportFromPipe {
 
     $pipe = $null
     try {
-        $pipe = New-SandboxNamedPipeServer -PipeName $PipeName
-        $pipe.WaitForConnection()
-
-        $reader = New-Object System.IO.StreamReader($pipe)
-        $lines = New-Object System.Collections.ArrayList
         $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
 
-        while ($pipe.IsConnected -and ([DateTime]::UtcNow -lt $deadline)) {
-            if ($reader.Peek() -ge 0) {
-                $line = $reader.ReadLine()
-                if ($null -eq $line) { break }
-                [void]$lines.Add($line)
+        # Em COM1->NamedPipe no Hyper-V, a ponta "server" pode variar.
+        # Tentar SERVER primeiro; se estiver ocupado, ligar como CLIENT.
+        $useClient = $false
+        try {
+            # Preferir InOut para maximizar compatibilidade (mesmo que só leiamos)
+            $pipe = New-SandboxNamedPipeServerEnhanced -PipeName $PipeName
+            Write-Host "[PIPE] Servidor à escuta em: $PipeName"
+        } catch {
+            $msg = $_.Exception.Message
+            if ($msg -match "ocupad|busy") {
+                $useClient = $true
+                Write-Host "[PIPE] Servidor ocupado, a tentar como cliente..."
+            } else {
+                throw
             }
-            else {
-                Start-Sleep -Milliseconds 200
+        }
+
+        if ($useClient) {
+            $pipe = New-Object System.IO.Pipes.NamedPipeClientStream(".", $PipeName, [System.IO.Pipes.PipeDirection]::InOut)
+            while (-not $pipe.IsConnected -and ([DateTime]::UtcNow -lt $deadline)) {
+                try {
+                    $remainingMs = [int][Math]::Max(100, [Math]::Min(2000, ($deadline - [DateTime]::UtcNow).TotalMilliseconds))
+                    $pipe.Connect($remainingMs)
+                } catch {
+                    Start-Sleep -Milliseconds 200
+                }
             }
+            if (-not $pipe.IsConnected) { throw "Timeout ao ligar como client ao pipe '$PipeName'." }
+            Write-Host "[PIPE] Cliente ligado ao pipe: $PipeName"
+        } else {
+            $pipe.WaitForConnection()
+            Write-Host "[PIPE] VM ligada ao pipe"
+        }
+
+        # Usar UTF-8 sem BOM para evitar ruído/auto-deteção no início do stream
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        $reader = New-Object System.IO.StreamReader($pipe, $utf8NoBom, $false)
+        try { $pipe.ReadTimeout = 1000 } catch { }
+
+        $inReport = $false
+        $reportLines = @()
+        $seenAny = $false
+        $lastProgress = [DateTime]::UtcNow
+        $rxLines = 0
+
+        while ([DateTime]::UtcNow -lt $deadline) {
+            $raw = $null
+            try {
+                $raw = $reader.ReadLine()
+            } catch [System.IO.IOException] {
+                # Tipicamente timeout de ReadTimeout em streams - continuar até ao deadline global
+                $raw = $null
+            } catch {
+                throw
+            }
+
+            if ($null -ne $raw) {
+                $seenAny = $true
+                $rxLines++
+
+                $line = ($raw -replace "`0","").Trim()
+                if ([string]::IsNullOrWhiteSpace($line)) { continue }
+
+                # Detetar início do relatório
+                if ($line -eq "START_OF_REPORT") {
+                    $inReport = $true
+                    Write-Host "[PIPE] Início do relatório detetado"
+                    continue
+                }
+
+                # Detetar fim do relatório
+                if ($line -eq "END_OF_REPORT" -or $line -eq "END_OF_REPORT_CHECKSUM") {
+                    Write-Host "[PIPE] Fim do relatório detetado"
+                    break
+                }
+
+                # Recolher linhas do relatório
+                if ($inReport) {
+                    $reportLines += $line
+                    Write-Host "[PIPE] Linha $($reportLines.Count): $line"
+                }
+            }
+
+            # Heartbeat enquanto está à espera (para não parecer bloqueado)
+            if (([DateTime]::UtcNow - $lastProgress).TotalSeconds -ge 10) {
+                $remaining = [int]($deadline - [DateTime]::UtcNow).TotalSeconds
+                if (-not $seenAny) {
+                    Write-Host "[PIPE] À espera de dados... (restante ~${remaining}s)"
+                } elseif (-not $inReport) {
+                    Write-Host "[PIPE] Dados recebidos ($rxLines linhas), à espera de START_OF_REPORT... (restante ~${remaining}s)"
+                } else {
+                    Write-Host "[PIPE] A receber relatório... ($($reportLines.Count) linhas) (restante ~${remaining}s)"
+                }
+                $lastProgress = [DateTime]::UtcNow
+            }
+            Start-Sleep -Milliseconds 100
         }
 
         $reader.Close()
         $pipe.Close()
 
-        $content = $lines -join "`r`n"
+        if ($reportLines.Count -eq 0) {
+            throw "Nenhum dado recebido do pipe"
+        }
+
+        # Remover linhas de cabeçalho (VERSION, TIMESTAMP, SHA256, etc.)
+        $cleanLines = @()
+        $skipHeader = $true
+        foreach ($line in $reportLines) {
+            if ($skipHeader) {
+                # Pular linhas que parecem cabeçalho
+                if ($line -match "^(VERSION|TIMESTAMP|SHA256|REPORT_SIZE|CHECKSUM)=") {
+                    Write-Host "[PIPE] Cabeçalho ignorado: $line"
+                    continue
+                }
+                if ($line -eq "END_HEADER") {
+                    $skipHeader = $false
+                    continue
+                }
+                # Se não for cabeçalho, já estamos no corpo
+                $skipHeader = $false
+                $cleanLines += $line
+            } else {
+                $cleanLines += $line
+            }
+        }
+
+        # Gravar relatório
+        $content = $cleanLines -join "`r`n"
         [System.IO.File]::WriteAllText($OutputPath, $content, [System.Text.Encoding]::UTF8)
-        return $lines.Count
-    }
-    finally {
+
+        Write-Host "[PIPE] Relatório guardado: $OutputPath ($($cleanLines.Count) linhas)"
+        return $cleanLines.Count
+
+    } catch {
+        Write-Error "[PIPE] Erro: $_"
+        throw
+    } finally {
         if ($null -ne $pipe -and $pipe.IsConnected) {
             try { $pipe.Close() } catch { }
         }
     }
 }
 
-
-###############################################################################
-# Funcoes de gestao de switch externo (internet temporaria para setup inicial)
-###############################################################################
-
-function Get-ExternalVMSwitch {
-    <#
-    .SYNOPSIS
-        Devolve o primeiro VMSwitch do tipo External disponivel no host.
-        Exclui o SandboxSwitch (isolado) e switches sem adaptador fisico associado.
-    #>
-    param(
-        [string] $ExcludeSwitchName = ""
-    )
-    $switches = Get-VMSwitch -ErrorAction SilentlyContinue |
-                Where-Object { ($_.SwitchType -eq "External") -or ($_.Name -eq "Default Switch") }
-
-    # Ordenar: External primeiro, depois Default Switch
-    $switches = $switches | Sort-Object @{ Expression = { if ($_.SwitchType -eq "External") { 0 } else { 1 } } }, Name
-
-    if ($ExcludeSwitchName) {
-        $switches = $switches | Where-Object { $_.Name -ne $ExcludeSwitchName }
-    }
-
-    return ($switches | Select-Object -First 1)
-}
-
-function Add-SandboxInternetAdapter {
-    <#
-    .SYNOPSIS
-        Adiciona um adaptador de rede temporario ligado a um switch externo (internet) na VM.
-        Devolve o nome do switch externo usado, ou $null se nao encontrado.
-    .PARAMETER VMName
-        Nome da VM.
-    .PARAMETER ExternalSwitchName
-        (Opcional) Nome especifico do switch externo. Se vazio, usa o primeiro externo disponivel.
-    .PARAMETER AdapterName
-        Nome logico do adaptador criado na VM (para identificacao futura).
-    #>
-    param(
-        [Parameter(Mandatory = $true)][string] $VMName,
-        [string] $ExternalSwitchName = "",
-        [string] $AdapterName = "TempInternet",
-        [string] $ExcludeSwitchName = ""
-    )
-    if ($script:DryRun) {
-        Write-LogHost "[DRY-RUN] Adicionaria adaptador '$AdapterName' com internet na VM '$VMName'."
-        return "DryRunSwitch"
-    }
-
-    $switchToUse = $null
-    if (-not [string]::IsNullOrWhiteSpace($ExternalSwitchName)) {
-        $switchToUse = Get-VMSwitch -Name $ExternalSwitchName -ErrorAction SilentlyContinue
-        if (-not $switchToUse) {
-            Write-LogWarning "Switch externo especificado '$ExternalSwitchName' nao encontrado."
-        }
-    }
-
-    if (-not $switchToUse) {
-        $switchToUse = Get-ExternalVMSwitch -ExcludeSwitchName $ExcludeSwitchName
-    }
-
-    if (-not $switchToUse) {
-        Write-LogWarning "Nenhum switch externo (internet) encontrado no host. A instalacao prosseguira sem internet."
-        return $null
-    }
-
-    # Verificar se o adaptador temporario ja existe
-    $existing = Get-VMNetworkAdapter -VMName $VMName -Name $AdapterName -ErrorAction SilentlyContinue
-    if ($existing) {
-        Write-LogHost "Adaptador '$AdapterName' ja existe na VM '$VMName'. A reutilizar."
-        return $switchToUse.Name
-    }
-
-    Add-VMNetworkAdapter -VMName $VMName -Name $AdapterName -SwitchName $switchToUse.Name -ErrorAction Stop | Out-Null
-    Write-LogHost "Adaptador '$AdapterName' adicionado na VM '$VMName' -> switch '$($switchToUse.Name)'."
-    return $switchToUse.Name
-}
-
-function Remove-SandboxInternetAdapter {
-    <#
-    .SYNOPSIS
-        Remove o adaptador de rede temporario de internet da VM.
-        Nao falha se o adaptador nao existir.
-    .PARAMETER VMName
-        Nome da VM.
-    .PARAMETER AdapterName
-        Nome logico do adaptador a remover.
-    #>
-    param(
-        [Parameter(Mandatory = $true)][string] $VMName,
-        [string] $AdapterName = "TempInternet"
-    )
-    if ($script:DryRun) {
-        Write-LogHost "[DRY-RUN] Removeria adaptador '$AdapterName' da VM '$VMName'."
-        return
-    }
-
-    $adapter = Get-VMNetworkAdapter -VMName $VMName -Name $AdapterName -ErrorAction SilentlyContinue
-    if (-not $adapter) {
-        Write-LogHost "Adaptador '$AdapterName' nao encontrado na VM '$VMName' (ja removido ou nunca adicionado)."
-        return
-    }
-
-    Remove-VMNetworkAdapter -VMName $VMName -Name $AdapterName -ErrorAction SilentlyContinue | Out-Null
-    Write-LogHost "Adaptador '$AdapterName' removido da VM '$VMName'. Internet cortada."
-}
-
-function Test-SandboxInternetAdapterExists {
-    <#
-    .SYNOPSIS
-        Verifica se o adaptador temporario de internet existe na VM.
-    #>
-    param(
-        [Parameter(Mandatory = $true)][string] $VMName,
-        [string] $AdapterName = "TempInternet"
-    )
-    $a = Get-VMNetworkAdapter -VMName $VMName -Name $AdapterName -ErrorAction SilentlyContinue
-    return ($null -ne $a)
-}
 
 Export-ModuleMember -Function * -Variable DryRun

@@ -306,12 +306,12 @@ def _score_function_by_indicators(
 
     matched: List[str] = []
     reasons: List[str] = []
-    score = 0
+    score_raw = 0
 
     # 1) Nome suspeito (heurístico leve, só como bump)
     lowered = name.lower()
     if any(k in lowered for k in ("key", "keystroke", "hook", "persist", "exfil", "c2", "steal")):
-        score += 8
+        score_raw += 8
         reasons.append("Nome da função sugere comportamento suspeito")
 
     # 2) Matches exatos por tokens (preferir o que vem da análise estática)
@@ -319,14 +319,14 @@ def _score_function_by_indicators(
         w = token_weights.get(tok)
         if w:
             matched.append(tok)
-            score += w
+            score_raw += w
 
     # 3) Padrões no corpo (regex simples)
     import re
 
     for pat, w, desc in pattern_weights:
         if re.search(pat, text, flags=re.IGNORECASE):
-            score += w
+            score_raw += w
             reasons.append(desc)
 
     # 4) Sinais adicionais por presença no corpo mesmo sem vir na lista (fallback)
@@ -335,7 +335,7 @@ def _score_function_by_indicators(
             continue
         if tok and tok in text:
             matched.append(tok)
-            score += max(6, int(w * 0.5))
+            score_raw += max(6, int(w * 0.5))
 
     matched_unique: List[str] = []
     seen: Set[str] = set()
@@ -344,7 +344,11 @@ def _score_function_by_indicators(
             seen.add(m)
             matched_unique.append(m)
 
-    # Severidade
+    # Normalização: o UI trata "score" como comparável (e.g. ordenação).
+    # Para manter consistência com o score global (0-100), fazemos clamp para 0..100.
+    score = int(min(max(score_raw, 0), 100))
+
+    # Severidade (usa score normalizado 0-100)
     if score >= 75:
         severity = "CRÍTICO"
     elif score >= 45:
@@ -359,6 +363,7 @@ def _score_function_by_indicators(
 
     return {
         "score": int(score),
+        "scoreRaw": int(score_raw),
         "severity": severity,
         "matchedIndicators": matched_unique,
         "reasons": reasons[:8],
