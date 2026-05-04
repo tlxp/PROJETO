@@ -9,7 +9,7 @@ param(
     [string] $SampleHash = "",
     [int]    $MaxRetries = 3,
     [int]    $BaudRate = 115200,    # Mais rápido, mantendo fiabilidade no NamedPipe
-    [int]    $DelayMs = 10          # Delay menor para não saturar buffers
+    [int]    $DelayMs = 0           # Em Named Pipe não é necessário "throttle" por linha
 )
 
 function Write-SerialLine {
@@ -58,10 +58,10 @@ function Send-ReportSimple {
         Write-Host "[INFO] COM1 aberta (baud: $BaudRate)"
         
         # Aguardar 1 segundo para estabilizar
-        Start-Sleep -Milliseconds 1000
+        Start-Sleep -Milliseconds 200
         
         # Enviar um marcador de início simples
-        Write-SerialLine -Port $port -Line "START_OF_REPORT" -DelayMs 100
+        Write-SerialLine -Port $port -Line "START_OF_REPORT" -DelayMs 0
         
         # Enviar cabeçalho básico
         Write-SerialLine -Port $port -Line "VERSION=1" -DelayMs $DelayMs
@@ -71,7 +71,7 @@ function Send-ReportSimple {
         }
         Write-SerialLine -Port $port -Line "REPORT_SIZE=$($content.Length)" -DelayMs $DelayMs
         Write-SerialLine -Port $port -Line "CHECKSUM=$checksum" -DelayMs $DelayMs
-        Write-SerialLine -Port $port -Line "END_HEADER" -DelayMs 100
+        Write-SerialLine -Port $port -Line "END_HEADER" -DelayMs 0
         
         # Enviar corpo linha por linha
         $lineCount = 0
@@ -85,9 +85,9 @@ function Send-ReportSimple {
         
         # Enviar marcador de fim
         Write-SerialLine -Port $port -Line "END_OF_REPORT" -DelayMs $DelayMs
-        Write-SerialLine -Port $port -Line "CHECKSUM=$checksum" -DelayMs 200
+        Write-SerialLine -Port $port -Line "CHECKSUM=$checksum" -DelayMs 0
         
-        Start-Sleep -Milliseconds 500
+        Start-Sleep -Milliseconds 150
         
         Write-Host "[SUCCESS] Relatório enviado: $lineCount linhas, $($content.Length) bytes"
         return $true

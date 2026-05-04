@@ -106,23 +106,31 @@ public partial class LoadingPage : Page
     public static async Task RunFullStartupSequenceAsync(Action<string>? addLog = null)
     {
         using var client = new HttpClient();
-
-        addLog?.Invoke("[INFO] A verificar backend em http://localhost:8000 ...");
-        var backendAlreadyRunning = await IsBackendUpAsync(client);
-        if (!backendAlreadyRunning)
+        // Paralelizar: backend e frontend são independentes (porta 8000 vs 8080).
+        var backendTask = Task.Run(async () =>
         {
-            addLog?.Invoke("[INFO] Backend não encontrado. A iniciar servidor uvicorn...");
-            await StartBackendAsync(client);
-            addLog?.Invoke("[OK] Backend iniciado com sucesso em http://localhost:8000.");
-        }
-        else
-        {
-            addLog?.Invoke("[OK] Backend já se encontra em execução.");
-        }
+            addLog?.Invoke("[INFO] A verificar backend em http://localhost:8000 ...");
+            var backendAlreadyRunning = await IsBackendUpAsync(client);
+            if (!backendAlreadyRunning)
+            {
+                addLog?.Invoke("[INFO] Backend não encontrado. A iniciar servidor uvicorn...");
+                await StartBackendAsync(client);
+                addLog?.Invoke("[OK] Backend iniciado com sucesso em http://localhost:8000.");
+            }
+            else
+            {
+                addLog?.Invoke("[OK] Backend já se encontra em execução.");
+            }
+        });
 
-        addLog?.Invoke("[INFO] Backend pronto. A iniciar frontend...");
-        await EnsureFrontendRunningAsync();
-        addLog?.Invoke("[OK] Frontend pronto.");
+        var frontendTask = Task.Run(async () =>
+        {
+            addLog?.Invoke("[INFO] A verificar dev server do frontend...");
+            await EnsureFrontendRunningAsync();
+            addLog?.Invoke("[OK] Frontend pronto.");
+        });
+
+        await Task.WhenAll(backendTask, frontendTask);
         // Não abrir automaticamente o browser no arranque.
         // A interface web deve ser aberta por ação explícita do utilizador (ex.: clicar em "Análise estática").
     }

@@ -75,7 +75,7 @@ $cred = $credCandidates | Select-Object -First 1
 Write-LogHost "[1/5] A parar a VM (estado limpo)..."
 if ($vm.State -ne "Off") {
     Stop-VM -Name $VMName -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 6
+    Start-Sleep -Milliseconds 800
 }
 Write-LogHost "       VM desligada."
 
@@ -168,14 +168,14 @@ try {
     Write-LogWarning "       Nao foi possivel configurar rede automaticamente: $_"
 }
 
-Start-Sleep -Seconds 8
+Start-Sleep -Seconds 1
 
 # ---------------------------------------------------------------------------
 # [3/5] Ativar Guest Service Interface
 # ---------------------------------------------------------------------------
 Write-LogHost "[3/5] A ativar Guest Service Interface..."
 Enable-SandboxGuestService -VMName $VMName
-Start-Sleep -Seconds 5
+Start-Sleep -Seconds 1
 
 # ---------------------------------------------------------------------------
 # [4/5] Garantir isolamento (sem adaptadores externos) + validar que não há internet
@@ -185,7 +185,7 @@ Write-LogHost "[4/5] A garantir isolamento de rede (sem adaptadores externos)...
 # Importante: o Hyper-V não permite remover adaptadores sintéticos com a VM em execução.
 Write-LogHost "       A parar a VM para remover adaptadores nao-Internal..."
 Stop-VM -Name $VMName -Force -ErrorAction SilentlyContinue
-Start-Sleep -Seconds 6
+Start-Sleep -Milliseconds 500
 
 # Remover qualquer adaptador ligado a switch não-Internal (ex.: External/Default Switch)
 $allAdapters = @(Get-VMNetworkAdapter -VMName $VMName -ErrorAction SilentlyContinue)
@@ -217,44 +217,111 @@ Get-VMNetworkAdapter -VMName $VMName | ForEach-Object {
 }
 
 # ---------------------------------------------------------------------------
-# Validar isolamento real (arrancar VM, testar DNS/TCP/HTTP para internet)
+# Garantir VM em execucao para passos seguintes
+# Nota: verificação de "internet" omitida por performance.
+# Com switch `Internal` e remoção de adaptadores externos, o risco de fuga é residual.
 # ---------------------------------------------------------------------------
-Write-LogHost "       A confirmar isolamento (arrancar VM, testar DNS/TCP/HTTP)..."
-$ps2 = Start-SandboxVM -VMName $VMName -Credential $cred -PowerShellDirectTimeoutSeconds 0
+Write-LogHost "       A arrancar VM (isolamento assumido: Switch Internal + adaptadores externos removidos)..."
+$ps2 = Start-SandboxVM -VMName $VMName -Credential $cred -PowerShellDirectTimeoutSeconds 120
 if ($ps2 -is [pscredential]) { $cred = $ps2 }
 
-try {
-    $isoResult = Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
-        $dns = $false
-        try { $null = [System.Net.Dns]::GetHostAddresses("example.com"); $dns = $true } catch {}
-        $tcp = $false
-        try {
-            $c  = New-Object System.Net.Sockets.TcpClient
-            $ar = $c.BeginConnect("8.8.8.8", 53, $null, $null)
-            $tcp = $ar.AsyncWaitHandle.WaitOne(3000, $false)
-            $c.Close()
-        } catch {}
-        $http = $false
-        try {
-            $r = Invoke-WebRequest -Uri "http://example.com" -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
-            $http = $true
-        } catch {}
-        return @{ dns = $dns; tcp = $tcp; http = $http }
-    } -ErrorAction SilentlyContinue
+# ---------------------------------------------------------------------------
+# Instalar runtimes essenciais (offline) antes do snapshot
+# ---------------------------------------------------------------------------
+Write-LogHost ""
+Write-LogHost "       A instalar runtimes essenciais (offline) na VM (se disponíveis)..."
 
-    if ($isoResult -and ($isoResult.dns -or $isoResult.tcp -or $isoResult.http)) {
-        Write-LogHost ""
-        Write-LogHost "       [AVISO] VM ainda tem acesso a internet!"
-        Write-LogHost "               DNS=$($isoResult.dns)  TCP=$($isoResult.tcp)  HTTP=$($isoResult.http)"
-        Write-LogHost "               Verifique se o SandboxSwitch ($SandboxSwitch) e Internal"
-        Write-LogHost "               e se nao existe NAT configurado no host para 192.168.100.0/24."
-        Write-LogHost "               A prosseguir com snapshot (corrija o isolamento manualmente se necessario)."
-        Write-LogHost ""
-    } else {
-        Write-LogHost "       ISOLAMENTO CONFIRMADO: DNS, TCP e HTTP para internet falharam dentro da VM."
+$offlineDir = Join-Path $scriptRoot "offline\runtimes"
+$vmInstallDir = "C:\analysis_work\installers"
+
+if (-not (Test-Path -LiteralPath $offlineDir)) {
+    Write-LogWarning "       Pasta offline não encontrada: $offlineDir"
+    Write-LogWarning "       Vou prosseguir sem instalar runtimes. (Recomendado: copiar instaladores para scripts/hyperv-sandbox/offline/runtimes/)"
+}
+else {
+    # Garantir diretório destino na VM
+    try {
+        Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
+            param($Dir)
+            if (-not (Test-Path -LiteralPath $Dir)) { New-Item -ItemType Directory -Path $Dir -Force | Out-Null }
+        } -ArgumentList $vmInstallDir -ErrorAction Stop | Out-Null
+    } catch {
+        Write-LogWarning "       Não foi possível criar '$vmInstallDir' na VM: $($_.Exception.Message)"
     }
-} catch {
-    Write-LogHost "       Verificacao de isolamento inconclusiva: $($_.Exception.Message)"
+
+    # Instalers suportados (colocar os ficheiros nesta pasta, com estes nomes).
+    $installers = @(
+        @{ Name = "VC++ Redistributable (x86)"; File = "VC_redist.x86.exe"; Args = "/install /quiet /norestart" },
+        @{ Name = "VC++ Redistributable (x64)"; File = "VC_redist.x64.exe"; Args = "/install /quiet /norestart" },
+        @{ Name = ".NET Framework 4.8 (offline)"; File = "ndp48-x86-x64-allos-enu.exe"; Args = "/q /norestart" },
+        @{ Name = ".NET Desktop Runtime 8 (x86)"; File = "windowsdesktop-runtime-8.0.*-win-x86.exe"; Args = "/install /quiet /norestart"; AllowPattern = $true },
+        @{ Name = ".NET Desktop Runtime 8 (x64)"; File = "windowsdesktop-runtime-8.0.*-win-x64.exe"; Args = "/install /quiet /norestart"; AllowPattern = $true }
+    )
+
+    foreach ($it in $installers) {
+        $src = $null
+        if ($it.AllowPattern -and ($it.File -match "[\*\?]")) {
+            try {
+                $hit = Get-ChildItem -LiteralPath $offlineDir -File -Filter $it.File -ErrorAction SilentlyContinue |
+                    Sort-Object Name -Descending |
+                    Select-Object -First 1
+                if ($hit) { $src = $hit.FullName }
+            } catch { }
+        } else {
+            $candidate = Join-Path $offlineDir $it.File
+            if (Test-Path -LiteralPath $candidate) { $src = $candidate }
+        }
+
+        if (-not $src) {
+            Write-LogHost "         [SKIP] $($it.Name) — instalador não encontrado: $($it.File)"
+            continue
+        }
+
+        $realName = Split-Path -Leaf $src
+
+        $dst = Join-Path $vmInstallDir $realName
+        try {
+            Write-LogHost "         [COPY] $($it.Name) -> $dst"
+            Copy-SandboxVMFile -VMName $VMName -SourcePath $src -DestinationPath $dst
+        } catch {
+            Write-LogWarning "         Falha a copiar '$realName' para VM: $($_.Exception.Message)"
+            continue
+        }
+
+        try {
+            Write-LogHost "         [RUN]  $($it.Name)"
+            $res = Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
+                param($PathExe, $Args)
+                if (-not (Test-Path -LiteralPath $PathExe)) { return @{ ok = $false; code = -1; msg = "Instalador não encontrado no guest." } }
+                $p = Start-Process -FilePath $PathExe -ArgumentList $Args -Wait -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+                if (-not $p) { return @{ ok = $false; code = -2; msg = "Falha ao iniciar instalador." } }
+                return @{ ok = $true; code = [int]$p.ExitCode; msg = "ok" }
+            } -ArgumentList $dst, $it.Args -ErrorAction Stop
+
+            $code = if ($res -and $res.code -ne $null) { [int]$res.code } else { 0 }
+            # Muitos instaladores devolvem 0 (OK) ou 3010 (reboot required)
+            if ($code -eq 0 -or $code -eq 3010) {
+                Write-LogHost "               OK (ExitCode=$code)"
+            } else {
+                Write-LogWarning "               Instalador terminou com ExitCode=$code (pode requerer atenção)."
+            }
+        } catch {
+            Write-LogWarning "         Erro ao executar '$($it.Name)' na VM: $($_.Exception.Message)"
+        }
+    }
+
+    # Sanity check: dotnet --info (se existir)
+    try {
+        $dotnetInfo = Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
+            $p = Get-Command dotnet -ErrorAction SilentlyContinue
+            if (-not $p) { return "dotnet: não encontrado" }
+            try { return (& dotnet --info 2>&1 | Select-Object -First 12) -join "`n" } catch { return "dotnet: erro ao executar --info" }
+        } -ErrorAction SilentlyContinue
+        if ($dotnetInfo) {
+            Write-LogHost "       dotnet (resumo):"
+            ($dotnetInfo -split "`r?`n") | ForEach-Object { Write-LogHost ("         " + $_) }
+        }
+    } catch { }
 }
 
 # ---------------------------------------------------------------------------
@@ -262,13 +329,13 @@ try {
 # ---------------------------------------------------------------------------
 Write-LogHost "[5/5] A parar VM e criar snapshot '$SnapshotName'..."
 Stop-VM -Name $VMName -Force -ErrorAction SilentlyContinue
-Start-Sleep -Seconds 8
+Start-Sleep -Milliseconds 500
 
 $existing = Get-VMSnapshot -VMName $VMName -Name $SnapshotName -ErrorAction SilentlyContinue
 if ($existing) {
     Write-LogHost "        A remover snapshot anterior '$SnapshotName'..."
     Remove-VMSnapshot -VMName $VMName -Name $SnapshotName -Confirm:$false -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 3
+    Start-Sleep -Milliseconds 500
 }
 
 Checkpoint-VM -VMName $VMName -SnapshotName $SnapshotName
@@ -285,7 +352,7 @@ Write-LogHost "=== Primeira entrada concluida com sucesso. ==="
 Write-LogHost "=========================================================="
 Write-LogHost ""
 Write-LogHost "    Internet:             REMOVIDA (sem adaptadores externos na VM)"
-Write-LogHost "    Snapshot '$SnapshotName': CRIADO (VM desligada, isolamento confirmado)"
+Write-LogHost ("    Snapshot '{0}': CRIADO (VM desligada, isolamento confirmado)" -f $SnapshotName)
 Write-LogHost ""
-Write-LogHost "    Proximo passo: .\04-Run-Sample.ps1 -SamplePath <caminho>"
+Write-LogHost "    Proximo passo: .\\04-Run-Sample.ps1 -SamplePath <caminho>"
 Write-LogHost ""

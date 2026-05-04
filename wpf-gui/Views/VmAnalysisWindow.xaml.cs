@@ -131,34 +131,72 @@ public partial class VmAnalysisWindow : Window
             AppendLine($"[*] Pasta de logs: {_runDir}", withTimestamp: true);
         AppendLine("", withTimestamp: true);
 
+        // 0) Modo "não primeira vez": validar pré-requisitos e NÃO reinstalar/configurar nada.
+        //    Queremos: ISO já existe (sanity check), VM existe, snapshot limpo existe.
+        if (!_runFirstTimeSetup)
+        {
+            var runPreflight = await GetRunPreflightAsync(scriptsPath);
+            if (runPreflight == null)
+            {
+                AppendLine("[ERRO] Falha no preflight da VM. Não consegui validar VM/snapshot/ISO via PowerShell.", withTimestamp: true);
+                await PersistGuiLogAsync();
+                return;
+            }
+
+            AppendLine($"[*] Preflight: ISO existe: {runPreflight.IsoExists} ({runPreflight.IsoPath})", withTimestamp: true);
+            AppendLine($"[*] Preflight: VM existe: {runPreflight.VmExists} ({runPreflight.VmName})", withTimestamp: true);
+            AppendLine($"[*] Preflight: Snapshot existe: {runPreflight.SnapshotExists} ({runPreflight.SnapshotName})", withTimestamp: true);
+            AppendLine("", withTimestamp: true);
+
+            if (!runPreflight.IsoExists)
+            {
+                AppendLine("[ERRO] ISO do Windows não encontrada. Corrija o caminho em scripts/hyperv-sandbox/_Config.ps1 (PROJETOVM_WindowsIsoPath) ou marque 'Primeira entrada na VM' para criar/reinstalar.", withTimestamp: true);
+                await PersistGuiLogAsync();
+                return;
+            }
+            if (!runPreflight.VmExists || !runPreflight.SnapshotExists)
+            {
+                AppendLine("[ERRO] VM ou snapshot limpo não existem. Marque 'Primeira entrada na VM' para criar/configurar a VM e gerar o snapshot.", withTimestamp: true);
+                await PersistGuiLogAsync();
+                return;
+            }
+        }
+
         // 1) Executar setup da sandbox (cria VM, switch, estrutura) se ainda não existir
         var setupScript = Path.Combine(scriptsPath, "01-Setup-MalwareSandbox.ps1");
-        if (File.Exists(setupScript))
+        if (_runFirstTimeSetup && File.Exists(setupScript))
         {
             // Preflight: se já existir VM/VHD, pedir confirmação na GUI (Read-Host não funciona na app)
             var preflight = await GetSetupPreflightAsync(scriptsPath);
             var setupArgs = (string?)null;
             if (preflight != null && (preflight.VmExists || preflight.VhdExists))
             {
-                var msg =
-                    "Foram detetados recursos existentes do sandbox Hyper-V:\n\n" +
-                    $"- VM: {preflight.VmName} (existe: {preflight.VmExists})\n" +
-                    $"- Disco: {preflight.VhdPath} (existe: {preflight.VhdExists})\n\n" +
-                    "Pretende ELIMINAR e reinstalar tudo de raiz?";
-                var confirm = MessageBox.Show(
-                    msg,
-                    "Reinstalar sandbox?",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning);
-
-                if (confirm != MessageBoxResult.Yes)
+                // IMPORTANTE:
+                // Quando "Primeira vez na VM" NÃO está marcado, NUNCA devemos reinstalar/limpar Windows.
+                // O setup deve ser idempotente (validar switch/paths/scripts) sem destruir a VM existente.
+                if (_runFirstTimeSetup)
                 {
-                    AppendLine("[*] Setup cancelado pelo utilizador (existiam recursos já criados).", withTimestamp: true);
-                    await PersistGuiLogAsync();
-                    return;
-                }
+                    var msg =
+                        "Foram detetados recursos existentes do sandbox Hyper-V:\n\n" +
+                        $"- VM: {preflight.VmName} (existe: {preflight.VmExists})\n" +
+                        $"- Disco: {preflight.VhdPath} (existe: {preflight.VhdExists})\n\n" +
+                        "Pretende ELIMINAR e reinstalar tudo de raiz?";
+                    var confirm = MessageBox.Show(
+                        msg,
+                        "Reinstalar sandbox?",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Warning);
 
-                setupArgs = "-ForceReinstall";
+                    if (confirm == MessageBoxResult.Yes)
+                        setupArgs = "-ForceReinstall";
+                    else
+                        AppendLine("[*] Reinstalação não selecionada. Vou prosseguir sem apagar a VM.", withTimestamp: true);
+                }
+                else
+                {
+                    AppendLine("[*] VM/Disco já existem. Como 'Primeira vez na VM' não está marcado, vou manter a VM e NÃO reinstalar.", withTimestamp: true);
+                    setupArgs = null;
+                }
             }
 
             AppendLine("[*] A executar setup da sandbox (01-Setup-MalwareSandbox.ps1)...", withTimestamp: true);
@@ -276,6 +314,74 @@ public partial class VmAnalysisWindow : Window
     }
 
     private sealed record SetupPreflight(string VmName, bool VmExists, string VhdPath, bool VhdExists);
+
+    private sealed record RunPreflight(
+        string VmName,
+        bool VmExists,
+        string SnapshotName,
+        bool SnapshotExists,
+        string IsoPath,
+        bool IsoExists
+    );
+
+    private Task<RunPreflight?> GetRunPreflightAsync(string scriptsPath)
+    {
+        return Task.Run(() =>
+        {
+            try
+            {
+                var configPath = Path.Combine(scriptsPath, "_Config.ps1");
+                if (!File.Exists(configPath))
+                    return null;
+
+                // Dot-source da config para usar os mesmos caminhos/nome de VM do projeto.
+                var command =
+                    "& { " +
+                    $"  . \"{configPath}\"; " +
+                    "  $vmName = $script:PROJETOVM_VMName; " +
+                    "  $snapName = $script:PROJETOVM_SnapshotName; " +
+                    "  $iso = $script:PROJETOVM_WindowsIsoPath; " +
+                    "  $vm = Get-VM -Name $vmName -ErrorAction SilentlyContinue; " +
+                    "  $snap = $null; if ($vm) { $snap = Get-VMSnapshot -VMName $vmName -Name $snapName -ErrorAction SilentlyContinue }; " +
+                    "  $obj = [pscustomobject]@{ VmName = $vmName; VmExists = [bool]$vm; SnapshotName = $snapName; SnapshotExists = [bool]$snap; IsoPath = $iso; IsoExists = (Test-Path -LiteralPath $iso) }; " +
+                    "  $obj | ConvertTo-Json -Compress " +
+                    "} ";
+
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "powershell.exe",
+                    Arguments = $"-NoProfile -ExecutionPolicy Bypass -Command \"{command}\"",
+                    WorkingDirectory = scriptsPath,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8
+                };
+
+                using var process = new Process { StartInfo = psi };
+                process.Start();
+                var stdout = process.StandardOutput.ReadToEnd();
+                process.WaitForExit();
+                if (process.ExitCode != 0)
+                    return null;
+
+                stdout = stdout?.Trim();
+                if (string.IsNullOrWhiteSpace(stdout))
+                    return null;
+
+                return JsonSerializer.Deserialize<RunPreflight>(stdout, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+            }
+            catch
+            {
+                return null;
+            }
+        }, _cts.Token);
+    }
 
     private Task<SetupPreflight?> GetSetupPreflightAsync(string scriptsPath)
     {

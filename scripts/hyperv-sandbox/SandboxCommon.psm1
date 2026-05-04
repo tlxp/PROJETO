@@ -812,8 +812,10 @@ function Start-SandboxVM {
         if (-not $Credential -and (-not $CredentialCandidates -or $CredentialCandidates.Count -eq 0)) {
             throw "Start-SandboxVM: espera por PowerShell Direct requer -Credential ou -CredentialCandidates (ou use apenas -BootWaitSeconds sem credenciais)."
         }
-        Write-LogHost "A aguardar arranque da VM (PowerShell Direct, verificação a cada 10s)..."
-        return (Wait-VMPowerShellDirectReady -VMName $VMName -Credential $Credential -CredentialCandidates $CredentialCandidates -TimeoutSeconds $PowerShellDirectTimeoutSeconds -LogPath $LogPath -LogIntervalSeconds 10)
+        # Default mais rápido e determinístico: evitar espera "sem timeout" (0) quando há credenciais.
+        if ($PowerShellDirectTimeoutSeconds -le 0) { $PowerShellDirectTimeoutSeconds = 60 }
+        Write-LogHost "A aguardar arranque da VM (PowerShell Direct, verificação a cada 2s)..."
+        return (Wait-VMPowerShellDirectReady -VMName $VMName -Credential $Credential -CredentialCandidates $CredentialCandidates -TimeoutSeconds $PowerShellDirectTimeoutSeconds -LogPath $LogPath -LogIntervalSeconds 2)
     }
 
     Write-LogHost "A aguardar $BootWaitSeconds s pelo arranque da VM (sem credenciais: espera fixa)..."

@@ -222,30 +222,14 @@ Write-LogHost ""
 $credCandidates = New-SandboxCredentialCandidates -UserName $GuestUser -Password $GuestPassword -ComputerName $VMName
 $cred = $credCandidates | Select-Object -First 1
 
-# 1) Restaurar snapshot limpo
-Write-LogHost "[1/7] A restaurar snapshot '$SnapshotName'..."
-Stop-SandboxVM -VMName $VMName
-Restore-SandboxSnapshot -VMName $VMName -SnapshotName $SnapshotName
-Write-LogHost "      Snapshot restaurado."
-
-# 1.5) Nome do pipe único por run (evita conflitos)
+# 1) Nome do pipe único por run (evita conflitos)
 $RunPipeName = ($PipeName + "_" + $RunId) -replace "[^A-Za-z0-9_\-\.]", "_"
 Add-LogLine -Path $HostLogPath -Value "Pipe name: $RunPipeName"
 
-# IMPORTANTE: O pipe deve ser configurado ANTES da VM arrancar, para que o lado guest encontre o pipe quando abrir COM1
-try {
-    Set-VMComPort -VMName $VMName -Number 1 -Path "\\.\pipe\$RunPipeName" -ErrorAction Stop
-    Add-LogLine -Path $HostLogPath -Value "COM1 pipe set to: \\.\pipe\$RunPipeName"
-    Write-LogHost "[1.5/7] Pipe configurado: \\.\pipe\$RunPipeName"
-} catch {
-    Add-LogLine -Path $HostLogPath -Value "Failed to set VM COM1 pipe: $_"
-    Write-Warning "      Falha ao configurar COM1 pipe: $_"
-}
-
-# 2) Iniciar listener do pipe ANTES de arrancar a VM
+# 2) Iniciar listener do pipe EM PARALELO com a restauração do snapshot
 # O Named Pipe tem de existir no host antes da VM arrancar, senão o Hyper-V
 # não consegue ligar o COM1 ao pipe e a VM recebe sempre respostas vazias.
-Write-LogHost "[2/7] A iniciar receptor do relatório (Named Pipe)..."
+Write-LogHost "[2/7] A iniciar receptor do relatório (Named Pipe) em background..."
 $modulePath = Join-Path $PSScriptRoot "SandboxCommon.psm1"
 # Com o envio simplificado (linha-a-linha) a transmissão pode demorar bastante.
 # Dar margem generosa para evitar timeouts prematuros.
@@ -257,13 +241,30 @@ $pipeJob = Start-Job -ScriptBlock {
     return (Receive-SandboxReportFromPipe -PipeName $PipeName -OutputPath $OutputPath -TimeoutSeconds $TimeoutSecondsLocal)
 } -ArgumentList $RunPipeName, $ReportOutputPath, $pipeTimeoutSeconds, $modulePath
 
-# Aguardar que o pipe esteja efectivamente à escuta antes de arrancar a VM
-Start-Sleep -Seconds 4
-Write-LogHost "      Receptor do relatório iniciado."
+# Pequena margem para o job arrancar; o restore do snapshot demora o suficiente
+# para o pipe ficar em escuta antes de iniciar a VM.
+Start-Sleep -Milliseconds 200
+Write-LogHost "      Receptor do relatório iniciado (background)."
 
-# 3) Arrancar VM (espera pelo arranque = PowerShell Direct, sem sleep fixo)
-Write-LogHost "[3/7] A arrancar a VM..."
-$psDirectOk = Start-SandboxVM -VMName $VMName -CredentialCandidates $credCandidates -PowerShellDirectTimeoutSeconds 180 -LogPath $HostLogPath
+# 3) Restaurar snapshot limpo
+Write-LogHost "[3/7] A restaurar snapshot '$SnapshotName'..."
+Stop-SandboxVM -VMName $VMName
+Restore-SandboxSnapshot -VMName $VMName -SnapshotName $SnapshotName
+Write-LogHost "      Snapshot restaurado."
+
+# 3.5) IMPORTANTE: configurar o pipe no COM1 após o restore, antes de arrancar a VM
+try {
+    Set-VMComPort -VMName $VMName -Number 1 -Path "\\.\pipe\$RunPipeName" -ErrorAction Stop
+    Add-LogLine -Path $HostLogPath -Value "COM1 pipe set to: \\.\pipe\$RunPipeName"
+    Write-LogHost "[3.5/7] Pipe configurado: \\.\pipe\$RunPipeName"
+} catch {
+    Add-LogLine -Path $HostLogPath -Value "Failed to set VM COM1 pipe: $_"
+    Write-Warning "      Falha ao configurar COM1 pipe: $_"
+}
+
+# 4) Arrancar VM (espera pelo arranque = PowerShell Direct, sem sleep fixo)
+Write-LogHost "[4/7] A arrancar a VM..."
+$psDirectOk = Start-SandboxVM -VMName $VMName -CredentialCandidates $credCandidates -PowerShellDirectTimeoutSeconds 120 -LogPath $HostLogPath
 if ($psDirectOk -is [pscredential]) {
     $cred = $psDirectOk
     Add-LogLine -Path $HostLogPath -Value "PowerShell Direct ready with credential: $($cred.UserName)"
@@ -272,13 +273,13 @@ if ($psDirectOk -is [pscredential]) {
     Write-Warning "      PowerShell Direct não ficou pronto após timeout. A continuar com cautela..."
 }
 
-# 4) Ativar Guest Service para Copy-VMFile (e opcionalmente Invoke-Command)
-Write-LogHost "[4/7] A ativar Guest Service para transferência..."
+# 5) Ativar Guest Service para Copy-VMFile (e opcionalmente Invoke-Command)
+Write-LogHost "[5/7] A ativar Guest Service para transferência..."
 Enable-SandboxGuestService -VMName $VMName
 $null = Wait-SandboxGuestServiceReady -VMName $VMName -TimeoutSeconds 120
 
-# 5) Copiar amostra e scripts para a VM
-Write-LogHost "[5/7] A copiar amostra para a VM..."
+# 6) Copiar amostra e scripts para a VM
+Write-LogHost "[6/7] A copiar amostra para a VM..."
 # Garantir que o diretório existe na VM
 try {
     Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
@@ -407,21 +408,7 @@ try {
     $analysisSuccess = $false
     Write-LogWarning "Invoke-Command falhou (tentativa 1): $($_.Exception.Message)"
     Add-LogLine -Path $HostLogPath -Value "Invoke-Command failed (try1): $($_.Exception.Message)"
-
-    Start-Sleep -Seconds 4
-    try {
-        # Revalidar PowerShell Direct com timeout curto e tentar novamente
-        $psRetry = Start-SandboxVM -VMName $VMName -CredentialCandidates $credCandidates -PowerShellDirectTimeoutSeconds 180 -LogPath $HostLogPath
-        if ($psRetry -is [pscredential]) { $cred = $psRetry }
-
-        Invoke-RunAnalysisInVm -VM $VMName -Cred $cred -VmSamplePath $VMSamplePath -TimeoutSec $TimeoutSeconds -VmScriptDir $VMScriptsPath -SampleSha256 $sampleSha256
-        $analysisSuccess = $true
-        Add-LogLine -Path $HostLogPath -Value "Analysis executed via Invoke-Command successfully (try2)"
-    } catch {
-        $analysisSuccess = $false
-        Write-LogWarning "Invoke-Command falhou (tentativa 2). Vou continuar para recolha de relatório via pipe/fallback. Erro: $($_.Exception.Message)"
-        Add-LogLine -Path $HostLogPath -Value "Invoke-Command failed (try2): $($_.Exception.Message)"
-    }
+    Write-LogWarning "Invoke-Command falhou. Vou continuar para recolha de relatório via pipe. Erro: $($_.Exception.Message)"
 }
 
 # 7) Aguardar o relatório via pipe
@@ -533,9 +520,9 @@ if ($pipeState -eq "Completed") {
 }
 
 # 8) Parar VM e restaurar snapshot
-Write-LogHost "[7/7] A parar a VM e a restaurar snapshot..."
+Write-LogHost "[8/8] A parar a VM e a restaurar snapshot..."
 Stop-SandboxVM -VMName $VMName
-Start-Sleep -Seconds 8
+Start-Sleep -Milliseconds 500
 Restore-SandboxSnapshot -VMName $VMName -SnapshotName $SnapshotName
 Write-LogHost "      VM restaurada ao estado limpo."
 
