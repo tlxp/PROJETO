@@ -12,6 +12,37 @@ import {
 } from "@/lib/cCodeXref";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const MENTION_CONTEXT_LINES = 50;
+const MENTION_CHUNK_LINES = 1;
+const MENTION_WINDOW_MAX_LINES = 1200;
+const DEFAULT_MENTIONS_TO_SHOW = 10;
+
+function formatMentions(n: number): string {
+  if (n === 1) return "1 menção";
+  return `${n.toLocaleString()} menções`;
+}
+
+type MentionGroup = { start: number; end: number; lines: number[] };
+function groupMentionLines(lines: number[]): MentionGroup[] {
+  const sorted = [...lines].filter((x) => Number.isFinite(x)).sort((a, b) => a - b);
+  const out: MentionGroup[] = [];
+  let cur: MentionGroup | null = null;
+  for (const ln of sorted) {
+    if (!cur) {
+      cur = { start: ln, end: ln, lines: [ln] };
+      continue;
+    }
+    if (ln === cur.end + 1) {
+      cur.end = ln;
+      cur.lines.push(ln);
+      continue;
+    }
+    out.push(cur);
+    cur = { start: ln, end: ln, lines: [ln] };
+  }
+  if (cur) out.push(cur);
+  return out;
+}
 
 function snippetAroundLine(code: string, line: number, context = 3): string {
   const lines = code.split("\n");
@@ -29,6 +60,8 @@ const XrefExplorerPage: React.FC = () => {
   const { jobId } = useParams<{ jobId?: string }>();
   const [payload, setPayload] = useState<XrefSessionPayload | null>(() => readXrefSession());
   const [scrollToLine, setScrollToLine] = useState<number | null>(null);
+  const [windowFocusLine, setWindowFocusLine] = useState<number | null>(null);
+  const [expandedMentionsByNode, setExpandedMentionsByNode] = useState<Record<string, boolean>>({});
 
   const wordFromQuery = useMemo(() => {
     const params = new URLSearchParams(location.search ?? "");
@@ -103,6 +136,20 @@ const XrefExplorerPage: React.FC = () => {
     return buildXrefViewModel(payload.code, payload.word);
   }, [payload?.code, payload?.word]);
 
+  // Ao abrir a página, focar automaticamente a primeira menção (origem) em modo janela,
+  // para evitar renderizar as primeiras 4000 linhas do ficheiro.
+  useEffect(() => {
+    if (!model || model.orderedNodes.length === 0) return;
+    if (windowFocusLine != null) return; // não sobrescrever foco do utilizador
+    const origin = model.orderedNodes.find((n) => n.isOrigin) ?? model.orderedNodes[0];
+    const ln = origin ? Math.min(...origin.mentionLines) : null;
+    if (ln != null && Number.isFinite(ln)) {
+      setWindowFocusLine(ln);
+      setScrollToLine(ln);
+      setTimeout(() => setScrollToLine(null), 1200);
+    }
+  }, [model, windowFocusLine]);
+
   const nameById = useMemo(() => {
     const m = new Map<string, string>();
     if (!model) return m;
@@ -114,6 +161,7 @@ const XrefExplorerPage: React.FC = () => {
     (word: string) => {
       const w = word.trim();
       if (w.length < 2 || !payload) return;
+      setWindowFocusLine(null);
       // Preferir URL com jobId (permalink) quando disponível
       if (jobId) {
         openXrefExplorerTab(`/analysis/${encodeURIComponent(jobId)}/xref?word=${encodeURIComponent(w)}`);
@@ -208,10 +256,26 @@ const XrefExplorerPage: React.FC = () => {
               ) : (
                 model.orderedNodes.map((node, idx) => {
                   const firstLine = Math.min(...node.mentionLines);
+                  const isGlobal = node.id === "__global__" || node.name.toLowerCase().includes("global");
+                  const mentionGroups = groupMentionLines(node.mentionLines);
+                  const isExpanded = !!expandedMentionsByNode[node.id];
+                  const flatMentionLines = mentionGroups.flatMap((g) => g.lines);
+                  const shownLines = isExpanded ? flatMentionLines : flatMentionLines.slice(0, DEFAULT_MENTIONS_TO_SHOW);
                   const callees = model.edges
                     .filter((e) => e.fromId === node.id)
                     .map((e) => nameById.get(e.toId) ?? e.toId);
                   const showArrow = idx < model.orderedNodes.length - 1;
+
+                  // Para (global), o range L1–L... não diz nada. Mostrar um range informativo.
+                  const displayStart =
+                    isGlobal && node.mentionLines.length
+                      ? Math.max(1, Math.min(...node.mentionLines) - MENTION_CONTEXT_LINES)
+                      : node.startLine;
+                  const displayEnd =
+                    isGlobal && node.mentionLines.length
+                      ? Math.min(payload.code.split("\n").length, Math.max(...node.mentionLines) + MENTION_CONTEXT_LINES)
+                      : node.endLine;
+
                   return (
                     <div key={node.id}>
                       <div
@@ -228,8 +292,7 @@ const XrefExplorerPage: React.FC = () => {
                           )}
                         </div>
                         <div className="text-muted-foreground text-[10px] mb-1.5">
-                          L{node.startLine}–L{node.endLine} · {node.mentionLines.length} menção
-                          {node.mentionLines.length !== 1 ? "ões" : ""}
+                          L{displayStart}–L{displayEnd} · {formatMentions(node.mentionLines.length)}
                         </div>
                         {callees.length > 0 && (
                           <div className="text-[10px] text-muted-foreground mb-1.5">
@@ -239,12 +302,15 @@ const XrefExplorerPage: React.FC = () => {
                         <pre className="mt-1 max-h-28 overflow-auto rounded bg-code-bg/80 p-2 text-[10px] leading-snug text-foreground/90 whitespace-pre border border-border/40">
                           {snippetAroundLine(payload.code, firstLine, 2)}
                         </pre>
-                        <div className="mt-1.5 flex flex-wrap gap-1">
-                          {node.mentionLines.map((ln) => (
+                        <div className="mt-1.5 flex flex-wrap gap-1 items-center">
+                          {shownLines.map((ln) => (
                             <button
                               key={ln}
                               type="button"
                               onClick={() => {
+                                // Mostrar uma janela leve à volta da menção (±N linhas) e ir "carregando"
+                                // mais à medida que o utilizador faz scroll.
+                                setWindowFocusLine(ln);
                                 setScrollToLine(ln);
                                 setTimeout(() => setScrollToLine(null), 2200);
                               }}
@@ -253,7 +319,26 @@ const XrefExplorerPage: React.FC = () => {
                               L{ln}
                             </button>
                           ))}
+                          {flatMentionLines.length > DEFAULT_MENTIONS_TO_SHOW && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedMentionsByNode((prev) => ({ ...prev, [node.id]: !isExpanded }))
+                              }
+                              className="rounded px-1.5 py-0.5 text-[10px] border border-border/60 bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
+                              title={isExpanded ? "Mostrar menos menções" : "Mostrar mais menções"}
+                            >
+                              {isExpanded
+                                ? "Mostrar menos"
+                                : `+${(flatMentionLines.length - DEFAULT_MENTIONS_TO_SHOW).toLocaleString()}`}
+                            </button>
+                          )}
                         </div>
+                        {mentionGroups.length > 1 && (
+                          <div className="mt-1 text-[10px] text-muted-foreground">
+                            {mentionGroups.length.toLocaleString()} grupo{mentionGroups.length !== 1 ? "s" : ""} de menções
+                          </div>
+                        )}
                       </div>
                       {showArrow && (
                         <div className="flex justify-center py-1 text-primary/70">
@@ -292,6 +377,10 @@ const XrefExplorerPage: React.FC = () => {
                 embedded
                 compactHeader
                 scrollToLine={scrollToLine}
+                windowFocusLine={windowFocusLine}
+                windowContextLines={MENTION_CONTEXT_LINES}
+                windowChunkLines={MENTION_CHUNK_LINES}
+                windowMaxLines={MENTION_WINDOW_MAX_LINES}
                 selectedWord={payload.word}
                 onWordSelect={handleWordSelect}
                 flaggedIndicators={payload.flaggedIndicators ?? undefined}
