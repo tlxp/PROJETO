@@ -295,7 +295,7 @@ def get_job_payload(job_id: str) -> Optional[dict]:
         if not c_code and decompiled_c:
             c_code = _read_file_safe(decompiled_c)
         if not c_code and last.get("decompilation_error_summary"):
-            c_code = f"# Descompilação não disponível\n{last.get('decompilation_error_summary')}"
+            c_code = compose_fallback_descompilation_ccode(last)
         if not c_code:
             c_code = "# Código não disponível."
 
@@ -399,7 +399,7 @@ def _run_static(job: AnalysisJob) -> AnalysisResult:
         if not c_code and decompiled_c:
             c_code = _read_file_safe(decompiled_c)
         if not c_code and last.get("decompilation_error_summary"):
-            c_code = f"# Descompilação não disponível\n{last.get('decompilation_error_summary')}"
+            c_code = compose_fallback_descompilation_ccode(last)
 
         disasm = last.get("disassembly_file")
         if disasm:
@@ -507,6 +507,45 @@ def _build_windows_around_indicators(lines: List[str], indicators: List[str], ra
             cur_start, cur_end = s, e
     merged.append((cur_start, cur_end))
     return merged
+
+
+def compose_fallback_descompilation_ccode(last: dict) -> str:
+    """
+    Monta o texto do painel quando não há ficheiro C# nem pseudo-C carregável,
+    mas há resumo de falha ILSpy. Acrescenta o estado do fallback Ghidra para a UI
+    não mostrar só o erro ILSpy (o pipeline corre Ghidra em [7b] quando ILSpy falha).
+    """
+    ilspy = (last.get("decompilation_error_summary") or "").strip()
+    lines: List[str] = [
+        "# Descompilação não disponível (detalhe ILSpy)",
+        ilspy if ilspy else "(Sem resumo ILSpy.)",
+    ]
+
+    ghidra = last.get("ghidra_decompilation") or {}
+    lines.append("")
+    lines.append("# --- Fallback: pseudo-C (Ghidra), após falha ILSpy ---")
+
+    if ghidra.get("success"):
+        op = ghidra.get("output_file") or ""
+        nfn = ghidra.get("functions_decompiled") or 0
+        lines.append(
+            f"Ghidra concluiu com sucesso. Ficheiro: {op or 'N/A'} ({nfn} funções decompiladas)."
+            "\nSe não vês pseudo-C acima, o carregamento do ficheiro falhou — abra o relatório ou "
+            + "`decompiled/` no projeto."
+        )
+    elif (ghidra.get("error") or "").strip():
+        err = ghidra["error"].strip()
+        if len(err) > 1800:
+            err = err[:1797] + "..."
+        lines.append("Ghidra falhou ou não completou:")
+        lines.append(err)
+    else:
+        lines.append(
+            "Sem resultado Ghidra registado. Requisitos: variável GHIDRA_INSTALL_DIR, Ghidra 12+, "
+            "`pip install pyghidra`. Passos [7a]/[7b] nos logs do analisador."
+        )
+
+    return "\n".join(lines)
 
 
 def summarize_c_code(c_code: str, flagged_indicators: Iterable[str], max_chars: int = MAX_CCODE_CHARS) -> str:

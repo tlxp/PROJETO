@@ -17,6 +17,7 @@ const REFERENCES_TIMEOUT_MS = 10000;
 const GHIDRA_PROGRESS_PREFIX = "[GHIDRA_PROGRESS]";
 import FileDropZone from "@/components/FileDropZone";
 import CodePanel from "@/components/CodePanel";
+import { openXrefExplorerTab, writeXrefSession } from "@/lib/cCodeXref";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -1480,6 +1481,22 @@ const Index = () => {
     if (w.length >= 2) setSelectedWord(w);
   }, []);
 
+  const openXrefExplorerFromSidebar = useCallback(() => {
+    if (!selectedWord || !result?.cCode || expandedPanel !== "c") return;
+    try {
+      writeXrefSession({
+        v: 1,
+        code: result.cCode,
+        word: selectedWord,
+        fileName: baseDownloadName,
+        flaggedIndicators: result.flaggedIndicators,
+      });
+      openXrefExplorerTab();
+    } catch {
+      /* sessionStorage indisponível ou quota */
+    }
+  }, [selectedWord, result?.cCode, result?.flaggedIndicators, expandedPanel, baseDownloadName]);
+
   // Timer/animação para a coluna de referências desaparecer ao fim de alguns segundos
   useEffect(() => {
     if (!selectedWord) {
@@ -2310,8 +2327,28 @@ const Index = () => {
                               {wordStats && (
                                 <>
                                   <div className="text-[11px] text-muted-foreground">
-                                    <span className="font-medium text-foreground">{wordStats.mentions}</span> menção
-                                    {wordStats.mentions !== 1 ? "ões" : ""} no código
+                                    {expandedPanel === "c" ? (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={openXrefExplorerFromSidebar}
+                                          className="group inline rounded px-0.5 -mx-0.5 hover:bg-primary/15 transition-colors align-baseline"
+                                          title="Abrir mapa de xrefs (pseudo-C) num novo separador"
+                                        >
+                                          <span className="font-medium text-foreground tabular-nums group-hover:text-primary group-hover:underline decoration-primary/60 underline-offset-2">
+                                            {wordStats.mentions}
+                                          </span>
+                                        </button>{" "}
+                                        menção
+                                        {wordStats.mentions !== 1 ? "ões" : ""} no código
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className="font-medium text-foreground">{wordStats.mentions}</span>{" "}
+                                        menção
+                                        {wordStats.mentions !== 1 ? "ões" : ""} no código
+                                      </>
+                                    )}
                                   </div>
                                   {wordStats.inferredType && (
                                     <div className="text-[11px] text-muted-foreground">

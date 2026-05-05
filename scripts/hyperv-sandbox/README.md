@@ -9,6 +9,7 @@ Ambiente isolado para análise comportamental de malware: VM Hyper-V sem interne
 
 - Windows 10/11 Pro ou Enterprise (ou Server) com **Hyper-V**.
 - PowerShell **como Administrador** para setup e orquestração.
+- **ISO do Windows:** **en-US** (English United States) apenas — mais nada é suportado para instalação unattended.
 - VM com Windows instalado e **porta COM1** configurada para o Named Pipe no host.
 
 ## Estrutura de ficheiros

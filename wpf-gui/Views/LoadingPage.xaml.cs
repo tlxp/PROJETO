@@ -3,11 +3,13 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Animation;
+using RatAnalyzer.Desktop;
 
 namespace RatAnalyzer.Desktop.Views;
 
@@ -45,6 +47,17 @@ public partial class LoadingPage : Page
 
     private async Task RunStartupSequenceAsync()
     {
+        try
+        {
+            await ProjectDependencyBootstrap.EnsureAndInstallAsync(
+                msg => Dispatcher.Invoke(() => AddLog(msg)),
+                CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Dispatcher.Invoke(() => AddLog($"[AVISO] Dependências: {ex.Message}"));
+        }
+
         using var client = new HttpClient();
 
         AddLog("[INFO] A verificar backend em http://localhost:8000 ...");
@@ -58,7 +71,7 @@ public partial class LoadingPage : Page
 
             try
             {
-                await StartBackendAsync(client);
+                await StartBackendAsync(client, msg => Dispatcher.Invoke(() => AddLog(msg)));
                 AddLog("[OK] Backend iniciado com sucesso em http://localhost:8000.");
             }
             catch (Exception ex)
@@ -88,7 +101,7 @@ public partial class LoadingPage : Page
         StatusText.Text = "Backend pronto. A iniciar frontend...";
 
         AddLog("[INFO] A verificar dev server do frontend...");
-        await EnsureFrontendRunningAsync();
+        await EnsureFrontendRunningAsync(msg => Dispatcher.Invoke(() => AddLog(msg)));
 
         StatusText.Text = "Frontend pronto.";
         AddLog("[OK] Frontend pronto.");
@@ -105,6 +118,16 @@ public partial class LoadingPage : Page
     /// </summary>
     public static async Task RunFullStartupSequenceAsync(Action<string>? addLog = null)
     {
+        void Log(string m) => addLog?.Invoke(m);
+        try
+        {
+            await ProjectDependencyBootstrap.EnsureAndInstallAsync(Log, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Log($"[AVISO] Fase de dependências: {ex.Message}");
+        }
+
         using var client = new HttpClient();
         // Paralelizar: backend e frontend são independentes (porta 8000 vs 8080).
         var backendTask = Task.Run(async () =>
@@ -114,7 +137,7 @@ public partial class LoadingPage : Page
             if (!backendAlreadyRunning)
             {
                 addLog?.Invoke("[INFO] Backend não encontrado. A iniciar servidor uvicorn...");
-                await StartBackendAsync(client);
+                await StartBackendAsync(client, addLog);
                 addLog?.Invoke("[OK] Backend iniciado com sucesso em http://localhost:8000.");
             }
             else
@@ -126,7 +149,7 @@ public partial class LoadingPage : Page
         var frontendTask = Task.Run(async () =>
         {
             addLog?.Invoke("[INFO] A verificar dev server do frontend...");
-            await EnsureFrontendRunningAsync();
+            await EnsureFrontendRunningAsync(addLog);
             addLog?.Invoke("[OK] Frontend pronto.");
         });
 
@@ -183,9 +206,151 @@ public partial class LoadingPage : Page
         return null;
     }
 
-    internal static async Task StartBackendAsync(HttpClient client)
+    /// <summary>
+    /// Considera dependências NPM satisfeitas se existir vite em node_modules (necessário para npm run dev).
+    /// Evita correr npm install em cada arranque.
+    /// </summary>
+    private static bool FrontendNodeModulesLooksComplete(string frontendDir)
+    {
+        var viteDir = Path.Combine(frontendDir, "node_modules", "vite");
+        return Directory.Exists(viteDir);
+    }
+
+    /// <summary>
+    /// Garante dependências pip do backend (requirements.txt). Se já instaladas, o pip sai rapidamente.
+    /// </summary>
+    internal static async Task EnsureBackendPythonDependenciesAsync(string backendDir, Action<string>? addLog)
+    {
+        var reqPath = Path.Combine(backendDir, "requirements.txt");
+        if (!File.Exists(reqPath))
+        {
+            addLog?.Invoke("[AVISO] Ficheiro requirements.txt não encontrado na pasta backend; a saltar pip install.");
+            return;
+        }
+
+        addLog?.Invoke("[INFO] A garantir dependências Python (pip)…");
+
+        await Task.Run(async () =>
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "python",
+                Arguments = "-m pip install -r requirements.txt --disable-pip-version-check -q",
+                WorkingDirectory = backendDir,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8
+            };
+
+            using var proc = Process.Start(psi);
+            if (proc is null)
+            {
+                throw new InvalidOperationException("Não foi possível iniciar pip (python não encontrado?).");
+            }
+
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+            var stderrTask = proc.StandardError.ReadToEndAsync();
+            using (var killCts = new CancellationTokenSource(TimeSpan.FromMinutes(10)))
+            {
+                await proc.WaitForExitAsync(killCts.Token);
+            }
+
+            var stdout = await stdoutTask.ConfigureAwait(false);
+            var stderr = await stderrTask.ConfigureAwait(false);
+
+            if (proc.ExitCode != 0)
+            {
+                var detail = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
+                var trimmed = detail.Length > 2000 ? detail[..2000] + "…" : detail;
+                throw new InvalidOperationException(
+                    $"pip install falhou (código {proc.ExitCode}).\n{trimmed}");
+            }
+        });
+
+        addLog?.Invoke("[OK] Dependências Python verificadas/instaladas.");
+    }
+
+    /// <summary>
+    /// Corre npm install só se node_modules estiver incompleto (vite em falta).
+    /// </summary>
+    internal static async Task EnsureFrontendNpmDependenciesAsync(string frontendDir, Action<string>? addLog)
+    {
+        if (FrontendNodeModulesLooksComplete(frontendDir))
+        {
+            return;
+        }
+
+        addLog?.Invoke("[INFO] node_modules incompletos ou em falta. A executar npm install…");
+
+        await Task.Run(async () =>
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = "/c npm install --no-fund --no-audit --loglevel=error",
+                WorkingDirectory = frontendDir,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8
+            };
+
+            using var proc = Process.Start(psi);
+            if (proc is null)
+            {
+                throw new InvalidOperationException(
+                    "Não foi possível iniciar npm. Verifique se o Node.js está instalado e no PATH.");
+            }
+
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+            var stderrTask = proc.StandardError.ReadToEndAsync();
+            using (var killCts = new CancellationTokenSource(TimeSpan.FromMinutes(15)))
+            {
+                await proc.WaitForExitAsync(killCts.Token);
+            }
+
+            var stdout = await stdoutTask.ConfigureAwait(false);
+            var stderr = await stderrTask.ConfigureAwait(false);
+
+            if (proc.ExitCode != 0)
+            {
+                var detail = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
+                var trimmed = detail.Length > 2000 ? detail[..2000] + "…" : detail;
+                throw new InvalidOperationException(
+                    $"npm install falhou (código {proc.ExitCode}).\n{trimmed}");
+            }
+        });
+
+        if (!FrontendNodeModulesLooksComplete(frontendDir))
+        {
+            throw new InvalidOperationException(
+                "npm install concluíu mas vite não aparece em node_modules. Verifique package.json.");
+        }
+
+        addLog?.Invoke("[OK] Dependências npm instaladas.");
+    }
+
+    internal static async Task StartBackendAsync(HttpClient client, Action<string>? addLog = null)
     {
         var backendDir = FindBackendWorkingDirectory() ?? AppDomain.CurrentDomain.BaseDirectory;
+
+        try
+        {
+            await EnsureBackendPythonDependenciesAsync(backendDir, addLog);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                "Não foi possível instalar/atualizar as dependências Python do backend.\n\n" +
+                "Na pasta 'backend', execute manualmente:\n" +
+                "python -m pip install -r requirements.txt\n\n" +
+                ex.Message);
+        }
 
         try
         {
@@ -199,6 +364,17 @@ public partial class LoadingPage : Page
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+
+            var javaHome = JavaDependencyHelper.ResolveJavaHomeForBackend();
+            if (!string.IsNullOrWhiteSpace(javaHome))
+            {
+                psi.Environment["JAVA_HOME"] = javaHome;
+                var binDir = Path.Combine(javaHome, "bin");
+                var pathNow = Environment.GetEnvironmentVariable("PATH") ?? "";
+                if (!string.Equals(pathNow, binDir, StringComparison.OrdinalIgnoreCase)
+                    && !pathNow.StartsWith(binDir + Path.PathSeparator, StringComparison.OrdinalIgnoreCase))
+                    psi.Environment["PATH"] = binDir + Path.PathSeparator + pathNow;
+            }
 
             // Guardamos o processo para o podermos terminar quando o WPF fechar.
             _managedBackendProcess = Process.Start(psi);
@@ -232,7 +408,7 @@ public partial class LoadingPage : Page
             "uvicorn api:app --reload --host 0.0.0.0 --port 8000");
     }
 
-    private static string? FindFrontendWorkingDirectory()
+    internal static string? FindFrontendWorkingDirectory()
     {
         var backendDir = FindBackendWorkingDirectory();
         var projectRoot = backendDir != null ? Directory.GetParent(backendDir)?.FullName : null;
@@ -261,7 +437,7 @@ public partial class LoadingPage : Page
         return null;
     }
 
-    private static async Task EnsureFrontendRunningAsync()
+    private static async Task EnsureFrontendRunningAsync(Action<string>? addLog = null)
     {
         if (await IsFrontendUpAsync())
         {
@@ -274,6 +450,19 @@ public partial class LoadingPage : Page
             throw new InvalidOperationException(
                 "Não foi possível localizar a pasta 'frontend' para iniciar o frontend.\n\n" +
                 "Certifique-se de que a estrutura do projeto é a esperada e, se necessário, inicie manualmente o dev server.");
+        }
+
+        try
+        {
+            await EnsureFrontendNpmDependenciesAsync(frontendDir, addLog);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                "Não foi possível instalar as dependências npm do frontend.\n\n" +
+                "Na pasta 'frontend', execute manualmente:\n" +
+                "npm install\n\n" +
+                ex.Message);
         }
 
         try

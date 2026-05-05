@@ -265,6 +265,14 @@ class RATAnalyzer:
         deobf = self.analysis_results.get("deobfuscation", {})
         obfuscation_indicators = deobf.get("obfuscation_indicators", []) or []
 
+        _ghidra = self.analysis_results.get("ghidra_decompilation") or {}
+        ghidra_snapshot = {
+            "success": bool(_ghidra.get("success")),
+            "error": ((_ghidra.get("error") or "")[:2500]),
+            "output_file": _ghidra.get("output_file") or "",
+            "functions_decompiled": int(_ghidra.get("functions_decompiled") or 0),
+        }
+
         last_analysis = {
             "target_file": str(self.target_file),
             "report_path": str(report_path),
@@ -280,6 +288,7 @@ class RATAnalyzer:
             "disassembly_file": disassembly_file,
             "decompiled_c_file": decompiled_c_file,
             "decompilation_error_summary": decompilation_error_summary,
+            "ghidra_decompilation": ghidra_snapshot,
             "flagged_indicators": flagged_indicators,
             "flagged_functions": flagged_functions,
         }

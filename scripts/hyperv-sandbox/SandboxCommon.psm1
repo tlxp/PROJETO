@@ -79,6 +79,125 @@ function Assert-FileSha1 {
     return $actual
 }
 
+function Get-WindowsIsoInstallMediaCandidates {
+    param([Parameter(Mandatory = $true)][string] $IsoRoot)
+    return @(
+        (Join-Path $IsoRoot 'x64\sources\install.wim'),
+        (Join-Path $IsoRoot 'x64\sources\install.esd'),
+        (Join-Path $IsoRoot 'sources\install.wim'),
+        (Join-Path $IsoRoot 'sources\install.esd'),
+        (Join-Path $IsoRoot 'x86\sources\install.wim'),
+        (Join-Path $IsoRoot 'x86\sources\install.esd')
+    )
+}
+
+function Get-WindowsImageLanguagesFromInstallMedia {
+    <#
+    .SYNOPSIS
+        Lista idiomas expostos pelo install.wim / install.esd (indice 1) via Get-WindowsImage.
+        Fallback quando lang.ini nao existe ou nao tem [Available UI Languages] reconhecivel.
+    #>
+    param([Parameter(Mandatory = $true)][string] $IsoRoot)
+
+    foreach ($media in (Get-WindowsIsoInstallMediaCandidates -IsoRoot $IsoRoot)) {
+        if (-not (Test-Path -LiteralPath $media)) { continue }
+        try {
+            $img = Get-WindowsImage -ImagePath $media -Index 1 -ErrorAction Stop
+            if (-not $img.Languages) { continue }
+            # Get-WindowsImage pode devolver Languages como string "en-US". Se passar pelo pipeline,
+            # o PowerShell enumera CARACTERES — o primeiro "idioma" vira "e" e corrompe o autounattend.
+            $langList = @()
+            if ($img.Languages -is [string]) {
+                $t = $img.Languages.Trim()
+                if ($t) { $langList = @($t) }
+            } else {
+                $langList = @($img.Languages | ForEach-Object { $_.ToString().Trim() } | Where-Object { $_ })
+            }
+            if ($langList.Count -gt 0) { return $langList }
+        } catch {
+            continue
+        }
+    }
+    return @()
+}
+
+function Get-WindowsIsoUiLanguages {
+    <#
+    .SYNOPSIS
+        Devolve os idiomas de UI disponíveis no ISO (sources\lang.ini), se possível.
+    .DESCRIPTION
+        - Monta o ISO temporariamente e lê a secção [Available UI Languages] de lang.ini.
+        - Procura em sources\lang.ini na raiz do volume **e** em x64\sources\lang.ini / x86\sources\lang.ini
+          (estrutura típica de ISOs MCT / imagens só x64).
+        - Se lang.ini nao listar idiomas, tenta **install.wim / install.esd** com Get-WindowsImage (indice 1).
+        - Se falhar, devolve lista vazia (o chamador decide fallback).
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $IsoPath
+    )
+
+    $langs = @()
+    if (-not (Test-Path -LiteralPath $IsoPath)) { return $langs }
+
+    $mounted = $false
+    try {
+        Mount-DiskImage -ImagePath $IsoPath -StorageType ISO -ErrorAction Stop | Out-Null
+        $mounted = $true
+        Start-Sleep -Milliseconds 1200
+
+        $vol = Get-DiskImage -ImagePath $IsoPath | Get-Volume | Select-Object -First 1
+        $isoDrive = if ($vol -and $vol.DriveLetter) { "$($vol.DriveLetter):\" } else { $null }
+        if (-not $isoDrive) { return $langs }
+
+        $langIniCandidates = @(
+            (Join-Path $isoDrive "sources\lang.ini"),
+            (Join-Path $isoDrive "x64\sources\lang.ini"),
+            (Join-Path $isoDrive "x86\sources\lang.ini")
+        )
+
+        foreach ($langIni in $langIniCandidates) {
+            if (-not (Test-Path -LiteralPath $langIni)) { continue }
+            try {
+                $content = Get-Content -LiteralPath $langIni -ErrorAction Stop
+            } catch {
+                continue
+            }
+            $inSection = $false
+            foreach ($line in $content) {
+                $t = ("" + $line).Trim()
+                if ($t -match '^\[(.+)\]\s*$') {
+                    $sec = $matches[1].Trim()
+                    $inSection = ($sec -match '^(?i)available ui languages$')
+                    continue
+                }
+                if (-not $inSection) { continue }
+                if ([string]::IsNullOrWhiteSpace($t)) { continue }
+                # Linha so com tag (en-US) ou chave=valor (en-US = 1 / en-US=true)
+                if ($t -match '^\s*([a-zA-Z]{2}-[a-zA-Z]{2,})\s*(=.*)?$') {
+                    $langs += $matches[1]
+                }
+            }
+        }
+
+        if (@($langs).Count -eq 0) {
+            foreach ($wl in (Get-WindowsImageLanguagesFromInstallMedia -IsoRoot $isoDrive)) {
+                $langs += $wl
+            }
+        }
+
+        $langs = $langs | Sort-Object -Unique
+        return $langs
+    }
+    catch {
+        return @()
+    }
+    finally {
+        if ($mounted) {
+            try { Dismount-DiskImage -ImagePath $IsoPath -ErrorAction SilentlyContinue | Out-Null } catch { }
+        }
+    }
+}
+
 function New-IsoFromFolder {
     <#
     .SYNOPSIS
@@ -452,6 +571,137 @@ function New-Windows10UnattendXml {
   </settings>
 </unattend>
 "@
+}
+
+function Get-WindowsIsoDefaultLanguage {
+    <#
+    .SYNOPSIS
+        Deteta o idioma default de um ISO do Windows (ex.: en-US, pt-PT) lendo sources\lang.ini.
+    .DESCRIPTION
+        O idioma do ISO afeta o comportamento do autounattend (Microsoft-Windows-International-Core-WinPE).
+        Quando o autounattend fixa en-US mas o ISO é pt-PT (ou outro), o setup pode ignorar partes do unattended
+        ou pedir input manual. Esta função tenta inferir o idioma do ISO para alinhar o autounattend.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $IsoPath,
+        # Quando nao e possivel ler lang.ini, devolver $null (nao fingir en-US — evita logs enganadores).
+        [string] $Fallback = $null
+    )
+
+    if (-not (Test-Path -LiteralPath $IsoPath)) { return $Fallback }
+
+    $mounted = $false
+    try {
+        Mount-DiskImage -ImagePath $IsoPath -StorageType ISO -ErrorAction Stop | Out-Null
+        $mounted = $true
+        Start-Sleep -Milliseconds 1200
+
+        $vol = Get-DiskImage -ImagePath $IsoPath | Get-Volume | Select-Object -First 1
+        $isoDrive = if ($vol -and $vol.DriveLetter) { "$($vol.DriveLetter):\" } else { $null }
+        if (-not $isoDrive) { return $Fallback }
+
+        $langIniCandidates = @(
+            (Join-Path $isoDrive "sources\lang.ini"),
+            (Join-Path $isoDrive "x64\sources\lang.ini"),
+            (Join-Path $isoDrive "x86\sources\lang.ini")
+        )
+
+        foreach ($p in $langIniCandidates) {
+            if (-not (Test-Path -LiteralPath $p)) { continue }
+            $lines = Get-Content -LiteralPath $p -ErrorAction SilentlyContinue
+            if (-not $lines) { continue }
+            foreach ($line in $lines) {
+                if ($line -match '^\s*Default\s*=\s*([A-Za-z]{2}-[A-Za-z]{2})\s*$') {
+                    return $Matches[1]
+                }
+            }
+        }
+
+        $wimLangs = @(Get-WindowsImageLanguagesFromInstallMedia -IsoRoot $isoDrive)
+        if ($wimLangs.Count -gt 0) {
+            $first = [string]$wimLangs[0]
+            if ($first -match '^[a-zA-Z]{2}-[a-zA-Z]{2,}$') { return $first }
+        }
+
+        return $Fallback
+    } catch {
+        return $Fallback
+    } finally {
+        if ($mounted) {
+            try { Dismount-DiskImage -ImagePath $IsoPath -ErrorAction SilentlyContinue | Out-Null } catch { }
+        }
+    }
+}
+
+function Set-UnattendLanguageInPlace {
+    <#
+    .SYNOPSIS
+        Substitui idioma/locale no autounattend.xml (WinPE + OOBE) para alinhar com o ISO.
+    .DESCRIPTION
+        Atualiza os nós mais comuns: SetupUILanguage/UILanguage, InputLocale, SystemLocale, UILanguage, UserLocale.
+        Se o ficheiro não contiver esses nós, não faz nada (mantém comportamento default do ISO).
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $UnattendXmlPath,
+        [Parameter(Mandatory = $true)][string] $UiLanguage
+    )
+
+    if (-not (Test-Path -LiteralPath $UnattendXmlPath)) { return }
+    if ([string]::IsNullOrWhiteSpace($UiLanguage)) { return }
+    if ($UiLanguage -notmatch '^[a-zA-Z]{2}-[a-zA-Z]{2,}$') {
+        Write-Warning "Set-UnattendLanguageInPlace: ignorando idioma invalido '$UiLanguage' (esperado xx-YY, ex.: en-US)."
+        return
+    }
+
+    $xmlText = Get-Content -LiteralPath $UnattendXmlPath -Raw -ErrorAction Stop
+
+    # WinPE / OOBE / general: substituir valores simples (ex.: en-US, pt-PT).
+    $xmlText = [regex]::Replace($xmlText, '<UILanguage>\s*[^<]+\s*</UILanguage>', "<UILanguage>$UiLanguage</UILanguage>")
+    $xmlText = [regex]::Replace($xmlText, '<InputLocale>\s*[^<]+\s*</InputLocale>', "<InputLocale>$UiLanguage</InputLocale>")
+    $xmlText = [regex]::Replace($xmlText, '<SystemLocale>\s*[^<]+\s*</SystemLocale>', "<SystemLocale>$UiLanguage</SystemLocale>")
+    $xmlText = [regex]::Replace($xmlText, '<UserLocale>\s*[^<]+\s*</UserLocale>', "<UserLocale>$UiLanguage</UserLocale>")
+
+    Set-Content -LiteralPath $UnattendXmlPath -Value $xmlText -Encoding UTF8 -ErrorAction Stop
+}
+
+function Remove-UnattendInternationalSettings {
+    <#
+    .SYNOPSIS
+        Remove componentes de idioma/locale do autounattend.xml para deixar o Setup seguir o idioma do ISO.
+    .DESCRIPTION
+        Em alguns ISOs não-en-US, forçar valores de locale pode fazer o unattended falhar ou pedir prompts.
+        Esta função remove:
+        - Microsoft-Windows-International-Core-WinPE (pass windowsPE)
+        - Microsoft-Windows-International-Core (pass oobeSystem)
+        Mantém o resto do autounattend intacto.
+        NAO usar no autounattend custom Gen1 (en-US): sem International-Core-WinPE o WinPE nao aplica
+        SetupUILanguage e o setup deixa de ser silencioso.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $UnattendXmlPath
+    )
+
+    if (-not (Test-Path -LiteralPath $UnattendXmlPath)) { return }
+
+    $xmlText = Get-Content -LiteralPath $UnattendXmlPath -Raw -ErrorAction Stop
+
+    # Remover bloco WinPE international core
+    $xmlText = [regex]::Replace(
+        $xmlText,
+        '<component\s+name="Microsoft-Windows-International-Core-WinPE"[\s\S]*?</component>\s*',
+        '',
+        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+    )
+
+    # Remover bloco OOBE international core
+    $xmlText = [regex]::Replace(
+        $xmlText,
+        '<component\s+name="Microsoft-Windows-International-Core"[\s\S]*?</component>\s*',
+        '',
+        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+    )
+
+    Set-Content -LiteralPath $UnattendXmlPath -Value $xmlText -Encoding UTF8 -ErrorAction Stop
 }
 
 function Wait-VMHeartbeatOk {

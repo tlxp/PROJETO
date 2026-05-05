@@ -186,13 +186,31 @@ class DotNetDecompiler:
                     f"ILSpy retornou código {completed.returncode}.\n"
                     f"Erro: {error_msg}"
                 )
+                # Runtime em falta (ilspycmd antigo pede .NET 6; máquina só tem 8, etc.)
+                if (
+                    "install or update .NET" in error_msg
+                    or "Microsoft.NETCore.App" in error_msg
+                    or ("Framework:" in error_msg and ".NETCore.App" in error_msg)
+                ):
+                    result["error_type"] = "missing_dotnet_runtime"
+                    result["error_short"] = (
+                        "O ILSpy CLI (ilspycmd) precisa de um runtime .NET que não está instalado — "
+                        "versões antigas do pacote pedem .NET 6 embora tenhas SDK/.NET 8.\n\n"
+                        "Opções:\n"
+                        "• Instalar runtime .NET 6 (x64): https://dotnet.microsoft.com/download/dotnet/6.0\n"
+                        "• Ou atualizar a ferramenta para uma versão que use .NET 8:\n"
+                        "  dotnet tool update -g ilspycmd --version 10.0.0.8330\n\n"
+                        "Depois reinicie o backend Python."
+                    )
                 # Mensagem curta para a GUI (ficheiro nativo ou AOT)
-                if completed.returncode == 70 or "managed metadata" in error_msg or "MetadataFileNotSupportedException" in error_msg:
+                elif completed.returncode == 70 or "managed metadata" in error_msg or "MetadataFileNotSupportedException" in error_msg:
                     result["error_type"] = "no_managed_metadata"
                     result["error_short"] = (
                         "Este ficheiro não contém metadados .NET (ILSpy não consegue descompilar). "
-                        "Pode ser: executável nativo (C/C++), ou .NET compilado com Native AOT. "
-                        "A análise estática e o relatório foram gerados na mesma."
+                        "Pode ser: executável nativo (C/C++), ou .NET compilado com Native AOT.\n\n"
+                        "A análise estática (strings, imports, YARA, score) corre sempre sobre o PE. "
+                        "Em seguida o pipeline tenta assembly (Capstone) e pseudo-C (Ghidra) no mesmo binário "
+                        "se GHIDRA_INSTALL_DIR/pyghidra estiverem configurados — ver também o separador IL/assembly."
                     )
                 if not result["is_dotnet"]:
                     result["error"] += (

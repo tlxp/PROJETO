@@ -24,7 +24,7 @@ $script:PROJETOVM_VMProcessorCount    = 0       # 0 = auto
 $script:PROJETOVM_VHDSizeGB           = 80
 $script:PROJETOVM_DynamicMemoryEnabled = $true
 
-# ISO do Windows (sem verificacao SHA-1)
+# ISO Windows (sem verificacao SHA-1): **en-US** (English United States) — mais nada e suportado para unattended.
 $script:PROJETOVM_WindowsIsoPath      = "D:\ISOs\Windows.iso"
 $script:PROJETOVM_AutoInstallWindows  = $true
 

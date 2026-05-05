@@ -58,6 +58,7 @@ Com isto, o utilizador passa a ter um **fluxo integrado**:
 - **Deobfuscação**: Aplica técnicas básicas de deobfuscação para revelar código ofuscado
 - **Scoring de Risco**: Calcula um score de risco de 0-100 baseado em múltiplos fatores
 - **Relatórios Detalhados**: Gera relatórios completos em formato texto
+- **Explorador de xrefs (pseudo‑C)**: Na interface web, após analisar um binário, pode abrir o mapa de referências cruzadas do código descompilado (rota `/xref`, também acessível a partir do painel de pseudo‑C)
 
 ## Requisitos
 
@@ -86,7 +87,7 @@ pip install -r backend/requirements.txt
 ## Uso
 
 ### Interface web (recomendado)
-A aplicação **Drop & Analyze** é uma interface web em React que se liga a este backend. Permite arrastar ficheiros .exe ou .dll e ver relatórios, pseudo-C e IL em tempo real.
+A aplicação **Drop & Analyze** é uma interface web em React que se liga a este backend. Permite arrastar ficheiros .exe ou .dll e ver relatórios, pseudo-C e IL em tempo real. Inclui a página **Explorador de xrefs** em `/xref` para navegar referências no pseudo‑C (aberta a partir dos resultados da análise).
 
 1. Inicie o backend (servidor Python que expõe a API).
 2. Na pasta `frontend`, execute `npm i` e `npm run dev`.
@@ -94,10 +95,22 @@ A aplicação **Drop & Analyze** é uma interface web em React que se liga a est
 
 Consulte `frontend/README.md` para mais detalhes.
 
+### Aplicação desktop WPF (`wpf-gui/`)
+Projeto **RatAnalyzer.Desktop** (.NET 8, Windows): ponto de entrada gráfico que pode arrancar/validar backend e frontend, verificar dependências (Python/pip, npm, YARA, JDK/Ghidra, ILSpy CLI, Hyper‑V, ferramentas ADK para ISO da VM) e integrar análise estática com a VM sandbox. Para compilar e executar:
+
+```powershell
+cd wpf-gui
+dotnet build -c Release
+dotnet run
+```
+
+O executável deve ser lançado a partir da raiz do repositório (ou com `backend/` e `frontend/` resolvíveis em relação ao exe) para os caminhos relativos funcionarem.
+
 ### Interface gráfica Python (recomendado para projetos .NET)
 Arraste um ficheiro `.cs` (ou selecione-o), compile o projeto e escolha analisar o `.exe` ou o `.dll`:
 
 ```bash
+cd backend
 pip install -r requirements.txt   # inclui windnd para drag-and-drop no Windows
 python rat_analyzer_gui.py
 ```
@@ -109,11 +122,13 @@ python rat_analyzer_gui.py
 
 ### Análise básica (linha de comandos):
 ```bash
+cd backend
 python rat_analyzer.py caminho/para/ficheiro.exe
 ```
 
 ### Com opções:
 ```bash
+cd backend
 python rat_analyzer.py caminho/para/ficheiro.dll -o relatorios/ -v
 ```
 
@@ -159,7 +174,7 @@ PROJETO/
 │   ├── modules/             # Módulos (static analyzer, yara, deobfuscator, decompilers, etc.)
 │   └── vm_drivers/          # Drivers dinâmicos (stub, hyperv, proxmox)
 ├── frontend/                # Interface web (React/Vite) – ver frontend/README.md
-├── wpf-gui/                 # App desktop WPF (.NET 8)
+├── wpf-gui/                 # RatAnalyzer.Desktop — WPF (.NET 8), bootstrap de dependências e VM
 ├── vm-agent/                # Agent HTTP para correr dentro da VM sandbox
 ├── scripts/hyperv-sandbox/  # Scripts PowerShell de automação Hyper-V
 ├── sandbox_jobs/            # Jobs e artefactos (SQLite + outputs por job)
@@ -291,7 +306,10 @@ Este repositório agora inclui uma base para **análise dinâmica** (execução 
 
 - **Pipeline de jobs (estática/dinâmica/ambas)**:
   - `POST /api/analysis?analysis_type=static|dynamic|both`
-  - `GET /api/analysis/{job_id}`
+  - `POST /api/analysis/upload_static` — publicar resultado estático já calculado noutro processo no mesmo `job_id`
+  - `GET /api/analysis/{job_id}` — estado e artefactos do job
+  - `GET /api/analysis/{job_id}/artifacts/obfuscated_snippets` — excertos ofuscados (texto)
+  - `GET /api/analyses` — listagem de jobs recentes
 
 Os jobs são guardados em `sandbox_jobs/{job_id}/` (ver `backend/config.py` → `SANDBOX_JOBS_DIR`).
 
@@ -384,7 +402,7 @@ Este guia descreve **todos os passos**, sem resumos, para ter uma VM Windows iso
 - Windows 10 Pro/Enterprise ou Windows 11 Pro/Enterprise (ou Windows Server) com Hyper-V disponível.
 - Permissões de administrador no PC.
 - Espaço em disco livre (recomendado: pelo menos 80 GB para a VM + espaço para o ISO do Windows).
-- Ficheiro ISO da instalação do Windows (10 ou 11).
+- Ficheiro ISO do Windows (10 ou 11). **Sandbox Hyper-V unattended:** ISO **en-US** (English United States) apenas — ver `scripts/hyperv-sandbox/README.md` e `_Config.ps1`.
 
 ---
 
@@ -610,7 +628,7 @@ $env:HYPERV_VM_NAME = "win-sandbox"
 $env:HYPERV_SNAPSHOT_NAME = "clean-snap"
 $env:VM_AGENT_BASE_URL = "http://192.168.100.10:5000"
 
-cd C:\Users\jmigu\Desktop\PROJETO\PROJETO\backend
+cd backend   # a partir da raiz do repositório clonado
 uvicorn api:app --reload --host 0.0.0.0 --port 8000
 ```
 

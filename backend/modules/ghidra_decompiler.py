@@ -36,9 +36,172 @@ Por defeito tem limites conservadores para evitar explosão de tempo/memória.
    - Na GUI do Ghidra: scripts FindUnrecoveredSwitchesScript e SwitchOverride para recuperar switches à mão.
 """
 
+import os
 import shutil
+import sys
 from pathlib import Path
 from typing import Callable, Dict, Optional
+
+
+def _jdk_root_has_java_bin(home: Path) -> bool:
+    name = "java.exe" if sys.platform == "win32" else "java"
+    return home.is_dir() and (home / "bin" / name).is_file()
+
+
+def _prepend_path(directory: str) -> None:
+    if not directory:
+        return
+    norm = os.path.normpath(directory)
+    sep = os.pathsep
+    path = os.environ.get("PATH", "")
+    parts = path.split(sep) if path else []
+    if norm in parts:
+        return
+    os.environ["PATH"] = norm + sep + path if path else norm
+
+
+def _ensure_java_home_for_ghidra() -> None:
+    """
+    O Ghidra chama LaunchSupport com `-jdk_home`; o processo Python (uvicorn) pode ter
+    arrancado antes de JAVA_HOME existir no ambiente. Descobre JDK 21 em disco / registo
+    Windows e define os.environ antes de import pyghidra / pyghidra.start().
+    """
+    existing = (os.environ.get("JAVA_HOME") or "").strip()
+    if existing:
+        p = Path(existing)
+        if _jdk_root_has_java_bin(p):
+            _prepend_path(str(p / "bin"))
+            return
+
+    if sys.platform == "win32":
+        try:
+            import winreg
+
+            for root, subkey in (
+                (winreg.HKEY_CURRENT_USER, r"Environment"),
+                (
+                    winreg.HKEY_LOCAL_MACHINE,
+                    r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
+                ),
+            ):
+                try:
+                    with winreg.OpenKey(root, subkey) as k:
+                        val, _ = winreg.QueryValueEx(k, "JAVA_HOME")
+                        if val and _jdk_root_has_java_bin(Path(str(val).strip())):
+                            home = str(Path(str(val).strip()).resolve())
+                            os.environ["JAVA_HOME"] = home
+                            _prepend_path(str(Path(home) / "bin"))
+                            return
+                except OSError:
+                    continue
+        except Exception:
+            pass
+
+        pf = os.environ.get("ProgramFiles", r"C:\Program Files")
+        adoptium = Path(pf) / "Eclipse Adoptium"
+        if adoptium.is_dir():
+            try:
+                matches = sorted(
+                    adoptium.glob("jdk-21*"),
+                    key=lambda x: x.name,
+                    reverse=True,
+                )
+                for d in matches:
+                    if _jdk_root_has_java_bin(d):
+                        home = str(d.resolve())
+                        os.environ["JAVA_HOME"] = home
+                        _prepend_path(str(d / "bin"))
+                        return
+            except Exception:
+                pass
+
+        for vendor_glob in (
+            (Path(pf) / "Microsoft", "jdk-*"),
+            (Path(pf) / "Amazon Corretto", "jdk*"),
+        ):
+            base, pat = vendor_glob
+            if not base.is_dir():
+                continue
+            try:
+                for d in sorted(base.glob(pat), key=lambda x: x.name, reverse=True):
+                    if "21" not in d.name:
+                        continue
+                    if _jdk_root_has_java_bin(d):
+                        home = str(d.resolve())
+                        os.environ["JAVA_HOME"] = home
+                        _prepend_path(str(d / "bin"))
+                        return
+            except Exception:
+                pass
+
+    if sys.platform == "darwin":
+        bases = (Path("/Library/Java/JavaVirtualMachines"),)
+        for base in bases:
+            if not base.is_dir():
+                continue
+            try:
+                for home in sorted(base.glob("jdk-21*.jdk/Contents/Home"), reverse=True):
+                    if _jdk_root_has_java_bin(home):
+                        os.environ["JAVA_HOME"] = str(home.resolve())
+                        _prepend_path(str(home / "bin"))
+                        return
+            except Exception:
+                pass
+
+    if sys.platform.startswith("linux"):
+        try:
+            jvm = Path("/usr/lib/jvm")
+            if jvm.is_dir():
+                for home in sorted(jvm.glob("java-21-*"), reverse=True):
+                    if _jdk_root_has_java_bin(home):
+                        os.environ["JAVA_HOME"] = str(home.resolve())
+                        _prepend_path(str(home / "bin"))
+                        return
+        except Exception:
+            pass
+
+
+def _format_pyghidra_start_error(exc: BaseException) -> str:
+    """
+    Erros típicos: LaunchSupport / -jdk_home / exit status 1 → JDK em falta ou versão errada.
+    Ghidra 12.x requer JDK 21 (64-bit).
+    """
+    msg = str(exc)
+    core = f"Falha ao iniciar Ghidra (verifique GHIDRA_INSTALL_DIR): {msg}"
+    low = msg.lower()
+    needs_java_hint = any(
+        x in low
+        for x in (
+            "launchsupport",
+            "jdk_home",
+            "-jdk",
+            "java ",
+            "non-zero exit status",
+            "cannot find java",
+            "java_home",
+            "failed to locate",
+            "no jdk",
+        )
+    ) or "LaunchSupport" in msg
+
+    if not needs_java_hint:
+        return core
+
+    return (
+        core
+        + "\n\n--- Java / JDK (requisito do Ghidra 12) ---\n"
+        "O Ghidra 12 precisa de um JDK 21 de 64 bits no sistema. Ter apenas .NET ou Python não chega.\n\n"
+        "Passos sugeridos:\n"
+        "  1. Instale JDK 21 (por exemplo Eclipse Temurin ou Amazon Corretto).\n"
+        "  2. Defina a variável de utilizador JAVA_HOME para a raiz do JDK "
+        '(por exemplo a pasta que contém bin\\java.exe no JDK 21).\n'
+        "  3. Confirme num terminal: java -version  → deve mostrar versão 21.\n"
+        "  4. Reinicie o backend Python se já estiver em execução sem JAVA_HOME; "
+        "o servidor também tenta detetar JDK 21 em disco ao iniciar o Ghidra.\n\n"
+        "Temurin 21: https://adoptium.net/temurin/releases/?version=21\n"
+        "Corretto 21: https://docs.aws.amazon.com/corretto/latest/corretto-21-ug/downloads-list.html"
+    )
+
 
 # Limites para não gerar ficheiros enormes
 # MAX_FUNCTIONS muito alto → na prática sem limite de número de funções
@@ -130,6 +293,8 @@ def decompile_binary_to_c(
         result["error"] = f"Ficheiro não encontrado: {path}"
         return result
 
+    _ensure_java_home_for_ghidra()
+
     try:
         import pyghidra
     except ImportError:
@@ -159,7 +324,7 @@ def decompile_binary_to_c(
         if not pyghidra.started():
             pyghidra.start(verbose=False, install_dir=ghidra_install_dir)
     except Exception as e:
-        result["error"] = f"Falha ao iniciar Ghidra (verifique GHIDRA_INSTALL_DIR): {e}"
+        result["error"] = _format_pyghidra_start_error(e)
         return result
 
     try:

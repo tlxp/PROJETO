@@ -9,6 +9,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
+using RatAnalyzer.Desktop;
 
 namespace RatAnalyzer.Desktop.Views;
 
@@ -84,6 +85,75 @@ public partial class VmAnalysisWindow : Window
             Dispatcher.BeginInvoke(DispatcherPriority.Normal, DoAppend);
     }
 
+    /// <summary>
+    /// Avisa o utilizador a transferir a ISO oficial e a coloca-la no caminho de PROJETOVM_WindowsIsoPath (_Config.ps1).
+    /// </summary>
+    private static void ShowWindowsIsoMissingDialog(string? configuredIsoPath)
+    {
+        const string downloadPage = "https://www.microsoft.com/pt-pt/software-download/windows10";
+
+        var displayPath = string.IsNullOrWhiteSpace(configuredIsoPath)
+            ? "(ver PROJETOVM_WindowsIsoPath em scripts/hyperv-sandbox/_Config.ps1)"
+            : configuredIsoPath;
+
+        try
+        {
+            string folderHint;
+            if (string.IsNullOrWhiteSpace(configuredIsoPath))
+            {
+                folderHint = "Configure o caminho completo para o .iso em PROJETOVM_WindowsIsoPath (_Config.ps1) e crie as pastas necessárias.";
+            }
+            else
+            {
+                var isoDir = Path.GetDirectoryName(configuredIsoPath);
+                folderHint = string.IsNullOrWhiteSpace(isoDir)
+                    ? "Garanta que o caminho no _Config.ps1 inclui pasta e nome de ficheiro do .iso."
+                    : "Crie esta pasta no disco se ainda não existir:\r\n" + isoDir;
+            }
+
+            var msg =
+                "O programa não encontrou a imagem ISO do Windows aqui:\r\n\r\n" +
+                displayPath +
+                "\r\n\r\n" +
+                folderHint +
+                "\r\n\r\n" +
+                "Requisito: a ISO tem de ser **en-US** (English United States) — mais nada é suportado para instalacao automatica.\r\n\r\n" +
+                "Transfira a ISO oficial do Windows 10 através do site da Microsoft " +
+                "(ferramenta de criação de suporte ou ficheiro ISO).\r\n" +
+                "Depois, copie ou mova o ficheiro .iso para esse caminho exato, " +
+                "ou altere scripts\\hyperv-sandbox\\_Config.ps1 (PROJETOVM_WindowsIsoPath).\r\n\r\n" +
+                "Site: " + downloadPage +
+                "\r\n\r\n" +
+                "Deseja abrir a página da Microsoft no navegador agora?";
+
+            var result = MessageBox.Show(
+                msg,
+                "ISO do Windows em falta",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (result != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = downloadPage,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "Não foi possível abrir o navegador. Transfira a ISO manualmente em:\r\n" + downloadPage +
+                "\r\n\r\nErro: " + ex.Message,
+                "ISO do Windows em falta",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
     private static string? FindHyperVScriptsPath()
     {
         var baseDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -131,35 +201,76 @@ public partial class VmAnalysisWindow : Window
             AppendLine($"[*] Pasta de logs: {_runDir}", withTimestamp: true);
         AppendLine("", withTimestamp: true);
 
-        // 0) Modo "não primeira vez": validar pré-requisitos e NÃO reinstalar/configurar nada.
-        //    Queremos: ISO já existe (sanity check), VM existe, snapshot limpo existe.
+        // Preflight comum (_Config.ps1): ISO obrigatório em qualquer fluxo; VM/snapshot só em modo repetido.
+        var runPreflight = await GetRunPreflightAsync(scriptsPath);
+        if (runPreflight == null)
+        {
+            AppendLine("[ERRO] Falha no preflight da VM. Não consegui validar VM/snapshot/ISO via PowerShell.", withTimestamp: true);
+            await PersistGuiLogAsync();
+            return;
+        }
+
+        AppendLine($"[*] Preflight: ISO existe: {runPreflight.IsoExists} ({runPreflight.IsoPath})", withTimestamp: true);
+        AppendLine($"[*] Preflight: VM existe: {runPreflight.VmExists} ({runPreflight.VmName})", withTimestamp: true);
+        AppendLine($"[*] Preflight: Snapshot existe: {runPreflight.SnapshotExists} ({runPreflight.SnapshotName})", withTimestamp: true);
+        AppendLine("", withTimestamp: true);
+
+        if (!runPreflight.IsoExists)
+        {
+            AppendLine("[ERRO] ISO do Windows não encontrada. Transfira a ISO oficial (site Microsoft), coloque no caminho configurado ou edite _Config.ps1.", withTimestamp: true);
+            await Dispatcher.InvokeAsync(() => ShowWindowsIsoMissingDialog(runPreflight.IsoPath));
+            await PersistGuiLogAsync();
+            return;
+        }
+
+        // Modo "não primeira vez": também exige VM + snapshot já criados (sem reinstalar).
         if (!_runFirstTimeSetup)
         {
-            var runPreflight = await GetRunPreflightAsync(scriptsPath);
-            if (runPreflight == null)
-            {
-                AppendLine("[ERRO] Falha no preflight da VM. Não consegui validar VM/snapshot/ISO via PowerShell.", withTimestamp: true);
-                await PersistGuiLogAsync();
-                return;
-            }
-
-            AppendLine($"[*] Preflight: ISO existe: {runPreflight.IsoExists} ({runPreflight.IsoPath})", withTimestamp: true);
-            AppendLine($"[*] Preflight: VM existe: {runPreflight.VmExists} ({runPreflight.VmName})", withTimestamp: true);
-            AppendLine($"[*] Preflight: Snapshot existe: {runPreflight.SnapshotExists} ({runPreflight.SnapshotName})", withTimestamp: true);
-            AppendLine("", withTimestamp: true);
-
-            if (!runPreflight.IsoExists)
-            {
-                AppendLine("[ERRO] ISO do Windows não encontrada. Corrija o caminho em scripts/hyperv-sandbox/_Config.ps1 (PROJETOVM_WindowsIsoPath) ou marque 'Primeira entrada na VM' para criar/reinstalar.", withTimestamp: true);
-                await PersistGuiLogAsync();
-                return;
-            }
             if (!runPreflight.VmExists || !runPreflight.SnapshotExists)
             {
                 AppendLine("[ERRO] VM ou snapshot limpo não existem. Marque 'Primeira entrada na VM' para criar/configurar a VM e gerar o snapshot.", withTimestamp: true);
                 await PersistGuiLogAsync();
                 return;
             }
+        }
+
+        // Primeira entrada: oscdimg (Windows ADK Deployment Tools) para ISO com autounattend
+        if (_runFirstTimeSetup)
+        {
+            AppendLine("[*] A verificar ferramentas do host (Windows ADK / oscdimg)…", withTimestamp: true);
+            StatusText.Text = "Dependências do host (ADK)…";
+            try
+            {
+                await SandboxHostDependencies.EnsureOscdimgAsync(
+                    msg => AppendLine(msg, true),
+                    _cts.Token,
+                    async () =>
+                    {
+                        var op = Dispatcher.InvokeAsync(() =>
+                            MessageBox.Show(
+                                "Para automatizar a instalação do Windows na VM, o setup injeta autounattend.xml no ISO. " +
+                                "Isso exige o Windows ADK — ferramentas de implementação (oscdimg.exe).\r\n\r\n" +
+                                "Deseja transferir e instalar agora o pacote \"Deployment Tools\" do ADK?\r\n\r\n" +
+                                "• Será pedida permissão de administrador.\r\n" +
+                                "• Pode demorar vários minutos e usar vários GB em disco.\r\n" +
+                                "• Se recusar, o script pode continuar com a ISO original (instalação manual na consola da VM).\r\n\r\n" +
+                                "Transferências (Microsoft): " + SandboxHostDependencies.AdkSetupDownloadUrl,
+                                "Instalar Windows ADK (Deployment Tools)?",
+                                MessageBoxButton.YesNo,
+                                MessageBoxImage.Question) == MessageBoxResult.Yes);
+                        return await op.Task.ConfigureAwait(true);
+                    });
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                AppendLine($"[AVISO] Verificação ADK: {ex.Message}", withTimestamp: true);
+            }
+
+            AppendLine("", withTimestamp: true);
         }
 
         // 1) Executar setup da sandbox (cria VM, switch, estrutura) se ainda não existir

@@ -23,7 +23,15 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 import config
 from rat_analyzer import RATAnalyzer
-from analysis_jobs import AnalysisType, AnalysisJob, create_job, get_job, get_job_payload, summarize_c_code
+from analysis_jobs import (
+    AnalysisType,
+    AnalysisJob,
+    compose_fallback_descompilation_ccode,
+    create_job,
+    get_job,
+    get_job_payload,
+    summarize_c_code,
+)
 import job_store
 
 logging.basicConfig(
@@ -210,7 +218,7 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
         if not c_code and decompiled_c:
             c_code = _read_file_safe(decompiled_c)
         if not c_code and last.get("decompilation_error_summary"):
-            c_code = f"# Descompilação não disponível\n{last.get('decompilation_error_summary')}"
+            c_code = compose_fallback_descompilation_ccode(last)
         # Aplicar resumo para evitar payloads gigantes no frontend
         c_code = summarize_c_code(c_code, flagged_indicators)
 
@@ -318,7 +326,7 @@ async def analyze_file_stream(file: UploadFile = File(...)):
                 if not c_code and decompiled_c:
                     c_code = _read_file_safe_local(decompiled_c)
                 if not c_code and last.get("decompilation_error_summary"):
-                    c_code = f"# Descompilação não disponível\n{last.get('decompilation_error_summary')}"
+                    c_code = compose_fallback_descompilation_ccode(last)
                 # Aplicar resumo também no modo streaming
                 c_code = summarize_c_code(c_code, flagged_indicators)
 
