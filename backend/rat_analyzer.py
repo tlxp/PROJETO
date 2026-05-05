@@ -12,6 +12,7 @@ from pathlib import Path
 from datetime import datetime
 
 import config
+from pipeline_version import compute_pipeline_version
 from modules.static_analyzer import StaticAnalyzer
 from modules.yara_scanner import YaraScanner
 from modules.deobfuscator import Deobfuscator
@@ -291,6 +292,7 @@ class RATAnalyzer:
             "ghidra_decompilation": ghidra_snapshot,
             "flagged_indicators": flagged_indicators,
             "flagged_functions": flagged_functions,
+            "pipeline_version": compute_pipeline_version(),
         }
         last_path = self.output_dir / "last_analysis.json"
         try:

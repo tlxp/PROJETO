@@ -64,12 +64,8 @@ internal static class ShutdownManager
                 return;
             }
 
-            // Segue a mesma convenção de backend/config.py (SANDBOX_JOBS_DIR = PROJECT_ROOT / "sandbox_jobs")
-            var sandboxJobsDir = Path.Combine(projectRoot, "sandbox_jobs");
-            if (Directory.Exists(sandboxJobsDir))
-            {
-                Directory.Delete(sandboxJobsDir, recursive: true);
-            }
+            // Nota: outputs já não vivem no repo por defeito (agora são guardados em %LOCALAPPDATA%\\RatAnalyzer).
+            // Não apagar dados automaticamente ao sair (comportamento destrutivo).
         }
         catch
         {

@@ -13,6 +13,7 @@ import config
 from rat_analyzer import RATAnalyzer
 from vm_orchestrator import run_dynamic_analysis
 import job_store
+from pipeline_version import compute_pipeline_version
 from task_queue import is_queue_enabled, get_queue
 
 
@@ -96,17 +97,34 @@ def _ensure_jobs_dir() -> Path:
 
 def create_job(file_name: str, contents: bytes, analysis_type: AnalysisType) -> AnalysisJob:
     jobs_root = _ensure_jobs_dir()
+    pipeline_version = compute_pipeline_version()
+    sha = job_store.sha256_bytes(contents)
+
+    # --- Cache/deduplicação: reusar análise anterior quando o ficheiro é igual ---
+    # Regras:
+    #  - static pode reutilizar resultados de static/both
+    #  - dynamic pode reutilizar resultados de dynamic/both (quando existirem)
+    #  - both reutiliza apenas both; caso contrário faz reuso parcial no _run_job (via DB + job_store)
+    # Política: criar sempre um novo job_id (compatível com UI), mas marcar reused_from_job_id
+    # e copiar resultados da DB quando possível.
+    wanted_types: list[str] = []
+    if analysis_type == AnalysisType.STATIC:
+        wanted_types = [AnalysisType.BOTH.value, AnalysisType.STATIC.value]
+    elif analysis_type == AnalysisType.DYNAMIC:
+        wanted_types = [AnalysisType.BOTH.value, AnalysisType.DYNAMIC.value]
+    else:
+        wanted_types = [AnalysisType.BOTH.value]
+
     job_id = str(uuid.uuid4())
     base_dir = jobs_root / job_id
     base_dir.mkdir(parents=True, exist_ok=True)
 
     sample_path = base_dir / file_name
-    sample_path.write_bytes(contents)
+    output_dir = base_dir / "out"
+    output_dir.mkdir(exist_ok=True)
 
     # Persistência/auditoria básica
-    sha: Optional[str] = None
     try:
-        sha = job_store.sha256_bytes(contents)
         job_store.insert_job(
             job_id=job_id,
             analysis_type=analysis_type.value,
@@ -114,12 +132,55 @@ def create_job(file_name: str, contents: bytes, analysis_type: AnalysisType) -> 
             sha256=sha,
             status=JobStatus.QUEUED.value,
         )
+        job_store.update_pipeline_version(job_id, pipeline_version)
     except Exception:
         # Não falhar o pipeline por problemas de DB
         _LOGGER.exception("Falha ao registar job %s na base de dados de histórico.", job_id)
 
-    output_dir = base_dir / "out"
-    output_dir.mkdir(exist_ok=True)
+    # Tentar cache após insert (para manter audit trail do pedido)
+    cached_row: Optional[dict] = None
+    cached_from: Optional[str] = None
+    try:
+        for t in wanted_types:
+            r = job_store.find_completed_by_sha256(sha256=sha, analysis_type=t, pipeline_version=pipeline_version)
+            if r:
+                cached_row = r
+                cached_from = str(r.get("id") or "")
+                break
+    except Exception:
+        cached_row = None
+        cached_from = None
+
+    if cached_row and cached_from:
+        # Marcar como reused e preencher resultados imediatamente (sem reexecutar análises)
+        try:
+            job_store.mark_reused(job_id, cached_from)
+            job_store.update_results(job_id, cached_row.get("staticResult"), cached_row.get("dynamicResult"))
+            job_store.update_status(job_id, JobStatus.COMPLETED.value, error=None)
+        except Exception:
+            _LOGGER.exception("Falha ao aplicar cache para job_id=%s reused_from=%s", job_id, cached_from)
+        # Não guardar o binário em disco se já temos tudo (poupa espaço).
+        # Mantemos um marcador para debug local.
+        try:
+            (base_dir / ".reused").write_text(f"reused_from={cached_from}\nsha256={sha}\npipeline={pipeline_version}\n", encoding="utf-8")
+        except Exception:
+            pass
+
+        job = AnalysisJob(
+            id=job_id,
+            analysis_type=analysis_type,
+            status=JobStatus.COMPLETED,
+            base_dir=base_dir,
+            sample_path=sample_path,
+            output_dir=output_dir,
+        )
+        with _JOBS_LOCK:
+            _JOBS[job_id] = job
+        _LOGGER.info("Job criado por cache: id=%s type=%s reused_from=%s sha256=%s", job_id, analysis_type.value, cached_from, sha)
+        return job
+
+    # Sem cache: guardar binário no job_dir
+    sample_path.write_bytes(contents)
 
     job = AnalysisJob(
         id=job_id,

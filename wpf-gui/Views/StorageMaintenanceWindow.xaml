@@ -1,0 +1,115 @@
+<Window x:Class="RatAnalyzer.Desktop.Views.StorageMaintenanceWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Manutenção de armazenamento"
+        Width="760"
+        Height="520"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource PrimaryBackgroundBrush}"
+        Foreground="{StaticResource TextPrimaryBrush}"
+        ResizeMode="CanResizeWithGrip"
+        WindowStyle="SingleBorderWindow">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <TextBlock Text="Manutenção / Limpeza" Style="{StaticResource TitleTextBlock}" />
+            <TextBlock Text="Estimativa e limpeza segura de dados temporários e artefactos antigos."
+                       Style="{StaticResource SubtitleTextBlock}"
+                       Margin="0,4,0,0"/>
+        </StackPanel>
+
+        <Border Grid.Row="1"
+                Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrushBase}"
+                BorderThickness="1"
+                CornerRadius="{StaticResource Radius.Medium}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Padding="14">
+                <StackPanel>
+                    <StackPanel Orientation="Vertical">
+                        <TextBlock Text="Espaço atual (estimativa)" FontWeight="SemiBold" />
+                        <TextBlock x:Name="EstimateText"
+                                   Margin="0,6,0,0"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock x:Name="PathsText"
+                                   Margin="0,6,0,0"
+                                   Foreground="{StaticResource TextMutedBrush}"
+                                   TextWrapping="Wrap"/>
+                        <Button x:Name="RefreshEstimateButton"
+                                Content="Recalcular estimativa"
+                                Margin="0,10,0,0"
+                                Width="190"
+                                Style="{StaticResource ModernButtonStyle}"
+                                Click="RefreshEstimateButton_Click"/>
+                    </StackPanel>
+
+                    <Separator Margin="0,14,0,14" Background="{StaticResource BorderBrushBase}" />
+
+                    <StackPanel>
+                        <TextBlock Text="Limpeza segura (soft) do histórico de jobs" FontWeight="SemiBold" />
+                        <TextBlock Text="Remove artefactos antigos em disco (sandbox_jobs) para jobs concluídos/falhados, mantendo a base de dados."
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   FontSize="11"
+                                   Margin="0,4,0,8"
+                                   TextWrapping="Wrap"/>
+
+                        <WrapPanel>
+                            <TextBlock Text="Reter últimos:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBox x:Name="KeepMostRecentBox" Width="70" Text="200" />
+                            <TextBlock Text="  |  Reter por dias:" VerticalAlignment="Center" Margin="12,0,8,0"/>
+                            <TextBox x:Name="RetentionDaysBox" Width="70" Text="30" />
+                        </WrapPanel>
+
+                        <Button x:Name="RunCleanupButton"
+                                Content="Limpar agora"
+                                Margin="0,10,0,0"
+                                Width="140"
+                                Style="{StaticResource ModernButtonStyle}"
+                                Click="RunCleanupButton_Click"/>
+                    </StackPanel>
+
+                    <Separator Margin="0,14,0,14" Background="{StaticResource BorderBrushBase}" />
+
+                    <StackPanel>
+                        <TextBlock Text="Arquivo frio (compressão)" FontWeight="SemiBold" />
+                        <TextBlock Text="Zipa out/ em out.zip para jobs antigos e remove a pasta original (recuperação continua possível)."
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   FontSize="11"
+                                   Margin="0,4,0,8"
+                                   TextWrapping="Wrap"/>
+                        <WrapPanel>
+                            <TextBlock Text="Arquivar com mais de (dias):" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBox x:Name="ArchiveDaysBox" Width="70" Text="30" />
+                        </WrapPanel>
+                        <Button x:Name="RunArchiveButton"
+                                Content="Arquivar agora"
+                                Margin="0,10,0,0"
+                                Width="150"
+                                Style="{StaticResource ModernButtonStyle}"
+                                Click="RunArchiveButton_Click"/>
+                    </StackPanel>
+
+                    <TextBlock x:Name="StatusText"
+                               Margin="0,14,0,0"
+                               Foreground="{StaticResource TextMutedBrush}"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="Fechar"
+                    Width="120"
+                    Style="{StaticResource ModernButtonStyle}"
+                    Click="CloseButton_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>
+

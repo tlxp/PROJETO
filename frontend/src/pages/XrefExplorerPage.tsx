@@ -1,5 +1,5 @@
-import React, { useCallback, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowDown, Code2, GitBranch, Terminal } from "lucide-react";
 import CodePanel from "@/components/CodePanel";
@@ -10,6 +10,8 @@ import {
   writeXrefSession,
   type XrefSessionPayload,
 } from "@/lib/cCodeXref";
+
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 function snippetAroundLine(code: string, line: number, context = 3): string {
   const lines = code.split("\n");
@@ -23,8 +25,78 @@ function snippetAroundLine(code: string, line: number, context = 3): string {
 }
 
 const XrefExplorerPage: React.FC = () => {
-  const [payload] = useState<XrefSessionPayload | null>(() => readXrefSession());
+  const location = useLocation();
+  const { jobId } = useParams<{ jobId?: string }>();
+  const [payload, setPayload] = useState<XrefSessionPayload | null>(() => readXrefSession());
   const [scrollToLine, setScrollToLine] = useState<number | null>(null);
+
+  const wordFromQuery = useMemo(() => {
+    const params = new URLSearchParams(location.search ?? "");
+    const w = params.get("word");
+    return typeof w === "string" ? w.trim() : "";
+  }, [location.search]);
+
+  useEffect(() => {
+    // Se existe jobId no URL, carregamos o pseudo-C do backend e ignoramos a sessão local.
+    if (!jobId) return;
+    if (!wordFromQuery) return;
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/analysis/${encodeURIComponent(jobId)}`);
+        if (!res.ok) {
+          if (!cancelled) setPayload(null);
+          return;
+        }
+        const job = (await res.json()) as unknown;
+        const rec = (job && typeof job === "object" ? (job as Record<string, unknown>) : null) ?? {};
+
+        // Backends diferentes: alguns devolvem cCode no topo, outros dentro de staticResult.
+        const staticResult =
+          rec.staticResult && typeof rec.staticResult === "object"
+            ? (rec.staticResult as Record<string, unknown>)
+            : null;
+
+        const cCode =
+          typeof rec.cCode === "string"
+            ? rec.cCode
+            : typeof staticResult?.cCode === "string"
+              ? (staticResult.cCode as string)
+              : "";
+
+        const fileName =
+          typeof rec.fileName === "string"
+            ? rec.fileName
+            : typeof staticResult?.fileName === "string"
+              ? (staticResult.fileName as string)
+              : "output";
+
+        const flaggedIndicatorsRaw =
+          Array.isArray(rec.flaggedIndicators) ? rec.flaggedIndicators : Array.isArray(staticResult?.flaggedIndicators) ? staticResult?.flaggedIndicators : [];
+        const flaggedIndicators = (flaggedIndicatorsRaw as unknown[]).filter(
+          (x): x is string => typeof x === "string"
+        );
+
+        if (!cancelled) {
+          setPayload({
+            v: 1,
+            code: cCode,
+            word: wordFromQuery,
+            fileName,
+            flaggedIndicators,
+          });
+        }
+      } catch {
+        if (!cancelled) setPayload(null);
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [jobId, wordFromQuery]);
 
   const model = useMemo(() => {
     if (!payload?.code || !payload.word) return null;
@@ -42,6 +114,12 @@ const XrefExplorerPage: React.FC = () => {
     (word: string) => {
       const w = word.trim();
       if (w.length < 2 || !payload) return;
+      // Preferir URL com jobId (permalink) quando disponível
+      if (jobId) {
+        openXrefExplorerTab(`/analysis/${encodeURIComponent(jobId)}/xref?word=${encodeURIComponent(w)}`);
+        return;
+      }
+
       writeXrefSession({
         v: 1,
         code: payload.code,
@@ -49,9 +127,9 @@ const XrefExplorerPage: React.FC = () => {
         fileName: payload.fileName,
         flaggedIndicators: payload.flaggedIndicators,
       });
-      openXrefExplorerTab();
+      openXrefExplorerTab("/xref");
     },
-    [payload]
+    [payload, jobId]
   );
 
   const baseName = (payload?.fileName ?? "output").replace(/\.[^.]+$/, "") || "output";
@@ -74,7 +152,10 @@ const XrefExplorerPage: React.FC = () => {
           <p className="text-sm text-muted-foreground">
             Não há dados de análise neste separador. Abra os xrefs a partir do pseudo-C (duplo-clique num símbolo e clique no número de menções na barra lateral).
           </p>
-          <Link to="/" className="inline-flex text-sm font-medium text-primary hover:underline">
+          <Link
+            to={jobId ? `/analysis/${encodeURIComponent(jobId)}` : "/"}
+            className="inline-flex text-sm font-medium text-primary hover:underline"
+          >
             Voltar ao início
           </Link>
         </main>
@@ -96,7 +177,7 @@ const XrefExplorerPage: React.FC = () => {
             </div>
           </div>
           <Link
-            to="/"
+            to={jobId ? `/analysis/${encodeURIComponent(jobId)}` : "/"}
             className="text-xs font-mono text-muted-foreground hover:text-primary transition-colors border border-border rounded-md px-3 py-1.5 bg-card/60"
           >
             Voltar à análise
