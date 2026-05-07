@@ -1,5 +1,5 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowDown, Code2, GitBranch, Terminal } from "lucide-react";
 import CodePanel from "@/components/CodePanel";
@@ -12,6 +12,39 @@ import {
   type XrefSessionPayload,
 } from "@/lib/cCodeXref";
 import { buildShortFileName } from "@/lib/artifactNaming";
+
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const MENTION_CONTEXT_LINES = 50;
+const MENTION_CHUNK_LINES = 1;
+const MENTION_WINDOW_MAX_LINES = 1200;
+const DEFAULT_MENTIONS_TO_SHOW = 10;
+
+function formatMentions(n: number): string {
+  if (n === 1) return "1 menção";
+  return `${n.toLocaleString()} menções`;
+}
+
+type MentionGroup = { start: number; end: number; lines: number[] };
+function groupMentionLines(lines: number[]): MentionGroup[] {
+  const sorted = [...lines].filter((x) => Number.isFinite(x)).sort((a, b) => a - b);
+  const out: MentionGroup[] = [];
+  let cur: MentionGroup | null = null;
+  for (const ln of sorted) {
+    if (!cur) {
+      cur = { start: ln, end: ln, lines: [ln] };
+      continue;
+    }
+    if (ln === cur.end + 1) {
+      cur.end = ln;
+      cur.lines.push(ln);
+      continue;
+    }
+    out.push(cur);
+    cur = { start: ln, end: ln, lines: [ln] };
+  }
+  if (cur) out.push(cur);
+  return out;
+}
 
 function snippetAroundLine(code: string, line: number, context = 3): string {
   const lines = code.split("\n");
@@ -34,129 +67,111 @@ function downloadTextFile(text: string, fileName: string): void {
 }
 
 const XrefExplorerPage: React.FC = () => {
-  const [payload] = useState<XrefSessionPayload | null>(() => readXrefSession());
+  const location = useLocation();
+  const { jobId } = useParams<{ jobId?: string }>();
+  const [payload, setPayload] = useState<XrefSessionPayload | null>(() => readXrefSession());
   const [scrollToLine, setScrollToLine] = useState<number | null>(null);
-  const [focusLine, setFocusLine] = useState<number | null>(null);
-  const [mentionWheelIdx, setMentionWheelIdx] = useState<number>(0);
   const [exportOpen, setExportOpen] = useState(false);
-  const wheelAccumRef = useRef(0);
-  const lastWheelAtRef = useRef(0);
-  const lastWheelStepAtRef = useRef(0);
+  const [windowFocusLine, setWindowFocusLine] = useState<number | null>(null);
+  const [expandedMentionsByNode, setExpandedMentionsByNode] = useState<Record<string, boolean>>({});
+
+  const wordFromQuery = useMemo(() => {
+    const params = new URLSearchParams(location.search ?? "");
+    const w = params.get("word");
+    return typeof w === "string" ? w.trim() : "";
+  }, [location.search]);
+
+  useEffect(() => {
+    // Se existe jobId no URL, carregamos o pseudo-C do backend e ignoramos a sessão local.
+    if (!jobId) return;
+    if (!wordFromQuery) return;
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/analysis/${encodeURIComponent(jobId)}`);
+        if (!res.ok) {
+          if (!cancelled) setPayload(null);
+          return;
+        }
+        const job = (await res.json()) as unknown;
+        const rec = (job && typeof job === "object" ? (job as Record<string, unknown>) : null) ?? {};
+
+        // Backends diferentes: alguns devolvem cCode no topo, outros dentro de staticResult.
+        const staticResult =
+          rec.staticResult && typeof rec.staticResult === "object"
+            ? (rec.staticResult as Record<string, unknown>)
+            : null;
+
+        const cCode =
+          typeof rec.cCode === "string"
+            ? rec.cCode
+            : typeof staticResult?.cCode === "string"
+              ? (staticResult.cCode as string)
+              : "";
+
+        const fileName =
+          typeof rec.fileName === "string"
+            ? rec.fileName
+            : typeof staticResult?.fileName === "string"
+              ? (staticResult.fileName as string)
+              : "output";
+
+        const flaggedIndicatorsRaw =
+          Array.isArray(rec.flaggedIndicators) ? rec.flaggedIndicators : Array.isArray(staticResult?.flaggedIndicators) ? staticResult?.flaggedIndicators : [];
+        const flaggedIndicators = (flaggedIndicatorsRaw as unknown[]).filter(
+          (x): x is string => typeof x === "string"
+        );
+
+        if (!cancelled) {
+          setPayload({
+            v: 1,
+            code: cCode,
+            word: wordFromQuery,
+            fileName,
+            flaggedIndicators,
+          });
+        }
+      } catch {
+        if (!cancelled) setPayload(null);
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [jobId, wordFromQuery]);
 
   const model = useMemo(() => {
     if (!payload?.code || !payload.word) return null;
     return buildXrefViewModel(payload.code, payload.word);
   }, [payload?.code, payload?.word]);
 
-  const functionRangesForXrefs = useMemo(() => {
-    if (!model) return null;
-    const ranges = model.orderedNodes
-      .map((n) => ({ start: n.startLine, end: n.endLine }))
-      .filter((r) => Number.isFinite(r.start) && Number.isFinite(r.end) && r.start >= 1 && r.end >= r.start)
-      .sort((a, b) => a.start - b.start || a.end - b.end);
-    // Dedup simples (ranges iguais)
-    const out: { start: number; end: number }[] = [];
-    for (const r of ranges) {
-      const prev = out[out.length - 1];
-      if (prev && prev.start === r.start && prev.end === r.end) continue;
-      out.push(r);
-    }
-    return out.length ? out : null;
-  }, [model]);
-
-  const allMentionLines = useMemo(() => {
-    if (!model) return [] as number[];
-    const s = new Set<number>();
-    for (const n of model.orderedNodes) for (const ln of n.mentionLines) s.add(ln);
-    return [...s].sort((a, b) => a - b);
-  }, [model]);
-
-  const activeMentionLine = allMentionLines.length ? allMentionLines[mentionWheelIdx] ?? null : null;
-  const activeNode = useMemo(() => {
-    if (!model || activeMentionLine == null) return null;
-    return model.orderedNodes.find((n) => n.mentionLines.includes(activeMentionLine)) ?? null;
-  }, [activeMentionLine, model]);
-
-  const initialFocusLine = useMemo(() => {
-    if (!model) return null;
-    const origin = model.origin;
-    if (origin && origin.mentionLines.length) return Math.min(...origin.mentionLines);
-    const first = model.orderedNodes[0];
-    if (first && first.mentionLines.length) return Math.min(...first.mentionLines);
-    return null;
-  }, [model]);
-
-  // Garantir que o painel abre já focado no símbolo.
-  React.useEffect(() => {
-    if (focusLine == null && initialFocusLine != null) setFocusLine(initialFocusLine);
-  }, [focusLine, initialFocusLine]);
-
-  // Sincronizar o índice do wheel com a linha atual (quando existe).
-  React.useEffect(() => {
-    if (!allMentionLines.length) return;
-    const ln = focusLine ?? scrollToLine ?? initialFocusLine;
-    if (ln == null) return;
-    const idx = allMentionLines.indexOf(ln);
-    if (idx >= 0) setMentionWheelIdx(idx);
-  }, [allMentionLines, focusLine, initialFocusLine, scrollToLine]);
-
-  const goToMentionIdx = useCallback(
-    (idx: number) => {
-      if (!allMentionLines.length) return;
-      const clamped = ((idx % allMentionLines.length) + allMentionLines.length) % allMentionLines.length;
-      const ln = allMentionLines[clamped];
-      if (!ln) return;
-      setMentionWheelIdx(clamped);
-      setFocusLine(ln);
+  // Ao abrir a página, focar automaticamente a primeira menção (origem) em modo janela,
+  // para evitar renderizar as primeiras 4000 linhas do ficheiro.
+  useEffect(() => {
+    if (!model || model.orderedNodes.length === 0) return;
+    if (windowFocusLine != null) return; // não sobrescrever foco do utilizador
+    const origin = model.orderedNodes.find((n) => n.isOrigin) ?? model.orderedNodes[0];
+    const ln = origin ? Math.min(...origin.mentionLines) : null;
+    if (ln != null && Number.isFinite(ln)) {
+      setWindowFocusLine(ln);
       setScrollToLine(ln);
       setTimeout(() => setScrollToLine(null), 1200);
-    },
-    [allMentionLines]
-  );
+    }
+  }, [model, windowFocusLine]);
 
-  const handleMentionsWheel = useCallback(
-    (e: React.WheelEvent<HTMLElement>) => {
-      if (!allMentionLines.length) return;
-      const dy = e.deltaY;
-      if (dy === 0) return;
-      e.preventDefault();
-      // Muitos devices disparam vários eventos por "tick"/notch.
-      // Fazemos acumulação + threshold para garantir no máximo 1 passo por notch.
-      const now = performance.now();
-      // Rate-limit: nunca mais do que 1 passo a cada 90ms
-      if (now - lastWheelStepAtRef.current < 90) return;
-      if (now - lastWheelAtRef.current > 180) {
-        wheelAccumRef.current = 0;
-      }
-      lastWheelAtRef.current = now;
-
-      // Normalizar por deltaMode: 0=pixels, 1=lines, 2=pages
-      const mode = (e.deltaMode ?? 0) as number;
-      const dyPx =
-        mode === 1 ? dy * 16 : mode === 2 ? dy * 400 : dy; // aproximações razoáveis
-
-      const threshold = 120; // ~1 notch típico
-      // Se vier um delta gigante num único evento, ainda assim: só 1 passo.
-      if (Math.abs(dyPx) >= threshold) {
-        wheelAccumRef.current = 0;
-        lastWheelStepAtRef.current = now;
-        goToMentionIdx(mentionWheelIdx + (dyPx > 0 ? 1 : -1));
-        return;
-      }
-
-      wheelAccumRef.current += dyPx;
-      if (wheelAccumRef.current >= threshold) {
-        wheelAccumRef.current = 0;
-        lastWheelStepAtRef.current = now;
-        goToMentionIdx(mentionWheelIdx + 1);
-      } else if (wheelAccumRef.current <= -threshold) {
-        wheelAccumRef.current = 0;
-        lastWheelStepAtRef.current = now;
-        goToMentionIdx(mentionWheelIdx - 1);
-      }
-    },
-    [allMentionLines.length, goToMentionIdx, mentionWheelIdx]
-  );
+  const activeNode = useMemo(() => {
+    if (!model || model.orderedNodes.length === 0) return null;
+    if (windowFocusLine == null) return model.orderedNodes.find((n) => n.isOrigin) ?? model.orderedNodes[0];
+    return (
+      model.orderedNodes.find((n) => windowFocusLine >= n.startLine && windowFocusLine <= n.endLine) ??
+      model.orderedNodes.find((n) => n.mentionLines.includes(windowFocusLine)) ??
+      model.orderedNodes.find((n) => n.isOrigin) ??
+      model.orderedNodes[0]
+    );
+  }, [model, windowFocusLine]);
 
   const nameById = useMemo(() => {
     const m = new Map<string, string>();
@@ -169,6 +184,13 @@ const XrefExplorerPage: React.FC = () => {
     (word: string) => {
       const w = word.trim();
       if (w.length < 2 || !payload) return;
+      setWindowFocusLine(null);
+      // Preferir URL com jobId (permalink) quando disponível
+      if (jobId) {
+        openXrefExplorerTab(`/analysis/${encodeURIComponent(jobId)}/xref?word=${encodeURIComponent(w)}`);
+        return;
+      }
+
       writeXrefSession({
         v: 1,
         code: payload.code,
@@ -176,9 +198,9 @@ const XrefExplorerPage: React.FC = () => {
         fileName: payload.fileName,
         flaggedIndicators: payload.flaggedIndicators,
       });
-      openXrefExplorerTab();
+      openXrefExplorerTab("/xref");
     },
-    [payload]
+    [payload, jobId]
   );
 
   const baseName = (payload?.fileName ?? "output").replace(/\.[^.]+$/, "") || "output";
@@ -208,7 +230,10 @@ const XrefExplorerPage: React.FC = () => {
           <p className="text-sm text-muted-foreground">
             Não há dados de análise neste separador. Abra os xrefs a partir do pseudo-C (duplo-clique num símbolo e clique no número de menções na barra lateral).
           </p>
-          <Link to="/" className="inline-flex text-sm font-medium text-primary hover:underline">
+          <Link
+            to={jobId ? `/analysis/${encodeURIComponent(jobId)}` : "/"}
+            className="inline-flex text-sm font-medium text-primary hover:underline"
+          >
             Voltar ao início
           </Link>
         </main>
@@ -230,7 +255,7 @@ const XrefExplorerPage: React.FC = () => {
             </div>
           </div>
           <Link
-            to="/"
+            to={jobId ? `/analysis/${encodeURIComponent(jobId)}` : "/"}
             className="text-xs font-mono text-muted-foreground hover:text-primary transition-colors border border-border rounded-md px-3 py-1.5 bg-card/60"
           >
             Voltar à análise
@@ -278,10 +303,29 @@ const XrefExplorerPage: React.FC = () => {
                         : node.startLine;
                   const openFunctionStartLine =
                     node.isOrigin && node.originDeclLine != null ? node.originDeclLine : node.startLine;
+
+                  const isGlobal = node.id === "__global__" || node.name.toLowerCase().includes("global");
+                  const mentionGroups = groupMentionLines(node.mentionLines);
+                  const isExpanded = !!expandedMentionsByNode[node.id];
+                  const flatMentionLines = mentionGroups.flatMap((g) => g.lines);
+                  const shownLines = isExpanded
+                    ? flatMentionLines
+                    : flatMentionLines.slice(0, DEFAULT_MENTIONS_TO_SHOW);
                   const callees = model.edges
                     .filter((e) => e.fromId === node.id)
                     .map((e) => nameById.get(e.toId) ?? e.toId);
                   const showArrow = idx < model.orderedNodes.length - 1;
+
+                  // Para (global), o range L1–L... não diz nada. Mostrar um range informativo.
+                  const displayStart =
+                    isGlobal && node.mentionLines.length
+                      ? Math.max(1, Math.min(...node.mentionLines) - MENTION_CONTEXT_LINES)
+                      : node.startLine;
+                  const displayEnd =
+                    isGlobal && node.mentionLines.length
+                      ? Math.min(payload.code.split("\n").length, Math.max(...node.mentionLines) + MENTION_CONTEXT_LINES)
+                      : node.endLine;
+
                   return (
                     <div key={node.id}>
                       <div
@@ -293,14 +337,14 @@ const XrefExplorerPage: React.FC = () => {
                         role="button"
                         tabIndex={0}
                         onClick={() => {
-                          setFocusLine(openFunctionStartLine);
+                          setWindowFocusLine(openFunctionStartLine);
                           setScrollToLine(openFunctionStartLine);
                           setTimeout(() => setScrollToLine(null), 1200);
                         }}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === " ") {
                             e.preventDefault();
-                            setFocusLine(openFunctionStartLine);
+                            setWindowFocusLine(openFunctionStartLine);
                             setScrollToLine(openFunctionStartLine);
                             setTimeout(() => setScrollToLine(null), 1200);
                           }
@@ -313,8 +357,7 @@ const XrefExplorerPage: React.FC = () => {
                           )}
                         </div>
                         <div className="text-muted-foreground text-[10px] mb-1.5">
-                          L{node.startLine}–L{node.endLine} · {node.mentionLines.length} menção
-                          {node.mentionLines.length !== 1 ? "ões" : ""}
+                          L{displayStart}–L{displayEnd} · {formatMentions(node.mentionLines.length)}
                         </div>
                         {callees.length > 0 && (
                           <div className="text-[10px] text-muted-foreground mb-1.5">
@@ -325,29 +368,45 @@ const XrefExplorerPage: React.FC = () => {
                           {snippetAroundLine(payload.code, previewLine, 2)}
                         </pre>
                         <div
-                          className="mt-1.5 flex flex-wrap gap-1 max-h-16 overflow-auto"
-                          title="Scroll para ver mais menções"
+                          className="mt-1.5 flex flex-wrap gap-1 items-center"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          {node.mentionLines.map((ln) => (
+                          {shownLines.map((ln) => (
                             <button
                               key={ln}
                               type="button"
                               onClick={() => {
-                                const idx = allMentionLines.indexOf(ln);
-                                if (idx >= 0) goToMentionIdx(idx);
-                                else {
-                                  setFocusLine(ln);
-                                  setScrollToLine(ln);
-                                  setTimeout(() => setScrollToLine(null), 1200);
-                                }
+                                // Mostrar uma janela leve à volta da menção (±N linhas) e ir "carregando"
+                                // mais à medida que o utilizador faz scroll.
+                                setWindowFocusLine(ln);
+                                setScrollToLine(ln);
+                                setTimeout(() => setScrollToLine(null), 2200);
                               }}
                               className="rounded px-1.5 py-0.5 text-[10px] bg-secondary/80 text-foreground hover:bg-primary/20 hover:text-primary transition-colors"
                             >
                               L{ln}
                             </button>
                           ))}
+                          {flatMentionLines.length > DEFAULT_MENTIONS_TO_SHOW && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedMentionsByNode((prev) => ({ ...prev, [node.id]: !isExpanded }))
+                              }
+                              className="rounded px-1.5 py-0.5 text-[10px] border border-border/60 bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
+                              title={isExpanded ? "Mostrar menos menções" : "Mostrar mais menções"}
+                            >
+                              {isExpanded
+                                ? "Mostrar menos"
+                                : `+${(flatMentionLines.length - DEFAULT_MENTIONS_TO_SHOW).toLocaleString()}`}
+                            </button>
+                          )}
                         </div>
+                        {mentionGroups.length > 1 && (
+                          <div className="mt-1 text-[10px] text-muted-foreground">
+                            {mentionGroups.length.toLocaleString()} grupo{mentionGroups.length !== 1 ? "s" : ""} de menções
+                          </div>
+                        )}
                       </div>
                       {showArrow && (
                         <div className="flex justify-center py-1 text-primary/70">
@@ -387,8 +446,10 @@ const XrefExplorerPage: React.FC = () => {
                 embedded
                 compactHeader
                 scrollToLine={scrollToLine}
-                displayLineRanges={functionRangesForXrefs}
-                showDisplayRangesNotice={false}
+                windowFocusLine={windowFocusLine}
+                windowContextLines={MENTION_CONTEXT_LINES}
+                windowChunkLines={MENTION_CHUNK_LINES}
+                windowMaxLines={MENTION_WINDOW_MAX_LINES}
                 selectedWord={payload.word}
                 onWordSelect={handleWordSelect}
                 flaggedIndicators={payload.flaggedIndicators ?? undefined}

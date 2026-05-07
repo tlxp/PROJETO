@@ -48,6 +48,8 @@ interface CodePanelProps {
   windowContextLines?: number;
   /** Quantas linhas deslocar a janela por vez ao fazer scroll. Default: 400. */
   windowChunkLines?: number;
+  /** Limite máximo de linhas a manter em memória/render no modo janela (antes de começar a deslizar). Default: 2500. */
+  windowMaxLines?: number;
   /** Intervalo de linhas a destacar temporariamente ao clicar na barra lateral (scroll + destaque que desaparece). */
   highlightedLineRange?: { start: number; end: number } | null;
   /** Intervalos das funções suspeitas: destaque permanente apenas na primeira e última linha de cada. */
@@ -108,6 +110,7 @@ const CodePanel: React.FC<CodePanelProps> = ({
   windowFocusLine,
   windowContextLines = 1000,
   windowChunkLines = 400,
+  windowMaxLines = 2500,
   highlightedLineRange,
   permanentHighlightRanges,
   functionHighlights,
@@ -134,6 +137,8 @@ const CodePanel: React.FC<CodePanelProps> = ({
   const lastViewportNotifyAtRef = useRef<number>(0);
   const lastViewportLineRef = useRef<number | null>(null);
   const lastScrollTopRef = useRef<number>(0);
+  const lastWheelShiftAtRef = useRef<number>(0);
+  const wheelRemainderPxRef = useRef<number>(0);
 
   const lines = useMemo(() => code.split("\n"), [code]);
   const totalLines = lines.length;
@@ -255,6 +260,17 @@ const CodePanel: React.FC<CodePanelProps> = ({
       windowStart,
     ]
   );
+
+  const ensureRowHeight = useCallback((): number => {
+    if (rowHeightRef.current != null && rowHeightRef.current > 0) return rowHeightRef.current;
+    const el = scrollRef.current;
+    if (!el) return 18;
+    const tr = el.querySelector<HTMLTableRowElement>("tr[data-line]");
+    if (!tr) return 18;
+    const h = tr.getBoundingClientRect().height;
+    if (h > 0) rowHeightRef.current = h;
+    return rowHeightRef.current ?? 18;
+  }, []);
 
   useEffect(() => {
     if (!isWindowMode) {
@@ -438,7 +454,7 @@ const CodePanel: React.FC<CodePanelProps> = ({
     const nearTop = el.scrollTop < thresholdPx;
     const nearBottom = el.scrollHeight - (el.scrollTop + el.clientHeight) < thresholdPx;
     // Evita loops que "carregam tudo": só expande quando o utilizador realmente moveu o scroll.
-    const rowH = rowHeightRef.current ?? 18;
+    const rowH = ensureRowHeight();
     const speedLines = Math.max(1, Math.min(200, Math.round(Math.abs(delta) / Math.max(1, rowH))));
     if (delta > 0 && nearBottom) expandWindow("down", speedLines);
     else if (delta < 0 && nearTop) expandWindow("up", speedLines);
@@ -449,26 +465,49 @@ const CodePanel: React.FC<CodePanelProps> = ({
     onViewportLineChange,
     totalLines,
     windowEnd,
+    windowMaxLines,
     windowSize,
     windowStart,
   ]);
 
-  const handleWheel = useCallback(
-    (e: React.WheelEvent<HTMLDivElement>) => {
-      // Quando não há scroll (conteúdo ainda curto), o onScroll pode não disparar.
-      // Neste caso, usamos wheel/trackpad para expandir a janela.
-      if (!isWindowMode) return;
-      const el = scrollRef.current;
-      if (!el) return;
-      const canScroll = el.scrollHeight > el.clientHeight + 1;
-      if (canScroll) return;
-      // Quando não há scroll ainda, usar o "impulso" do wheel para carregar mais rápido.
-      const rowH = rowHeightRef.current ?? 18;
-      const speedLines = Math.max(1, Math.min(200, Math.round(Math.abs(e.deltaY) / Math.max(1, rowH))));
-      if (e.deltaY > 0) expandWindow("down", speedLines);
-      else if (e.deltaY < 0) expandWindow("up", speedLines);
+  const shiftWindowByWheel = useCallback(
+    (direction: "up" | "down", linesToShift: number) => {
+      if (!isWindowMode || windowStart == null || windowEnd == null) return;
+      if (totalLines <= windowSize) return;
+      const now = Date.now();
+      // Wheel dispara muito rápido; queremos um "tick" previsível.
+      if (now - lastWheelShiftAtRef.current < 16) return;
+      lastWheelShiftAtRef.current = now;
+
+      const chunk = Math.max(1, Math.floor(linesToShift));
+      const maxKeep = Math.max(windowSize, windowMaxLines);
+      const rowH = ensureRowHeight();
+
+      if (direction === "down" && windowEnd < totalLines) {
+        const newEnd = Math.min(totalLines, windowEnd + chunk);
+        let newStart = windowStart;
+        const expandedSize = newEnd - newStart + 1;
+        if (expandedSize > maxKeep) newStart = Math.max(1, newEnd - maxKeep + 1);
+        if (newStart !== windowStart || newEnd !== windowEnd) {
+          const deltaStart = newStart - windowStart;
+          if (deltaStart !== 0) pendingScrollAdjustPxRef.current += -deltaStart * rowH;
+          setWindowStart(newStart);
+          setWindowEnd(newEnd);
+        }
+      } else if (direction === "up" && windowStart > 1) {
+        const newStart = Math.max(1, windowStart - chunk);
+        let newEnd = windowEnd;
+        const expandedSize = newEnd - newStart + 1;
+        if (expandedSize > maxKeep) newEnd = Math.min(totalLines, newStart + maxKeep - 1);
+        if (newStart !== windowStart || newEnd !== windowEnd) {
+          const deltaStart = newStart - windowStart;
+          if (deltaStart !== 0) pendingScrollAdjustPxRef.current += -deltaStart * rowH;
+          setWindowStart(newStart);
+          setWindowEnd(newEnd);
+        }
+      }
     },
-    [expandWindow, isWindowMode]
+    [ensureRowHeight, isWindowMode, totalLines, windowChunkLines, windowEnd, windowMaxLines, windowSize, windowStart]
   );
 
   useLayoutEffect(() => {
@@ -672,7 +711,34 @@ const CodePanel: React.FC<CodePanelProps> = ({
       <div
         ref={scrollRef}
         onScroll={disableScroll ? undefined : handleScroll}
-        onWheel={disableScroll ? undefined : handleWheel}
+        onWheel={
+          disableScroll
+            ? undefined
+            : (e) => {
+                // Em modo janela, pode não existir overflow suficiente para disparar "scroll".
+                // O wheel deve ainda assim permitir carregar mais contexto progressivamente.
+                if (!isWindowMode) return;
+
+                const rowH = ensureRowHeight();
+
+                // DOWN: acompanhar velocidade (deltaY -> N linhas, com acumulador).
+                if (e.deltaY > 0) {
+                  const px = e.deltaY + wheelRemainderPxRef.current;
+                  const denom = Math.max(8, rowH);
+                  const lines = Math.trunc(Math.abs(px) / denom);
+                  wheelRemainderPxRef.current = px - Math.sign(px) * lines * denom;
+                  if (lines <= 0) return;
+                  shiftWindowByWheel("down", lines);
+                  return;
+                }
+
+                // UP: 1 por tick, sem acumular velocidade.
+                if (e.deltaY < 0) {
+                  wheelRemainderPxRef.current = 0;
+                  shiftWindowByWheel("up", 1);
+                }
+              }
+        }
         className={`flex-1 min-h-0 h-full ${disableScroll ? "overflow-hidden" : "overflow-auto"} code-block p-0 ${
           compactHeader ? "min-h-0" : ""
         }`}

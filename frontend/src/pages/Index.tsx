@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Terminal, Play, Cpu, FileCode2, FileText, Code2, X, ChevronLeft, ChevronRight, FileSearch } from "lucide-react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -550,6 +550,7 @@ function extractObfuscationIndicatorsFromReport(report: string): string | null {
 const Index = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { jobId: jobIdFromPath } = useParams<{ jobId?: string }>();
   const [file, setFile] = useState<File | null>(null);
   const [fileContent, setFileContent] = useState<string>("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -623,7 +624,8 @@ const Index = () => {
   // Suporte a arranque externo (por exemplo, WPF) que abre o site já com um jobId na query string.
   useEffect(() => {
     const params = new URLSearchParams(location.search ?? "");
-    const jobId = params.get("jobId");
+    const jobIdFromQuery = params.get("jobId");
+    const jobId = jobIdFromPath ?? jobIdFromQuery;
     if (!jobId) return;
     if (jobId === lastExternalJobId) return;
 
@@ -646,6 +648,11 @@ const Index = () => {
       const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
       try {
+        // Canonicalizar URL: se vier de query (?jobId=...), troca para /analysis/:jobId
+        if (!cancelled && !jobIdFromPath && jobIdFromQuery) {
+          navigate(`/analysis/${encodeURIComponent(jobId)}`, { replace: true });
+        }
+
         let attempts = 0;
         const maxAttempts = 300; // ~5 minutos de espera máxima
         let finalJob: unknown = null;
@@ -740,7 +747,7 @@ const Index = () => {
     return () => {
       cancelled = true;
     };
-  }, [location.search, lastExternalJobId]);
+  }, [location.search, lastExternalJobId, jobIdFromPath, navigate]);
 
   // Demo rápida com resultado mock, para testar o layout das 3 colunas sem chamar o backend
   const loadMockDemo = useCallback(() => {
@@ -1171,6 +1178,8 @@ const Index = () => {
       }
 
       setResultJobId(submitData.jobId);
+      // Depois de criar um job, coloca o jobId no URL (permalink) para back/forward funcionar bem.
+      navigate(`/analysis/${encodeURIComponent(submitData.jobId)}`, { replace: false });
       setAnalysisResult(chosen);
       setShowResults(true);
     } catch (e) {
@@ -1178,7 +1187,7 @@ const Index = () => {
     } finally {
       setIsAnalyzing(false);
     }
-  }, [file, analysisMode]);
+  }, [file, analysisMode, navigate]);
 
   const result = analysisResult;
 
@@ -1484,6 +1493,15 @@ const Index = () => {
 
   const openXrefExplorerFromSidebar = useCallback(() => {
     if (!selectedWord || !result?.cCode || expandedPanel !== "c") return;
+    const jobId = resultJobId ?? lastExternalJobId;
+    // Se temos jobId, usamos URL dedicado (não depende de sessionStorage e funciona em separador novo).
+    if (jobId) {
+      const href = `/analysis/${encodeURIComponent(jobId)}/xref?word=${encodeURIComponent(selectedWord)}`;
+      openXrefExplorerTab(href, { forceNewTab: true });
+      return;
+    }
+
+    // Fallback (resultados sem jobId): mantém o fluxo antigo via storage.
     try {
       writeXrefSession({
         v: 1,
@@ -1492,11 +1510,19 @@ const Index = () => {
         fileName: baseDownloadName,
         flaggedIndicators: result.flaggedIndicators,
       });
-      openXrefExplorerTab();
+      openXrefExplorerTab("/xref", { forceNewTab: true });
     } catch {
-      /* sessionStorage indisponível ou quota */
+      /* storage indisponível ou quota */
     }
-  }, [selectedWord, result?.cCode, result?.flaggedIndicators, expandedPanel, baseDownloadName]);
+  }, [
+    selectedWord,
+    result?.cCode,
+    result?.flaggedIndicators,
+    expandedPanel,
+    baseDownloadName,
+    resultJobId,
+    lastExternalJobId,
+  ]);
 
   // Timer/animação para a coluna de referências desaparecer ao fim de alguns segundos
   useEffect(() => {

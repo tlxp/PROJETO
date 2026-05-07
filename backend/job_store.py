@@ -25,6 +25,14 @@ def _db_path() -> Path:
     return Path(config.ANALYSIS_DB_PATH)
 
 
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    try:
+        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+        return {str(r[1]) for r in rows}  # (cid, name, type, notnull, dflt, pk)
+    except Exception:
+        return set()
+
+
 def init_db() -> None:
     with _LOCK:
         p = _db_path()
@@ -47,6 +55,19 @@ def init_db() -> None:
                 """
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_analyses_updated_at ON analyses(updated_at)")
+            # Migrações "soft" (ALTER TABLE) para manter compatibilidade com DBs antigas
+            cols = _table_columns(conn, "analyses")
+            migrations: list[tuple[str, str]] = [
+                ("pipeline_version", "TEXT NULL"),
+                ("reused_from_job_id", "TEXT NULL"),
+                ("out_zip_path", "TEXT NULL"),
+                ("decompiled_zip_path", "TEXT NULL"),
+                ("archived_at", "TEXT NULL"),
+                ("artifacts_deleted_at", "TEXT NULL"),
+            ]
+            for name, ddl in migrations:
+                if name not in cols:
+                    conn.execute(f"ALTER TABLE analyses ADD COLUMN {name} {ddl}")
             conn.commit()
         finally:
             conn.close()
@@ -75,6 +96,137 @@ def insert_job(job_id: str, analysis_type: str, file_name: str, sha256: str, sta
         finally:
             conn.close()
 
+
+def update_pipeline_version(job_id: str, pipeline_version: str) -> None:
+    init_db()
+    with _LOCK:
+        conn = sqlite3.connect(str(_db_path()))
+        try:
+            conn.execute(
+                """
+                UPDATE analyses
+                   SET pipeline_version = ?,
+                       updated_at = ?
+                 WHERE job_id = ?
+                """,
+                (pipeline_version, _utc_now_iso(), job_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def mark_reused(job_id: str, reused_from_job_id: str) -> None:
+    init_db()
+    with _LOCK:
+        conn = sqlite3.connect(str(_db_path()))
+        try:
+            conn.execute(
+                """
+                UPDATE analyses
+                   SET reused_from_job_id = ?,
+                       updated_at = ?
+                 WHERE job_id = ?
+                """,
+                (reused_from_job_id, _utc_now_iso(), job_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def set_archive_paths(job_id: str, out_zip_path: str | None, decompiled_zip_path: str | None) -> None:
+    init_db()
+    with _LOCK:
+        conn = sqlite3.connect(str(_db_path()))
+        try:
+            conn.execute(
+                """
+                UPDATE analyses
+                   SET out_zip_path = COALESCE(?, out_zip_path),
+                       decompiled_zip_path = COALESCE(?, decompiled_zip_path),
+                       archived_at = ?,
+                       updated_at = ?
+                 WHERE job_id = ?
+                """,
+                (out_zip_path, decompiled_zip_path, _utc_now_iso(), _utc_now_iso(), job_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def mark_artifacts_deleted(job_id: str) -> None:
+    init_db()
+    with _LOCK:
+        conn = sqlite3.connect(str(_db_path()))
+        try:
+            conn.execute(
+                """
+                UPDATE analyses
+                   SET artifacts_deleted_at = ?,
+                       updated_at = ?
+                 WHERE job_id = ?
+                """,
+                (_utc_now_iso(), _utc_now_iso(), job_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def find_completed_by_sha256(sha256: str, analysis_type: str | None = None, pipeline_version: str | None = None) -> Optional[dict]:
+    """
+    Procura um job COMPLETED por sha256, opcionalmente filtrando por analysis_type e pipeline_version.
+    Devolve o row "normalizado" (mesmo formato de get_job_row).
+    """
+    init_db()
+    with _LOCK:
+        conn = sqlite3.connect(str(_db_path()))
+        conn.row_factory = sqlite3.Row
+        try:
+            where = ["status = 'completed'", "sha256 = ?"]
+            args: list[Any] = [sha256]
+            if analysis_type:
+                where.append("analysis_type = ?")
+                args.append(analysis_type)
+            if pipeline_version:
+                where.append("pipeline_version = ?")
+                args.append(pipeline_version)
+            sql = f"SELECT * FROM analyses WHERE {' AND '.join(where)} ORDER BY updated_at DESC LIMIT 1"
+            row = conn.execute(sql, tuple(args)).fetchone()
+            if not row:
+                return None
+            d = dict(row)
+        finally:
+            conn.close()
+
+    def _loads(s: Optional[str]) -> Any | None:
+        if not s:
+            return None
+        try:
+            return json.loads(s)
+        except Exception:
+            return None
+
+    return {
+        "id": d["job_id"],
+        "analysisType": d["analysis_type"],
+        "status": d["status"],
+        "error": d.get("error"),
+        "fileName": d["file_name"],
+        "sha256": d["sha256"],
+        "createdAt": d["created_at"],
+        "updatedAt": d["updated_at"],
+        "staticResult": _loads(d.get("static_json")),
+        "dynamicResult": _loads(d.get("dynamic_json")),
+        "pipelineVersion": d.get("pipeline_version"),
+        "reusedFromJobId": d.get("reused_from_job_id"),
+        "outZipPath": d.get("out_zip_path"),
+        "decompiledZipPath": d.get("decompiled_zip_path"),
+        "archivedAt": d.get("archived_at"),
+        "artifactsDeletedAt": d.get("artifacts_deleted_at"),
+    }
 
 def update_status(job_id: str, status: str, error: Optional[str] = None) -> None:
     init_db()

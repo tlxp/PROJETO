@@ -43,7 +43,7 @@ from pathlib import Path
 from typing import Callable, Dict, Optional
 
 from artifact_naming import short_stem
-
+import config
 
 def _jdk_root_has_java_bin(home: Path) -> bool:
     name = "java.exe" if sys.platform == "win32" else "java"
@@ -421,6 +421,22 @@ def decompile_binary_to_c(
                     progress_callback(100.0)
                 except Exception:
                     pass
+
+            # Poupança de espaço: opcionalmente remover o projeto Ghidra (.rep/.gpr) após gerar o pseudo-C.
+            try:
+                if not getattr(config, "KEEP_GHIDRA_PROJECT", True):
+                    try:
+                        if project_dir.exists() and project_dir.is_dir():
+                            shutil.rmtree(project_dir)
+                    except Exception:
+                        pass
+                    try:
+                        if project_file.exists():
+                            project_file.unlink()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
     except Exception as e:
         result["error"] = str(e)
         if "GHIDRA_INSTALL_DIR" in str(e) or "Ghidra" in str(e):

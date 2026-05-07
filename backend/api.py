@@ -34,6 +34,7 @@ from analysis_jobs import (
     summarize_c_code,
 )
 import job_store
+from storage_maintenance import estimate_storage, cleanup_job_artifacts, archive_cold_jobs, read_text_artifact_from_job
 
 logging.basicConfig(
     level=logging.INFO,
@@ -52,6 +53,28 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def _startup():
+    # Garantir DB/migrações e diretórios de data.
+    try:
+        job_store.init_db()
+        Path(config.REPORTS_DIR).mkdir(parents=True, exist_ok=True)
+        Path(config.DECOMPILED_DIR).mkdir(parents=True, exist_ok=True)
+        Path(config.SANDBOX_JOBS_DIR).mkdir(parents=True, exist_ok=True)
+    except Exception:
+        logger.exception("Falha no startup ao inicializar diretórios/DB.")
+
+    # Retenção/arquivo "soft": falhas nunca devem impedir o servidor de arrancar.
+    try:
+        cleanup_job_artifacts(config.JOBS_RETENTION_DAYS, config.JOBS_MAX_COUNT)
+    except Exception:
+        pass
+    try:
+        archive_cold_jobs(config.COLD_ARCHIVE_DAYS)
+    except Exception:
+        pass
 
 class StaticAnalysisUpload(BaseModel):
     """Payload enviado pelo WPF com um resultado de análise estática já concluído.
@@ -76,6 +99,24 @@ def _read_file_safe(path: str | None, encoding: str = "utf-8", errors: str = "re
         return ""
     p = Path(path)
     if not p.exists():
+        # Transparência: se o path aponta para um artefacto dentro de sandbox_jobs/<job_id>/out/
+        # mas out/ foi arquivado em out.zip, tentar ler do zip.
+        try:
+            base = Path(config.SANDBOX_JOBS_DIR).resolve()
+            rp = p.resolve()
+            if base in rp.parents:
+                # procurar ".../sandbox_jobs/<job_id>/out/<rel>"
+                parts = list(rp.parts)
+                # encontrar index de sandbox_jobs e job_id
+                if "sandbox_jobs" in parts:
+                    i = parts.index("sandbox_jobs")
+                    if i + 2 < len(parts) and parts[i + 2] == "out":
+                        job_id = parts[i + 1]
+                        rel = str(Path(*parts[i + 3 :])).replace("\\", "/")
+                        txt = read_text_artifact_from_job(job_id, rel)
+                        return txt or ""
+        except Exception:
+            pass
         return ""
     try:
         with open(p, encoding=encoding, errors=errors) as f:
@@ -721,3 +762,52 @@ async def list_analyses(limit: int = 50, offset: int = 0) -> dict:
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/api/storage/estimate")
+async def storage_estimate() -> dict:
+    """Estimativa de espaço por categoria (para UI de manutenção)."""
+    est = estimate_storage(project_root=config.PROJECT_ROOT)
+    return {
+        "paths": {
+            "dataDir": str(getattr(config, "DATA_DIR", "")),
+            "sandboxJobsDir": str(config.SANDBOX_JOBS_DIR),
+            "reportsDir": str(config.REPORTS_DIR),
+            "decompiledDir": str(config.DECOMPILED_DIR),
+        },
+        "bytes": {
+            "sandboxJobs": est.sandbox_jobs_bytes,
+            "reports": est.reports_bytes,
+            "decompiled": est.decompiled_bytes,
+            "pythonCache": est.python_cache_bytes,
+            "wpfBuild": est.wpf_build_bytes,
+            "frontendDist": est.frontend_dist_bytes,
+            "total": est.total_bytes,
+        },
+    }
+
+
+class StorageCleanupRequest(BaseModel):
+    retentionDays: int = 30
+    keepMostRecent: int = 200
+
+
+@app.post("/api/storage/cleanup")
+async def storage_cleanup(req: StorageCleanupRequest) -> dict:
+    """
+    Limpeza segura (soft) de artefactos antigos: remove apenas conteúdo de disco
+    em sandbox_jobs/<job_id> para jobs COMPLETED/FAILED, mantendo DB.
+    """
+    result = cleanup_job_artifacts(req.retentionDays, req.keepMostRecent)
+    return {"ok": True, "result": result}
+
+
+class StorageArchiveRequest(BaseModel):
+    olderThanDays: int = 30
+
+
+@app.post("/api/storage/archive")
+async def storage_archive(req: StorageArchiveRequest) -> dict:
+    """Arquivo frio: zip de out/ e remoção do diretório original."""
+    result = archive_cold_jobs(req.olderThanDays)
+    return {"ok": True, "result": result}

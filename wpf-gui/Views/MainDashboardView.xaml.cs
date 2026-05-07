@@ -367,6 +367,26 @@ public partial class MainDashboardView : UserControl
         vmWindow.Show();
     }
 
+    private void StorageMaintenanceButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var w = new StorageMaintenanceWindow
+            {
+                Owner = Window.GetWindow(this)
+            };
+            w.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Não foi possível abrir a janela de manutenção.\n\n{ex.Message}",
+                "RAT Analyzer",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
     private static bool IsRunningAsAdministrator()
     {
         try

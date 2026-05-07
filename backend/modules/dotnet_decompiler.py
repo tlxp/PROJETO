@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Optional, Dict
 
 from artifact_naming import short_stem
+import config
 
 
 class DotNetDecompiler:
@@ -242,6 +243,27 @@ class DotNetDecompiler:
             self._consolidate_cs_files(cs_files, consolidated_file)
             result["consolidated_file"] = str(consolidated_file)
             result["files_count"] = len(cs_files)
+
+            # Poupança de espaço: por defeito, manter apenas o consolidado (opcional).
+            # Mantemos a árvore ILSpy apenas se config.KEEP_ILSPY_TREE estiver ativo.
+            try:
+                if not getattr(config, "KEEP_ILSPY_TREE", True):
+                    for f in output_dir.rglob("*.cs"):
+                        if f.resolve() == consolidated_file.resolve():
+                            continue
+                        try:
+                            f.unlink()
+                        except Exception:
+                            pass
+                    # Remover diretórios vazios
+                    for d in sorted([p for p in output_dir.rglob("*") if p.is_dir()], key=lambda p: len(str(p)), reverse=True):
+                        try:
+                            if not any(d.iterdir()):
+                                d.rmdir()
+                        except Exception:
+                            pass
+            except Exception:
+                pass
 
             result["success"] = True
             return result

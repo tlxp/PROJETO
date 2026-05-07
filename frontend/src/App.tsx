@@ -18,6 +18,11 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
+          {/* Rotas com jobId (permalinks) */}
+          <Route path="/analysis/:jobId" element={<Index />} />
+          <Route path="/analysis/:jobId/xref" element={<XrefExplorerPage />} />
+
+          {/* Back-compat */}
           <Route path="/xref" element={<XrefExplorerPage />} />
           <Route path="/resultados" element={<ResultadosPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
