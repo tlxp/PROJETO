@@ -6,6 +6,8 @@ Gera listing em assembly (x86/x64) a partir do PE para binários sem metadados .
 from pathlib import Path
 from typing import Dict, Optional
 
+from artifact_naming import short_stem
+
 # Constantes PE (IMAGE_FILE_HEADER.Machine)
 IMAGE_FILE_MACHINE_I386 = 0x014C
 IMAGE_FILE_MACHINE_AMD64 = 0x8664
@@ -65,7 +67,8 @@ def disassemble_pe(file_path: str, output_path: Optional[str] = None, output_roo
         result["error"] = f"Arquitetura não suportada para desmontagem: Machine=0x{machine:X}"
         return result
 
-    out_file = Path(output_path) if output_path else (Path(output_root).resolve() / path.stem / f"{path.stem}.asm")
+    sstem = short_stem(path.stem)
+    out_file = Path(output_path) if output_path else (Path(output_root).resolve() / sstem / f"{sstem}.asm")
     out_file.parent.mkdir(parents=True, exist_ok=True)
 
     lines = []

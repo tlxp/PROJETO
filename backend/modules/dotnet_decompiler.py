@@ -10,6 +10,8 @@ import pefile
 from pathlib import Path
 from typing import Optional, Dict
 
+from artifact_naming import short_stem
+
 
 class DotNetDecompiler:
     """
@@ -132,7 +134,7 @@ class DotNetDecompiler:
         result["is_dotnet"] = self._is_dotnet_assembly(assembly)
 
         # Cada ficheiro analisado terá o seu próprio subdirectório (caminhos absolutos)
-        output_dir = (self.output_root / assembly.stem).resolve()
+        output_dir = (self.output_root / short_stem(assembly.stem)).resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
 
         def _write_erro_pasta(msg: str) -> None:
@@ -225,7 +227,7 @@ class DotNetDecompiler:
                 return result
 
             # Ficheiros .cs gerados pelo ILSpy (excluir o nosso consolidado)
-            consolidated_name = f"{assembly.stem}.decompiled.cs"
+            consolidated_name = f"{short_stem(assembly.stem)}.decompiled.cs"
             cs_files = [f for f in output_dir.rglob("*.cs") if f.name != consolidated_name]
             if not cs_files:
                 result["error"] = (
@@ -236,7 +238,7 @@ class DotNetDecompiler:
                 return result
 
             # Consolidar todos os ficheiros .cs num único ficheiro .decompiled.cs
-            consolidated_file = output_dir / f"{assembly.stem}.decompiled.cs"
+            consolidated_file = output_dir / f"{short_stem(assembly.stem)}.decompiled.cs"
             self._consolidate_cs_files(cs_files, consolidated_file)
             result["consolidated_file"] = str(consolidated_file)
             result["files_count"] = len(cs_files)

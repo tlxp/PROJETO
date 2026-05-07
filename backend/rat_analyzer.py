@@ -12,6 +12,7 @@ from pathlib import Path
 from datetime import datetime
 
 import config
+from artifact_naming import short_stem
 from modules.static_analyzer import StaticAnalyzer
 from modules.yara_scanner import YaraScanner
 from modules.deobfuscator import Deobfuscator
@@ -155,13 +156,16 @@ class RATAnalyzer:
             decompilation_error_summary = decomp.get("error_short") or decomp.get("error", "")
             if len(decompilation_error_summary) > 280:
                 decompilation_error_summary = decompilation_error_summary[:277] + "..."
+        # Stem curto para pastas/ficheiros gerados (evita nomes gigantes no Windows)
+        sstem = short_stem(self.target_file.stem)
+
         if decomp.get("success") and consolidated_file and Path(consolidated_file).exists():
             # Extrair trechos obfuscados para ficheiros separados (antes de deobfuscar o ficheiro inteiro)
             output_dir_snippets = Path(consolidated_file).parent
             obf_path, deob_path, summary = extract_and_write_snippets(
                 consolidated_file,
                 output_dir_snippets,
-                self.target_file.stem,
+                sstem,
                 self.deobfuscator.deobfuscate_content,
             )
             if obf_path:
@@ -178,7 +182,7 @@ class RATAnalyzer:
             self.analysis_results["obfuscation_snippets_summary"] = obfuscation_snippets_summary
 
             print("[*] A aplicar deobfuscação ao código descompilado...")
-            out_deob = Path(consolidated_file).parent / (self.target_file.stem + ".deobfuscated.cs")
+            out_deob = Path(consolidated_file).parent / (sstem + ".deobfuscated.cs")
             do_result = self.deobfuscator.deobfuscate_source(consolidated_file, str(out_deob))
             if do_result.get("success"):
                 deobfuscated_file = do_result.get("output_file", "")
@@ -187,7 +191,7 @@ class RATAnalyzer:
         else:
             # Binário nativo ou .NET AOT: assembly e Ghidra diretamente no binário original (sem deobfuscação binária)
             self._log("[7a] Desmontagem (assembly) do binário...")
-            out_asm = str(config.DECOMPILED_DIR / self.target_file.stem / f"{self.target_file.stem}.asm")
+            out_asm = str(config.DECOMPILED_DIR / sstem / f"{sstem}.asm")
             disasm_result = disassemble_pe(str(self.target_file), output_path=out_asm, output_root=str(config.DECOMPILED_DIR))
             self.analysis_results["native_disassembly"] = disasm_result
             if disasm_result.get("success"):
@@ -199,7 +203,7 @@ class RATAnalyzer:
             if decompile_binary_to_c:
                 self._log("[7b] Decompilação para pseudo-C (Ghidra) — pode demorar vários minutos...")
                 ghidra_dir = os.environ.get("GHIDRA_INSTALL_DIR")
-                out_c = str(config.DECOMPILED_DIR / self.target_file.stem / f"{self.target_file.stem}_decompiled.c")
+                out_c = str(config.DECOMPILED_DIR / sstem / f"{sstem}_decompiled.c")
                 try:
                     ghidra_result = decompile_binary_to_c(
                         str(self.target_file),
@@ -220,7 +224,7 @@ class RATAnalyzer:
                                 content_c,
                                 decompiled_c_file,
                                 out_dir_c,
-                                f"{self.target_file.stem}_pseudoc",
+                                f"{sstem}_pseudoc",
                                 self.deobfuscator.deobfuscate_content,
                             )
                             if obf_p:
@@ -246,7 +250,7 @@ class RATAnalyzer:
         report_path = self.report_generator.generate(
             self.analysis_results,
             self.output_dir
-            / f"report_{self.target_file.stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+            / f"report_{sstem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
         )
 
         if decompiled_c_file and not Path(decompiled_c_file).exists():

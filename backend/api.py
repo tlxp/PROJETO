@@ -22,6 +22,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 import config
+from artifact_naming import short_stem, short_filename
 from rat_analyzer import RATAnalyzer
 from analysis_jobs import (
     AnalysisType,
@@ -459,10 +460,10 @@ async def upload_static_analysis(payload: StaticAnalysisUpload) -> dict:
     out_dir = _get_job_output_dir(job_id)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    base_name = Path(payload.fileName or "analysis").stem or "analysis"
-    report_path = out_dir / f"{base_name}.report.txt"
-    c_code_path = out_dir / f"{base_name}.c.txt"
-    il_code_path = out_dir / f"{base_name}.il.txt"
+    base_name = short_stem(Path(payload.fileName or "analysis").stem or "analysis")
+    report_path = out_dir / short_filename(base_name, "report", ext="txt")
+    c_code_path = out_dir / short_filename(base_name, "c", ext="txt")
+    il_code_path = out_dir / short_filename(base_name, "il", ext="txt")
 
     try:
         report_path.write_text(payload.report or "", encoding="utf-8", errors="replace")
@@ -626,6 +627,7 @@ async def get_obfuscated_snippets_artifact(
                 from modules.obfuscation_snippet_extractor import extract_and_write_snippets_from_content
 
                 stem = Path(str(file_name)).stem or "analysis"
+                stem = short_stem(stem)
                 deob = Deobfuscator()
                 obf_path, deob_path, _summary = extract_and_write_snippets_from_content(
                     content=c_code,

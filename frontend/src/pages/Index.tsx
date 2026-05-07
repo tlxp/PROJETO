@@ -18,6 +18,7 @@ const GHIDRA_PROGRESS_PREFIX = "[GHIDRA_PROGRESS]";
 import FileDropZone from "@/components/FileDropZone";
 import CodePanel from "@/components/CodePanel";
 import { openXrefExplorerTab, writeXrefSession } from "@/lib/cCodeXref";
+import { buildShortFileName } from "@/lib/artifactNaming";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -1967,7 +1968,17 @@ const Index = () => {
                     highlightedLineRange={highlightedLineRange}
                     flaggedIndicators={result?.flaggedIndicators ?? undefined}
                     functionHighlights={cFunctionHighlights}
-                    downloadFileName={result?.cCode != null ? `${baseDownloadName}.c` : undefined}
+                    downloadFileName={
+                      result?.cCode != null
+                        ? buildShortFileName({
+                            baseName: baseDownloadName,
+                            kind: "c",
+                            parts: [],
+                            ext: "c",
+                            maxTotal: 120,
+                          })
+                        : undefined
+                    }
                     maxInitialLines={800}
                     showDisplayRangesNotice
                     onExpand={() => { setScrollToLine(null); setWindowFocusLine(null); setExpandedPanel("c"); }}
@@ -1979,7 +1990,17 @@ const Index = () => {
                   code={result?.ilCode ?? ""}
                   icon={<FileCode2 className="h-3.5 w-3.5 text-accent" />}
                   hideLimitNotice
-                  downloadFileName={result?.ilCode != null ? `${baseDownloadName}.il` : undefined}
+                  downloadFileName={
+                    result?.ilCode != null
+                      ? buildShortFileName({
+                          baseName: baseDownloadName,
+                          kind: "il",
+                          parts: [],
+                          ext: "il",
+                          maxTotal: 120,
+                        })
+                      : undefined
+                  }
                   onExpand={() => { setScrollToLine(null); setWindowFocusLine(null); setExpandedPanel("il"); }}
                 />
                 <CodePanel
@@ -1987,7 +2008,17 @@ const Index = () => {
                   language="report"
                   code={result?.report ?? ""}
                   icon={<FileText className="h-3.5 w-3.5 text-code-string" />}
-                  downloadFileName={result?.report != null ? `${baseDownloadName}-report.txt` : undefined}
+                  downloadFileName={
+                    result?.report != null
+                      ? buildShortFileName({
+                          baseName: baseDownloadName,
+                          kind: "report",
+                          parts: [],
+                          ext: "txt",
+                          maxTotal: 120,
+                        })
+                      : undefined
+                  }
                   onExpand={() => { setScrollToLine(null); setWindowFocusLine(null); setExpandedPanel("report"); }}
                 />
               </div>
@@ -2258,7 +2289,17 @@ const Index = () => {
                           }}
                           selectedWord={selectedWord ?? undefined}
                           onWordSelect={expandedPanel === "c" ? handleWordSelect : undefined}
-                          downloadFileName={result?.cCode != null ? `${baseDownloadName}.c` : undefined}
+                          downloadFileName={
+                            result?.cCode != null
+                              ? buildShortFileName({
+                                  baseName: baseDownloadName,
+                                  kind: "c",
+                                  parts: [],
+                                  ext: "c",
+                                  maxTotal: 120,
+                                })
+                              : undefined
+                          }
                           maxInitialLines={2000}
                         />
                       )}
@@ -2273,7 +2314,17 @@ const Index = () => {
                           highlightedLineRange={highlightedLineRange}
                           selectedWord={selectedWord ?? undefined}
                           onWordSelect={expandedPanel === "il" ? handleWordSelect : undefined}
-                          downloadFileName={result?.ilCode != null ? `${baseDownloadName}.il` : undefined}
+                          downloadFileName={
+                            result?.ilCode != null
+                              ? buildShortFileName({
+                                  baseName: baseDownloadName,
+                                  kind: "il",
+                                  parts: [],
+                                  ext: "il",
+                                  maxTotal: 120,
+                                })
+                              : undefined
+                          }
                         />
                       )}
                       {expandedPanel === "report" && (
@@ -2284,7 +2335,17 @@ const Index = () => {
                           icon={<FileText className="h-3.5 w-3.5 text-code-string" />}
                           scrollToLine={scrollToLine}
                           compactHeader
-                          downloadFileName={result?.report != null ? `${baseDownloadName}-report.txt` : undefined}
+                          downloadFileName={
+                            result?.report != null
+                              ? buildShortFileName({
+                                  baseName: baseDownloadName,
+                                  kind: "report",
+                                  parts: [],
+                                  ext: "txt",
+                                  maxTotal: 120,
+                                })
+                              : undefined
+                          }
                         />
                       )}
                     </div>

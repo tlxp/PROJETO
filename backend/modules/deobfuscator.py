@@ -12,6 +12,8 @@ import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from artifact_naming import short_stem
+
 
 class Deobfuscator:
     """Deobfuscador básico para strings e código"""
@@ -317,7 +319,7 @@ class Deobfuscator:
             with open(output_path, "wb") as f:
                 f.write(out_data)
             # Gravar regiões obfuscadas/deobfuscadas para auditoria
-            stem = Path(file_path).stem
+            stem = short_stem(Path(file_path).stem)
             regions_path = out_parent / f"{stem}.obfuscated_binary_regions.txt"
             with open(regions_path, "w", encoding="utf-8", errors="replace") as rf:
                 rf.write("# Regiões XOR patched (offset, tamanho, bytes originais hex, bytes deobfuscados hex)\n\n")
@@ -353,9 +355,10 @@ class Deobfuscator:
         if not path.exists():
             result["error"] = f"Ficheiro não encontrado: {path}"
             return result
-        out_dir = Path(output_root).resolve() / path.stem
+        sstem = short_stem(path.stem)
+        out_dir = Path(output_root).resolve() / sstem
         out_dir.mkdir(parents=True, exist_ok=True)
-        out_file = Path(output_path) if output_path else (out_dir / f"{path.stem}.deobfuscated{path.suffix}")
+        out_file = Path(output_path) if output_path else (out_dir / f"{sstem}.deobfuscated{path.suffix}")
 
         # 1) Tentar UPX unpack
         if self._is_upx_packed(str(path)):

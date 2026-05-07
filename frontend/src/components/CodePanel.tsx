@@ -66,6 +66,12 @@ interface CodePanelProps {
   onWordSelect?: (word: string) => void;
   /** Esconder aviso de limite de linhas e botão "Mostrar tudo". */
   hideLimitNotice?: boolean;
+  /** Esconder aviso de modo janela (±N linhas) no fundo do painel. */
+  hideWindowNotice?: boolean;
+  /** Notifica o range atual do modo janela (para footers externos). */
+  onWindowRangeChange?: (range: { start: number; end: number; totalLines: number }) => void;
+  /** Quando true, remove scrolling (painel fica estático). */
+  disableScroll?: boolean;
 }
 
 /** Encontra todos os blocos { } no código (por linha). */
@@ -111,6 +117,9 @@ const CodePanel: React.FC<CodePanelProps> = ({
   onWordSelect,
   showDisplayRangesNotice = true,
   hideLimitNotice = false,
+  hideWindowNotice = false,
+  onWindowRangeChange,
+  disableScroll = false,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showAll, setShowAll] = useState(false);
@@ -124,6 +133,7 @@ const CodePanel: React.FC<CodePanelProps> = ({
   const lastShiftAtRef = useRef<number>(0);
   const lastViewportNotifyAtRef = useRef<number>(0);
   const lastViewportLineRef = useRef<number | null>(null);
+  const lastScrollTopRef = useRef<number>(0);
 
   const lines = useMemo(() => code.split("\n"), [code]);
   const totalLines = lines.length;
@@ -195,6 +205,56 @@ const CodePanel: React.FC<CodePanelProps> = ({
 
   const isWindowMode = windowFocusLine != null && windowFocusLine >= 1;
   const windowSize = Math.max(1, windowContextLines * 2 + 1);
+  // No modo janela, mantemos sempre uma janela fixa de ±N linhas e deslizamos com scroll.
+
+  const expandWindow = useCallback(
+    (dir: "down" | "up", chunkOverride?: number) => {
+      if (!isWindowMode || windowStart == null || windowEnd == null) return;
+      if (totalLines <= windowSize) return;
+
+      const now = Date.now();
+      // Responder melhor a scroll rápido sem entrar em loop.
+      if (now - lastShiftAtRef.current < 35) return;
+
+      const curSize = windowEnd - windowStart + 1;
+      // No modo janela, o "passo" deve ser configurável (ex.: 1 linha por tick).
+      const baseChunk = Math.max(1, Math.floor(windowChunkLines));
+      const chunk = Math.max(baseChunk, Math.min(400, Math.floor(chunkOverride ?? baseChunk)));
+      const rowH = rowHeightRef.current ?? 18;
+
+      if (dir === "down" && windowEnd < totalLines) {
+        const newEnd = Math.min(totalLines, windowEnd + chunk);
+        const newStart = Math.max(1, newEnd - curSize + 1);
+        if (newStart !== windowStart || newEnd !== windowEnd) {
+          const deltaStart = newStart - windowStart; // >0 remove linhas de cima
+          pendingScrollAdjustPxRef.current += -deltaStart * rowH;
+          lastShiftAtRef.current = now;
+          setWindowStart(newStart);
+          setWindowEnd(newEnd);
+        }
+      }
+
+      if (dir === "up" && windowStart > 1) {
+        const newStart = Math.max(1, windowStart - chunk);
+        const newEnd = Math.min(totalLines, newStart + curSize - 1);
+        if (newStart !== windowStart || newEnd !== windowEnd) {
+          const deltaStart = newStart - windowStart; // <0 adiciona linhas em cima
+          pendingScrollAdjustPxRef.current += -deltaStart * rowH;
+          lastShiftAtRef.current = now;
+          setWindowStart(newStart);
+          setWindowEnd(newEnd);
+        }
+      }
+    },
+    [
+      isWindowMode,
+      totalLines,
+      windowChunkLines,
+      windowEnd,
+      windowSize,
+      windowStart,
+    ]
+  );
 
   useEffect(() => {
     if (!isWindowMode) {
@@ -213,6 +273,12 @@ const CodePanel: React.FC<CodePanelProps> = ({
     setWindowEnd(end);
     setShowAll(false);
   }, [isWindowMode, windowFocusLine, totalLines, windowContextLines, windowSize]);
+
+  useEffect(() => {
+    if (!isWindowMode || !onWindowRangeChange) return;
+    if (windowStart == null || windowEnd == null) return;
+    onWindowRangeChange({ start: windowStart, end: windowEnd, totalLines });
+  }, [isWindowMode, onWindowRangeChange, totalLines, windowEnd, windowStart]);
 
   /** Linhas a mostrar: modo janela (leve), ou ranges (funções com flag), ou tudo (com limite). */
   const visibleRows = useMemo<Row[]>(() => {
@@ -329,6 +395,10 @@ const CodePanel: React.FC<CodePanelProps> = ({
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
+    const prevTop = lastScrollTopRef.current;
+    const curTop = el.scrollTop;
+    lastScrollTopRef.current = curTop;
+    const delta = curTop - prevTop;
 
     // Notificar linha aproximada no viewport (throttle) — útil para sincronizar lista lateral
     if (onViewportLineChange && rowHeightRef.current) {
@@ -364,48 +434,42 @@ const CodePanel: React.FC<CodePanelProps> = ({
     if (!isWindowMode || windowStart == null || windowEnd == null) return;
     if (totalLines <= windowSize) return;
 
-    const now = Date.now();
-    if (now - lastShiftAtRef.current < 150) return;
-
     const thresholdPx = 260;
     const nearTop = el.scrollTop < thresholdPx;
     const nearBottom = el.scrollHeight - (el.scrollTop + el.clientHeight) < thresholdPx;
-
+    // Evita loops que "carregam tudo": só expande quando o utilizador realmente moveu o scroll.
     const rowH = rowHeightRef.current ?? 18;
-    const curSize = windowEnd - windowStart + 1;
-    const chunk = Math.max(50, windowChunkLines);
-
-    if (nearBottom && windowEnd < totalLines) {
-      const newEnd = Math.min(totalLines, windowEnd + chunk);
-      const newStart = Math.max(1, newEnd - curSize + 1);
-      if (newStart !== windowStart || newEnd !== windowEnd) {
-        const deltaStart = newStart - windowStart; // >0 remove linhas de cima
-        pendingScrollAdjustPxRef.current += -deltaStart * rowH;
-        lastShiftAtRef.current = now;
-        setWindowStart(newStart);
-        setWindowEnd(newEnd);
-      }
-    } else if (nearTop && windowStart > 1) {
-      const newStart = Math.max(1, windowStart - chunk);
-      const newEnd = Math.min(totalLines, newStart + curSize - 1);
-      if (newStart !== windowStart || newEnd !== windowEnd) {
-        const deltaStart = newStart - windowStart; // <0 adiciona linhas em cima
-        pendingScrollAdjustPxRef.current += -deltaStart * rowH;
-        lastShiftAtRef.current = now;
-        setWindowStart(newStart);
-        setWindowEnd(newEnd);
-      }
-    }
+    const speedLines = Math.max(1, Math.min(200, Math.round(Math.abs(delta) / Math.max(1, rowH))));
+    if (delta > 0 && nearBottom) expandWindow("down", speedLines);
+    else if (delta < 0 && nearTop) expandWindow("up", speedLines);
   }, [
     foldedRows,
     isWindowMode,
+    expandWindow,
     onViewportLineChange,
     totalLines,
-    windowChunkLines,
     windowEnd,
     windowSize,
     windowStart,
   ]);
+
+  const handleWheel = useCallback(
+    (e: React.WheelEvent<HTMLDivElement>) => {
+      // Quando não há scroll (conteúdo ainda curto), o onScroll pode não disparar.
+      // Neste caso, usamos wheel/trackpad para expandir a janela.
+      if (!isWindowMode) return;
+      const el = scrollRef.current;
+      if (!el) return;
+      const canScroll = el.scrollHeight > el.clientHeight + 1;
+      if (canScroll) return;
+      // Quando não há scroll ainda, usar o "impulso" do wheel para carregar mais rápido.
+      const rowH = rowHeightRef.current ?? 18;
+      const speedLines = Math.max(1, Math.min(200, Math.round(Math.abs(e.deltaY) / Math.max(1, rowH))));
+      if (e.deltaY > 0) expandWindow("down", speedLines);
+      else if (e.deltaY < 0) expandWindow("up", speedLines);
+    },
+    [expandWindow, isWindowMode]
+  );
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -488,7 +552,9 @@ const CodePanel: React.FC<CodePanelProps> = ({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
-      className={`flex flex-1 flex-col overflow-hidden bg-card ${embedded ? "" : "rounded-lg border border-border"}`}
+      className={`flex flex-1 min-h-0 flex-col overflow-hidden bg-card ${embedded ? "h-full" : ""} ${
+        embedded ? "" : "rounded-lg border border-border"
+      }`}
     >
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-border bg-secondary/50 px-4 py-2.5">
@@ -605,8 +671,11 @@ const CodePanel: React.FC<CodePanelProps> = ({
       {/* Code area */}
       <div
         ref={scrollRef}
-        onScroll={handleScroll}
-        className={`flex-1 overflow-auto code-block p-0 ${compactHeader ? "min-h-0" : ""}`}
+        onScroll={disableScroll ? undefined : handleScroll}
+        onWheel={disableScroll ? undefined : handleWheel}
+        className={`flex-1 min-h-0 h-full ${disableScroll ? "overflow-hidden" : "overflow-auto"} code-block p-0 ${
+          compactHeader ? "min-h-0" : ""
+        }`}
       >
         <table className="w-full border-collapse">
           <tbody>
@@ -770,16 +839,12 @@ const CodePanel: React.FC<CodePanelProps> = ({
                     className="px-4 py-0 whitespace-pre cursor-text select-text"
                     onDoubleClick={onWordSelect ? handleCodeDoubleClick : undefined}
                   >
-                    {isWindowMode && language !== "report" ? (
-                      <span className="text-foreground">{line}</span>
-                    ) : (
-                      <HighlightedLine
-                        line={line}
-                        language={language}
-                        highlightTokens={language === "C" ? flaggedIndicators ?? undefined : undefined}
-                        highlightWord={selectedWord ?? undefined}
-                      />
-                    )}
+                    <HighlightedLine
+                      line={line}
+                      language={language}
+                      highlightTokens={language === "C" ? flaggedIndicators ?? undefined : undefined}
+                      highlightWord={selectedWord ?? undefined}
+                    />
                   </td>
                 </tr>
               );
@@ -787,7 +852,7 @@ const CodePanel: React.FC<CodePanelProps> = ({
           </tbody>
         </table>
 
-        {isWindowMode && (
+        {isWindowMode && !hideWindowNotice && (
           <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-border bg-muted/50 px-3 py-2 text-[11px] text-muted-foreground">
             <span>
               A mostrar ±{windowContextLines.toLocaleString()} linhas à volta do marcador. Faça scroll para carregar mais.

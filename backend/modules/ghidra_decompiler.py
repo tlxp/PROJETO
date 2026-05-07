@@ -42,6 +42,8 @@ import sys
 from pathlib import Path
 from typing import Callable, Dict, Optional
 
+from artifact_naming import short_stem
+
 
 def _jdk_root_has_java_bin(home: Path) -> bool:
     name = "java.exe" if sys.platform == "win32" else "java"
@@ -304,12 +306,13 @@ def decompile_binary_to_c(
         )
         return result
 
-    out_file = Path(output_path) if output_path else (Path(output_root).resolve() / path.stem / f"{path.stem}_decompiled.c")
+    sstem = short_stem(path.stem)
+    out_file = Path(output_path) if output_path else (Path(output_root).resolve() / sstem / f"{sstem}_decompiled.c")
     out_file.parent.mkdir(parents=True, exist_ok=True)
 
     # Forçar re-análise: apagar projeto Ghidra existente (.rep/.gpr) para que as opções
     # e a análise sejam aplicadas de raiz (evita cache com limites antigos).
-    project_name = f"{path.stem}_ghidra"
+    project_name = f"{sstem}_ghidra"
     project_dir = out_file.parent / f"{project_name}.rep"
     project_file = out_file.parent / f"{project_name}.gpr"
     try:
@@ -331,7 +334,7 @@ def decompile_binary_to_c(
         with pyghidra.open_program(
             str(path),
             project_location=str(out_file.parent),
-            project_name=f"{path.stem}_ghidra",
+            project_name=f"{sstem}_ghidra",
             analyze=True,
         ) as flat_api:
             program = flat_api.getCurrentProgram()
