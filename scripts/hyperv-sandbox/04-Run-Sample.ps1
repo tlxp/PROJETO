@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Orquestração no host: restaura VM, copia amostra, executa análise, recebe relatório via pipe, restaura snapshot.
 .DESCRIPTION
@@ -215,8 +215,8 @@ Add-LogLine -Path $HostLogPath -Value "VM: $VMName  Snapshot: $SnapshotName"
 Add-LogLine -Path $HostLogPath -Value "Report: $ReportOutputPath"
 Add-LogLine -Path $HostLogPath -Value "RunDir: $RunDir"
 if ($vmObj.Generation -ge 2) {
-    Write-LogWarning "      VM '$VMName' é Gen$($vmObj.Generation): COM1→Named Pipe costuma não funcionar (use VM Gen1 / PROJETOVM_VMGeneration=1, ou relatório só por Guest Service)."
-    Add-LogLine -Path $HostLogPath -Value "WARNING: Gen$($vmObj.Generation) VM — serial pipe transport often unavailable"
+    Write-LogWarning "      VM '$VMName' e Gen$($vmObj.Generation): COM1->Named Pipe costuma nao funcionar (use VM Gen1 / PROJETOVM_VMGeneration=1, ou relatorio so por Guest Service)."
+    Add-LogLine -Path $HostLogPath -Value "WARNING: Gen$($vmObj.Generation) VM -- serial pipe transport often unavailable"
 }
 
 Write-LogHost "=== Orquestração Sandbox Hyper-V ==="
@@ -473,7 +473,7 @@ if ($waitSec -gt 0) {
             }
         } catch { }
 
-        # Guest concluiu mas COM1/pipe não entregou — saída antecipada com Copy-VMFile
+        # Guest concluiu mas COM1/pipe nao entregou -- saida antecipada com Copy-VMFile
         if ($st -ne "Completed") {
             try {
                 $guestDone = Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
@@ -482,7 +482,7 @@ if ($waitSec -gt 0) {
                 } -ArgumentList $guestDonePath -ErrorAction SilentlyContinue
                 if ($guestDone -eq $true) {
                     Write-LogWarning "      Guest análise concluída ($guestDonePath) mas pipe ainda não recebeu relatório. A tentar Copy-VMFile..."
-                    Add-LogLine -Path $HostLogPath -Value "Guest done detected; pipe not complete — fallback Copy-VMFile"
+                    Add-LogLine -Path $HostLogPath -Value "Guest done detected; pipe not complete -- fallback Copy-VMFile"
                     try {
                         Copy-SandboxVMFileFromGuest -VMName $VMName -Credential $cred `
                             -GuestSourcePath $guestReportPath -HostDestinationPath $ReportOutputPath
