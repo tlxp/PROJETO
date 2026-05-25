@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Envia o ficheiro de relatório para o host via porta COM1 (serial virtual -> Named Pipe).
     Versão SIMPLIFICADA e ROBUSTA - sem handshake complexo.
@@ -8,9 +8,16 @@ param(
     [string] $ReportPath = "C:\analysis.txt",
     [string] $SampleHash = "",
     [int]    $MaxRetries = 3,
-    [int]    $BaudRate = 115200,    # Mais rápido, mantendo fiabilidade no NamedPipe
-    [int]    $DelayMs = 0           # Em Named Pipe não é necessário "throttle" por linha
+    [int]    $BaudRate = 115200,
+    [int]    $DelayMs = 0
 )
+
+function Write-ComLog {
+    param([string] $Message)
+    $ts = (Get-Date).ToUniversalTime().ToString("o")
+    $cn = $env:COMPUTERNAME
+    Write-Host "[COM1 guest=$cn utc=$ts] $Message"
+}
 
 function Write-SerialLine {
     param(
@@ -19,7 +26,6 @@ function Write-SerialLine {
         [int] $DelayMs
     )
     $Port.WriteLine($Line)
-    # Flush ajuda bastante no caminho COM1->NamedPipe (Hyper-V)
     try { $Port.BaseStream.Flush() } catch { }
     if ($DelayMs -gt 0) { Start-Sleep -Milliseconds $DelayMs }
 }
@@ -30,50 +36,41 @@ function Send-ReportSimple {
         [string] $SampleHash,
         [int] $Attempt
     )
-    
-    Write-Host "[INFO] Tentativa $Attempt de $MaxRetries"
-    
+
     if (-not (Test-Path $ReportPath)) {
         throw "Ficheiro não encontrado: $ReportPath"
     }
-    
-    # Ler o relatório
+    $lenRep = (Get-Item -LiteralPath $ReportPath).Length
+    Write-ComLog "Tentativa $Attempt/$MaxRetries report=$ReportPath bytes=$lenRep"
+
     $content = Get-Content -Path $ReportPath -Encoding UTF8 -Raw
-    $lines = $content -split "`r`n"
-    
-    # Calcular checksum simples (para verificação)
-    $sha256 = [System.Security.Cryptography.SHA256]::Create()
-    $hashBytes = $sha256.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($content))
-    $checksum = ($hashBytes | ForEach-Object { $_.ToString("x2") }) -join ""
-    
+    # CRLF ou só LF (ficheiros gerados com line endings Unix); Environment.NewLine falha se o ficheiro for só \n
+    $lines = $content -split '\r?\n'
+
     $port = $null
     try {
-        # Abrir porta serial
+        Write-ComLog "A abrir SerialPort COM1 baud=$BaudRate"
         $port = New-Object System.IO.Ports.SerialPort "COM1", $BaudRate, None, 8, One
+        $port.Encoding = New-Object System.Text.UTF8Encoding($false)
         $port.ReadTimeout = 5000
         $port.WriteTimeout = 5000
         $port.NewLine = "`r`n"
         $port.Open()
-        
-        Write-Host "[INFO] COM1 aberta (baud: $BaudRate)"
-        
-        # Aguardar 1 segundo para estabilizar
+        Write-ComLog "COM1 Open OK; a enviar cabecalho SBXREP1 ($($lines.Count) linhas corpo)"
         Start-Sleep -Milliseconds 200
-        
-        # Enviar um marcador de início simples
+
         Write-SerialLine -Port $port -Line "START_OF_REPORT" -DelayMs 0
-        
-        # Enviar cabeçalho básico
+        Write-ComLog "START_OF_REPORT enviado"
+
+        # Cabeçalho opcional
         Write-SerialLine -Port $port -Line "VERSION=1" -DelayMs $DelayMs
         Write-SerialLine -Port $port -Line "TIMESTAMP=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -DelayMs $DelayMs
         if ($SampleHash -and $SampleHash.Trim().Length -gt 0) {
             Write-SerialLine -Port $port -Line "SHA256=$SampleHash" -DelayMs $DelayMs
         }
         Write-SerialLine -Port $port -Line "REPORT_SIZE=$($content.Length)" -DelayMs $DelayMs
-        Write-SerialLine -Port $port -Line "CHECKSUM=$checksum" -DelayMs $DelayMs
         Write-SerialLine -Port $port -Line "END_HEADER" -DelayMs 0
-        
-        # Enviar corpo linha por linha
+
         $lineCount = 0
         foreach ($line in $lines) {
             Write-SerialLine -Port $port -Line $line -DelayMs $DelayMs
@@ -82,28 +79,28 @@ function Send-ReportSimple {
                 Write-Host "[PROGRESS] $lineCount linhas enviadas"
             }
         }
-        
-        # Enviar marcador de fim
+
         Write-SerialLine -Port $port -Line "END_OF_REPORT" -DelayMs $DelayMs
-        Write-SerialLine -Port $port -Line "CHECKSUM=$checksum" -DelayMs 0
-        
+        Write-ComLog "END_OF_REPORT enviado; a fechar porta"
+
         Start-Sleep -Milliseconds 150
-        
+        Write-ComLog "Fim envio OK lineCount=$lineCount bytes=$($content.Length)"
         Write-Host "[SUCCESS] Relatório enviado: $lineCount linhas, $($content.Length) bytes"
         return $true
-        
+
     } catch {
+        Write-ComLog "ERRO: $($_.Exception.Message)"
         Write-Warning "[ERROR] $($_.Exception.Message)"
         return $false
     } finally {
         if ($port -and $port.IsOpen) {
             try { $port.Close() } catch { }
             Write-Host "[INFO] COM1 fechada"
+            Write-ComLog "COM1 Close"
         }
     }
 }
 
-# Executar com retry
 for ($attempt = 1; $attempt -le $MaxRetries; $attempt++) {
     if (Send-ReportSimple -ReportPath $ReportPath -SampleHash $SampleHash -Attempt $attempt) {
         Write-Host ""
@@ -112,7 +109,7 @@ for ($attempt = 1; $attempt -le $MaxRetries; $attempt++) {
         Write-Host "========================================="
         exit 0
     }
-    
+
     if ($attempt -lt $MaxRetries) {
         $waitTime = 5
         Write-Host "[INFO] A aguardar $waitTime segundos..."

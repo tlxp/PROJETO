@@ -109,6 +109,45 @@ class DotNetDecompiler:
         except Exception:
             return False
 
+    @staticmethod
+    def _no_managed_metadata_result() -> Dict[str, str]:
+        """Mensagens curtas para PE sem metadados .NET (nativo, AOT, etc.)."""
+        error_short = (
+            "Este ficheiro não contém metadados .NET (ILSpy não consegue descompilar). "
+            "Pode ser: executável nativo (C/C++), ou .NET compilado com Native AOT.\n\n"
+            "A análise estática (strings, imports, YARA, score) corre sempre sobre o PE. "
+            "Em seguida o pipeline tenta assembly (Capstone) e pseudo-C (Ghidra) no mesmo binário "
+            "se GHIDRA_INSTALL_DIR/pyghidra estiverem configurados — ver também o separador IL/assembly."
+        )
+        return {
+            "error_type": "no_managed_metadata",
+            "error_short": error_short,
+            "log_message": (
+                "Sem metadados .NET no PE (binário nativo ou AOT); descompilação ILSpy não aplicável."
+            ),
+        }
+
+    @staticmethod
+    def _summarize_ilspy_error(error_msg: str, returncode: int) -> str:
+        """Reduz stderr do ILSpy a uma linha legível para logs e relatório."""
+        lines = [ln.strip() for ln in error_msg.splitlines() if ln.strip()]
+        headline = ""
+        for ln in lines:
+            if "Exception:" in ln:
+                headline = ln.split("Exception:", 1)[-1].strip()
+                break
+            if ln.startswith("Erro:"):
+                headline = ln[5:].strip()
+                break
+            if ln.startswith("Error:"):
+                headline = ln[6:].strip()
+                break
+        if not headline and lines:
+            headline = lines[0]
+        if headline:
+            return f"ILSpy retornou código {returncode}: {headline}"
+        return f"ILSpy retornou código {returncode}."
+
     def decompile(self, assembly_path: str) -> Dict:
         """
         Descompila um assembly .NET usando ILSpy CLI.
@@ -131,12 +170,19 @@ class DotNetDecompiler:
             result["error"] = f"Assembly não encontrado: {assembly}"
             return result
 
-        # Indicar se o PE tem cabeçalho CLR (apenas informativo; tentamos sempre o ILSpy)
         result["is_dotnet"] = self._is_dotnet_assembly(assembly)
 
         # Cada ficheiro analisado terá o seu próprio subdirectório (caminhos absolutos)
         output_dir = (self.output_root / short_stem(assembly.stem)).resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
+        result["output_dir"] = str(output_dir)
+
+        if not result["is_dotnet"]:
+            meta = self._no_managed_metadata_result()
+            result.update(meta)
+            result["skipped"] = True
+            result["error"] = meta["error_short"]
+            return result
 
         def _write_erro_pasta(msg: str) -> None:
             """Escreve um ficheiro na pasta de saída para não ficar vazia e explicar o erro."""
@@ -185,10 +231,9 @@ class DotNetDecompiler:
 
             if completed.returncode != 0:
                 error_msg = completed.stderr.strip() or completed.stdout.strip()
-                result["error"] = (
-                    f"ILSpy retornou código {completed.returncode}.\n"
-                    f"Erro: {error_msg}"
-                )
+                summary = self._summarize_ilspy_error(error_msg, completed.returncode)
+                result["log_message"] = summary
+                result["error"] = summary
                 # Runtime em falta (ilspycmd antigo pede .NET 6; máquina só tem 8, etc.)
                 if (
                     "install or update .NET" in error_msg
@@ -205,26 +250,20 @@ class DotNetDecompiler:
                         "  dotnet tool update -g ilspycmd --version 10.0.0.8330\n\n"
                         "Depois reinicie o backend Python."
                     )
+                    result["log_message"] = result["error_short"].split("\n", 1)[0]
+                    result["error"] = result["error_short"]
                 # Mensagem curta para a GUI (ficheiro nativo ou AOT)
                 elif completed.returncode == 70 or "managed metadata" in error_msg or "MetadataFileNotSupportedException" in error_msg:
-                    result["error_type"] = "no_managed_metadata"
-                    result["error_short"] = (
-                        "Este ficheiro não contém metadados .NET (ILSpy não consegue descompilar). "
-                        "Pode ser: executável nativo (C/C++), ou .NET compilado com Native AOT.\n\n"
-                        "A análise estática (strings, imports, YARA, score) corre sempre sobre o PE. "
-                        "Em seguida o pipeline tenta assembly (Capstone) e pseudo-C (Ghidra) no mesmo binário "
-                        "se GHIDRA_INSTALL_DIR/pyghidra estiverem configurados — ver também o separador IL/assembly."
-                    )
-                if not result["is_dotnet"]:
-                    result["error"] += (
-                        "\n\nNota: Este ficheiro não tem o cabeçalho CLR de um assembly .NET. "
-                        "Pode ser um executável nativo (C/C++) ou .NET compilado com Native AOT "
-                        "(neste caso o ILSpy não consegue descompilar). Para descompilar, use um "
-                        ".exe/.dll .NET normal (ex.: dotnet publish sem PublishAot)."
-                    )
+                    meta = self._no_managed_metadata_result()
+                    result.update(meta)
+                    result["is_dotnet"] = False
                 # Escrever versão legível na pasta (resumo primeiro)
                 msg_para_pasta = result.get("error_short", result["error"])
-                _write_erro_pasta(msg_para_pasta + "\n\n--- Detalhe técnico ---\n\n" + result["error"])
+                detail = error_msg if error_msg and error_msg not in msg_para_pasta else ""
+                pasta_body = msg_para_pasta
+                if detail:
+                    pasta_body += "\n\n--- Detalhe técnico ---\n\n" + detail
+                _write_erro_pasta(pasta_body)
                 return result
 
             # Ficheiros .cs gerados pelo ILSpy (excluir o nosso consolidado)

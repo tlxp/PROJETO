@@ -7,6 +7,11 @@ namespace RatAnalyzer.Desktop;
 
 public partial class App : Application
 {
+    public App()
+    {
+        SessionEnding += (_, _) => ShutdownManager.CleanupOnExit();
+    }
+
     protected override void OnStartup(StartupEventArgs e)
     {
         // Hyper-V cmdlets e scripts requerem privilégios de Administrador.

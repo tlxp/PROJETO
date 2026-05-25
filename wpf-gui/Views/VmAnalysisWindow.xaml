@@ -54,19 +54,51 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock x:Name="StatusText"
-                       Grid.Column="0"
-                       VerticalAlignment="Center"
-                       Style="{StaticResource MutedTextBlock}"
-                       Text="A iniciar..." />
-            <Button x:Name="CloseButton"
-                    Grid.Column="1"
-                    Content="Fechar"
-                    IsEnabled="False"
-                    MinWidth="100"
-                    Padding="12,6"
-                    Style="{StaticResource ModernButtonStyle}"
-                    Click="CloseButton_Click" />
+
+            <StackPanel Grid.Column="0" Orientation="Vertical" VerticalAlignment="Center">
+                <TextBlock x:Name="StatusText"
+                           Style="{StaticResource MutedTextBlock}"
+                           Text="A iniciar..." />
+                <TextBlock x:Name="TechStatusText"
+                           Opacity="0.85"
+                           Margin="0,4,0,0"
+                           Style="{StaticResource MutedTextBlock}"
+                           Text="—" />
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button x:Name="OpenRunFolderButton"
+                        Content="Abrir logs"
+                        IsEnabled="False"
+                        MinWidth="110"
+                        Margin="0,0,8,0"
+                        Padding="12,6"
+                        Style="{StaticResource ModernButtonStyle}"
+                        Click="OpenRunFolderButton_Click" />
+                <Button x:Name="OpenReportButton"
+                        Content="Abrir relatório"
+                        IsEnabled="False"
+                        MinWidth="130"
+                        Margin="0,0,8,0"
+                        Padding="12,6"
+                        Style="{StaticResource ModernButtonStyle}"
+                        Click="OpenReportButton_Click" />
+                <Button x:Name="CopyRunIdButton"
+                        Content="Copiar RunId"
+                        IsEnabled="False"
+                        MinWidth="130"
+                        Margin="0,0,8,0"
+                        Padding="12,6"
+                        Style="{StaticResource ModernButtonStyle}"
+                        Click="CopyRunIdButton_Click" />
+                <Button x:Name="CloseButton"
+                        Content="Fechar"
+                        IsEnabled="False"
+                        MinWidth="100"
+                        Padding="12,6"
+                        Style="{StaticResource ModernButtonStyle}"
+                        Click="CloseButton_Click" />
+            </StackPanel>
         </Grid>
     </Grid>
 </Window>

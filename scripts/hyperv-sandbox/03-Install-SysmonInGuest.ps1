@@ -184,6 +184,7 @@ $psOk2 = Wait-VMPowerShellDirectReady -VMName $VMName -CredentialCandidates $cre
 if ($psOk2 -is [pscredential]) { $cred = $psOk2 }
 
 # 2) Ativar Guest Service Interface para Copy-VMFile / Invoke-Command
+#    (O 04 também reconfigura COM1→pipe após cada restore de snapshot, incluindo snapshot actualizado pelo Sysmon.)
 Write-Host "[2/5] A ativar Guest Service Interface na VM..."
 Enable-SandboxGuestService -VMName $VMName
 Start-Sleep -Seconds 5
@@ -218,6 +219,50 @@ try {
         $proc = [System.Diagnostics.Process]::Start($psi)
         $null = $proc.WaitForExit(600000)  # até 10 minutos
         Write-Host "    [VM] Sysmon terminou com ExitCode $($proc.ExitCode)."
+
+        # Validar imediatamente (serviço + canal de eventos)
+        $svc = Get-Service -Name "Sysmon64" -ErrorAction SilentlyContinue
+        if (-not $svc) { $svc = Get-Service -Name "Sysmon" -ErrorAction SilentlyContinue }
+
+        if (-not $svc) {
+            throw "Sysmon aparenta ter sido instalado mas o serviço Sysmon64/Sysmon não existe."
+        }
+
+        if ($svc.Status -ne "Running") {
+            try {
+                Start-Service -Name $svc.Name -ErrorAction Stop
+                Start-Sleep -Milliseconds 500
+                $svc = Get-Service -Name $svc.Name -ErrorAction SilentlyContinue
+            } catch { }
+        }
+
+        $logName = "Microsoft-Windows-Sysmon/Operational"
+        $logPresent = $false
+        try { $logPresent = [bool](Get-WinEvent -ListLog $logName -ErrorAction SilentlyContinue) } catch { $logPresent = $false }
+
+        # Mostrar a config ativa (best-effort). `sysmon -c` costuma funcionar sem UI.
+        try {
+            $psiC = New-Object System.Diagnostics.ProcessStartInfo
+            $psiC.FileName = $exePath
+            $psiC.Arguments = "-c"
+            $psiC.UseShellExecute = $false
+            $psiC.RedirectStandardOutput = $true
+            $psiC.RedirectStandardError = $true
+            $psiC.CreateNoWindow = $true
+            $p2 = New-Object System.Diagnostics.Process
+            $p2.StartInfo = $psiC
+            $null = $p2.Start()
+            $out = $p2.StandardOutput.ReadToEnd()
+            $err = $p2.StandardError.ReadToEnd()
+            $null = $p2.WaitForExit(120000)
+            if ($out) { Write-Host ("    [VM] sysmon -c: " + ($out -replace "`r","").Trim()) }
+            if ($err) { Write-Host ("    [VM] sysmon -c (stderr): " + ($err -replace "`r","").Trim()) }
+        } catch { }
+
+        Write-Host ("    [VM] Serviço: {0} | Estado: {1} | Canal Sysmon: {2}" -f $svc.Name, $svc.Status, $logPresent)
+        if ($svc.Status -ne "Running" -or -not $logPresent) {
+            throw ("Sysmon não ficou operacional. svc_status={0} log_present={1}" -f $svc.Status, $logPresent)
+        }
     } -ArgumentList $guestSysmonExe, $guestSysmonConfig -ErrorAction Stop
 }
 catch {

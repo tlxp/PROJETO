@@ -1,0 +1,10 @@
+^C:\\ProgramData\\Microsoft\\Windows Defender\\
+^C:\\ProgramData\\Microsoft\\Windows\\AppRepository\\
+^C:\\ProgramData\\Microsoft\\Windows\\AppRepository\\Packages\\
+^C:\\ProgramData\\Microsoft\\Network\\Downloader\\
+^C:\\ProgramData\\Microsoft OneDrive\\
+^C:\\Windows\\SoftwareDistribution\\
+^C:\\Windows\\Logs\\
+^C:\\Windows\\Temp\\
+^C:\\Users\\[^\\]+\\AppData\\Local\\Temp\\
+^C:\\Users\\[^\\]+\\AppData\\Roaming\\Microsoft\\Windows\\Recent\\

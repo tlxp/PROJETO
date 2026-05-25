@@ -231,6 +231,32 @@ function buildAnalysisResultFromJob(job: unknown, fallbackFileName?: string): An
   return null;
 }
 
+async function publishStaticAnalysisResult(result: AnalysisResult): Promise<string> {
+  const res = await fetch(`${API_BASE}/api/analysis/upload_static`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      fileName: result.fileName,
+      report: result.report,
+      cCode: result.cCode,
+      ilCode: result.ilCode,
+      riskScore: result.riskScore,
+      riskLevel: result.riskLevel,
+      flaggedIndicators: result.flaggedIndicators ?? [],
+      flaggedFunctions: result.flaggedFunctions ?? [],
+    }),
+  });
+  if (!res.ok) {
+    const text = await readErrorDetail(res, res.statusText);
+    throw new Error(text || "Falha ao publicar resultado estático no backend.");
+  }
+  const data = (await res.json()) as { jobId?: string };
+  if (!data.jobId) {
+    throw new Error("Resposta inesperada ao publicar resultado estático (jobId em falta).");
+  }
+  return data.jobId;
+}
+
 /** Encontra blocos top-level no código C por matching de chavetas (funções ou blocos). */
 function getCBlocks(code: string): { start: number; end: number }[] {
   const lines = code.split("\n");
@@ -1009,6 +1035,7 @@ const Index = () => {
         const reader = res.body.getReader();
         const decoder = new TextDecoder("utf-8");
         let buffer = "";
+        let streamResult: AnalysisResult | null = null;
 
         for (;;) {
           const { value, done } = await reader.read();
@@ -1095,9 +1122,24 @@ const Index = () => {
                       })
                   : [],
               };
+              streamResult = data;
               setAnalysisResult(data);
               setShowResults(true);
             }
+          }
+        }
+
+        if (streamResult) {
+          try {
+            const jobId = await publishStaticAnalysisResult(streamResult);
+            setResultJobId(jobId);
+            setLastExternalJobId(jobId);
+            navigate(`/resultados?jobId=${encodeURIComponent(jobId)}`, { replace: false });
+            setAnalysisLogs((prev) => [...prev, `Resultado registado no backend: ${jobId}`]);
+          } catch (e) {
+            const message =
+              e instanceof Error ? e.message : "Falha ao registar o resultado estático no backend.";
+            setAnalysisLogs((prev) => [...prev, message]);
           }
         }
         return;
@@ -1510,7 +1552,7 @@ const Index = () => {
         fileName: baseDownloadName,
         flaggedIndicators: result.flaggedIndicators,
       });
-      openXrefExplorerTab("/xref", { forceNewTab: true });
+      openXrefExplorerTab(`/xref?word=${encodeURIComponent(selectedWord)}`, { forceNewTab: true });
     } catch {
       /* storage indisponível ou quota */
     }
@@ -1628,10 +1670,10 @@ const Index = () => {
           </div>
           <div>
             <h1 className="font-mono text-lg font-bold text-foreground tracking-tight">
-              CodeAnalyzer
+              RAT Analyzer
             </h1>
             <p className="text-[11px] text-muted-foreground">
-              .NET Binary & Source Analysis Tool
+              Análise estática de executáveis e DLLs
             </p>
           </div>
         </div>

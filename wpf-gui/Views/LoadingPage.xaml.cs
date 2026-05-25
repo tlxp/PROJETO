@@ -376,6 +376,10 @@ public partial class LoadingPage : Page
                     psi.Environment["PATH"] = binDir + Path.PathSeparator + pathNow;
             }
 
+            var ghidraHome = GhidraDependencyHelper.ResolveGhidraInstallDirForBackend();
+            if (!string.IsNullOrWhiteSpace(ghidraHome))
+                psi.Environment["GHIDRA_INSTALL_DIR"] = ghidraHome;
+
             // Guardamos o processo para o podermos terminar quando o WPF fechar.
             _managedBackendProcess = Process.Start(psi);
         }
@@ -532,7 +536,8 @@ public partial class LoadingPage : Page
         {
             if (_managedBackendProcess is { HasExited: false })
             {
-                _managedBackendProcess.Kill(true);
+                _managedBackendProcess.Kill(entireProcessTree: true);
+                _managedBackendProcess.WaitForExit(5000);
             }
         }
         catch
@@ -552,7 +557,8 @@ public partial class LoadingPage : Page
         {
             if (_managedFrontendProcess is { HasExited: false })
             {
-                _managedFrontendProcess.Kill(true);
+                _managedFrontendProcess.Kill(entireProcessTree: true);
+                _managedFrontendProcess.WaitForExit(5000);
             }
         }
         catch

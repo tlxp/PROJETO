@@ -96,6 +96,25 @@
                                 Click="RunArchiveButton_Click"/>
                     </StackPanel>
 
+                    <Separator Margin="0,14,0,14" Background="{StaticResource BorderBrushBase}" />
+
+                    <StackPanel>
+                        <TextBlock Text="Limpeza completa" FontWeight="SemiBold" />
+                        <TextBlock Text="Apaga histórico local, amostras, relatórios, descompilados e caches temporários de análise em %LOCALAPPDATA%\RatAnalyzer (mantém a pasta Ghidra se existir — instalação usada no arranque). Esta ação é irreversível para os dados de análise."
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   FontSize="11"
+                                   Margin="0,4,0,8"
+                                   TextWrapping="Wrap"/>
+                        <Button x:Name="RunFullPurgeButton"
+                                Content="Limpeza completa"
+                                Margin="0,4,0,0"
+                                Width="180"
+                                Foreground="{StaticResource DangerBrush}"
+                                BorderBrush="{StaticResource DangerBrush}"
+                                Style="{StaticResource ModernButtonStyle}"
+                                Click="RunFullPurgeButton_Click"/>
+                    </StackPanel>
+
                     <TextBlock x:Name="StatusText"
                                Margin="0,14,0,0"
                                Foreground="{StaticResource TextMutedBrush}"

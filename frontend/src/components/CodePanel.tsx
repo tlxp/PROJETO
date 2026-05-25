@@ -953,6 +953,56 @@ const CodePanel: React.FC<CodePanelProps> = ({
 
 const MALICIOUS_CLASS = "bg-destructive/25 text-destructive font-medium";
 const SELECTED_WORD_CLASS = "bg-primary/25 text-primary font-medium rounded-sm";
+const SELECTED_WORD_PRIORITY = -1;
+const MALICIOUS_PRIORITY = 0;
+const SYNTAX_PRIORITY = 1;
+
+type StyledSpan = { start: number; end: number; className: string; priority: number };
+
+function renderStyledLine(line: string, spans: StyledSpan[]): React.ReactNode {
+  if (spans.length === 0) {
+    return <span className="text-foreground">{line}</span>;
+  }
+
+  const classes = new Array<string | null>(line.length).fill(null);
+  const priorities = new Array<number>(line.length).fill(Number.POSITIVE_INFINITY);
+
+  for (const span of spans) {
+    const start = Math.max(0, span.start);
+    const end = Math.min(line.length, span.end);
+    for (let i = start; i < end; i++) {
+      if (span.priority < priorities[i]) {
+        priorities[i] = span.priority;
+        classes[i] = span.className;
+      }
+    }
+  }
+
+  const elements: React.ReactNode[] = [];
+  let i = 0;
+  while (i < line.length) {
+    const cls = classes[i];
+    let j = i + 1;
+    while (j < line.length && classes[j] === cls) j++;
+    const text = line.slice(i, j);
+    if (cls) {
+      elements.push(
+        <span key={i} className={cls}>
+          {text}
+        </span>
+      );
+    } else {
+      elements.push(
+        <span key={`t${i}`} className="text-foreground">
+          {text}
+        </span>
+      );
+    }
+    i = j;
+  }
+
+  return <>{elements}</>;
+}
 
 // Simple syntax highlighting + optional highlight of malicious indicators and selected word
 const HighlightedLine: React.FC<{
@@ -1048,7 +1098,7 @@ const HighlightedLine: React.FC<{
   }
 
   // Selected word (duplo-clique) — highlight todas as ocorrências na linha
-  const spansWithPriority: { start: number; end: number; className: string; priority: number }[] = [];
+  const spansWithPriority: StyledSpan[] = [];
   if (highlightWord && highlightWord.length >= 2) {
     const escaped = highlightWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const re = new RegExp("\\b" + escaped + "\\b", "g");
@@ -1058,12 +1108,12 @@ const HighlightedLine: React.FC<{
         start: match.index,
         end: match.index + match[0].length,
         className: SELECTED_WORD_CLASS,
-        priority: 0,
+        priority: SELECTED_WORD_PRIORITY,
       });
     }
   }
 
-  // Malicious indicators (GetAsyncKeyState, etc.) — priority 0, override syntax
+  // Malicious indicators (GetAsyncKeyState, etc.)
   if (highlightTokens && highlightTokens.length > 0 && (language === "C" || language === "c")) {
     const tokens = [...highlightTokens].filter((t) => t && t.length >= 2).sort((a, b) => b.length - a.length);
     for (const token of tokens) {
@@ -1075,7 +1125,7 @@ const HighlightedLine: React.FC<{
           start: idx,
           end: idx + token.length,
           className: MALICIOUS_CLASS,
-          priority: 0,
+          priority: MALICIOUS_PRIORITY,
         });
         pos = idx + token.length;
       }
@@ -1092,72 +1142,58 @@ const HighlightedLine: React.FC<{
   let match;
   comments.lastIndex = 0;
   while ((match = comments.exec(line)) !== null) {
-    spansWithPriority.push({ start: match.index, end: match.index + match[0].length, className: "text-code-comment", priority: 1 });
+    spansWithPriority.push({
+      start: match.index,
+      end: match.index + match[0].length,
+      className: "text-code-comment",
+      priority: SYNTAX_PRIORITY,
+    });
   }
 
   const hasComments = spansWithPriority.some((s) => s.className === "text-code-comment");
   if (!hasComments) {
     strings.lastIndex = 0;
     while ((match = strings.exec(line)) !== null) {
-      spansWithPriority.push({ start: match.index, end: match.index + match[0].length, className: "text-code-string", priority: 1 });
+      spansWithPriority.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        className: "text-code-string",
+        priority: SYNTAX_PRIORITY,
+      });
     }
 
     keywords.lastIndex = 0;
     while ((match = keywords.exec(line)) !== null) {
-      const overlaps = spansWithPriority.some((s) => match!.index >= s.start && match!.index < s.end);
-      if (!overlaps) {
-        spansWithPriority.push({ start: match.index, end: match.index + match[0].length, className: "text-code-keyword", priority: 1 });
-      }
+      spansWithPriority.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        className: "text-code-keyword",
+        priority: SYNTAX_PRIORITY,
+      });
     }
 
     types.lastIndex = 0;
     while ((match = types.exec(line)) !== null) {
-      const overlaps = spansWithPriority.some((s) => match!.index >= s.start && match!.index < s.end);
-      if (!overlaps) {
-        spansWithPriority.push({ start: match.index, end: match.index + match[0].length, className: "text-code-type", priority: 1 });
-      }
+      spansWithPriority.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        className: "text-code-type",
+        priority: SYNTAX_PRIORITY,
+      });
     }
 
     numbers.lastIndex = 0;
     while ((match = numbers.exec(line)) !== null) {
-      const overlaps = spansWithPriority.some((s) => match!.index >= s.start && match!.index < s.end);
-      if (!overlaps) {
-        spansWithPriority.push({ start: match.index, end: match.index + match[0].length, className: "text-code-number", priority: 1 });
-      }
+      spansWithPriority.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        className: "text-code-number",
+        priority: SYNTAX_PRIORITY,
+      });
     }
   }
 
-  if (spansWithPriority.length === 0) {
-    return <span className="text-foreground">{line}</span>;
-  }
-
-  spansWithPriority.sort((a, b) => a.start - b.start);
-  const merged: { start: number; end: number; className: string; priority: number }[] = [];
-  for (const s of spansWithPriority) {
-    for (let i = merged.length - 1; i >= 0; i--) {
-      const r = merged[i];
-      if (r.end > s.start && r.start < s.end && r.priority > s.priority) {
-        merged.splice(i, 1);
-      }
-    }
-    merged.push({ start: s.start, end: s.end, className: s.className, priority: s.priority });
-  }
-  merged.sort((a, b) => a.start - b.start);
-
-  const elements: React.ReactNode[] = [];
-  let lastEnd = 0;
-  merged.forEach((span, i) => {
-    if (span.start > lastEnd) {
-      elements.push(<span key={`t${i}`} className="text-foreground">{line.slice(lastEnd, span.start)}</span>);
-    }
-    elements.push(<span key={i} className={span.className}>{line.slice(span.start, span.end)}</span>);
-    lastEnd = span.end;
-  });
-  if (lastEnd < line.length) {
-    elements.push(<span key="last" className="text-foreground">{line.slice(lastEnd)}</span>);
-  }
-
-  return <>{elements}</>;
+  return renderStyledLine(line, spansWithPriority);
 };
 
 export default CodePanel;

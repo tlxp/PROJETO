@@ -85,6 +85,26 @@ class RATAnalyzer:
         else:
             print(msg, flush=True)
 
+    def _log_dotnet_decompilation(self, decomp_result: dict) -> None:
+        """Regista o resultado da descompilação .NET sem stack traces nem texto duplicado."""
+        if decomp_result.get("success"):
+            self._log(f"[+] Código C# descompilado para: {decomp_result.get('output_dir')}")
+            return
+
+        log_msg = (decomp_result.get("log_message") or "").strip()
+        if not log_msg:
+            err_short = (decomp_result.get("error_short") or decomp_result.get("error") or "falha desconhecida").strip()
+            log_msg = err_short.split("\n", 1)[0].strip()
+            if len(log_msg) > 220:
+                log_msg = log_msg[:217] + "..."
+
+        if decomp_result.get("error_type") == "no_managed_metadata":
+            self._log(f"[~] Descompilação .NET: {log_msg}")
+            self._log("      A seguir: desmontagem (assembly) e pseudo-C (Ghidra), se disponível.")
+            return
+
+        self._log(f"[!] Descompilação .NET: {log_msg}")
+
     def analyze(self):
         """Executa a análise completa do ficheiro"""
         self._log(f"[*] Iniciando análise de: {self.target_file.name}")
@@ -97,10 +117,7 @@ class RATAnalyzer:
             self._log("[2/7] Descompilação .NET (ILSpy) — pode demorar 1-2 min...")
             decomp_result = self.dotnet_decompiler.decompile(str(self.target_file))
             self.analysis_results["dotnet_decompilation"] = decomp_result
-            if not decomp_result.get("success"):
-                self._log(f"[!] AVISO: Falha na descompilação .NET: {decomp_result.get('error')}")
-            else:
-                self._log(f"[+] Código C# descompilado para: {decomp_result.get('output_dir')}")
+            self._log_dotnet_decompilation(decomp_result)
 
         # 3. Análise estática
         self._log("[3/7] Análise estática (strings, imports, indicadores)...")
@@ -114,7 +131,6 @@ class RATAnalyzer:
         self.analysis_results["deobfuscation"] = self.deobfuscator.deobfuscate(
             str(self.target_file)
         )
-        self._log("      OK.")
         self._log("      OK.")
 
         # 5. Scan YARA
@@ -240,7 +256,18 @@ class RATAnalyzer:
                         except Exception as e:
                             self._log(f"[!] Extração de trechos pseudo-C falhou: {e}")
                     elif ghidra_result.get("error"):
-                        self._log(f"[!] Ghidra: {ghidra_result['error'][:80]}...")
+                        err = (ghidra_result.get("error") or "").strip().split("\n", 1)[0]
+                        if len(err) > 220:
+                            err = err[:217] + "..."
+                        self._log(f"[!] Ghidra: {err}")
+                        if ghidra_result.get("error_type") == "project_locked":
+                            self._log(
+                                "      Dica: fecha o Ghidra GUI ou apaga a pasta do projeto em decompiled/ e volta a analisar."
+                            )
+                        if disasm_result.get("success"):
+                            self._log(
+                                f"      Fallback: assembly disponível ({disasm_result.get('instructions', 0)} instruções) no separador IL/assembly."
+                            )
                 except Exception as e:
                     self._log(f"[!] Ghidra decompilation falhou: {e}")
             else:
@@ -274,6 +301,7 @@ class RATAnalyzer:
         ghidra_snapshot = {
             "success": bool(_ghidra.get("success")),
             "error": ((_ghidra.get("error") or "")[:2500]),
+            "error_type": _ghidra.get("error_type") or "",
             "output_file": _ghidra.get("output_file") or "",
             "functions_decompiled": int(_ghidra.get("functions_decompiled") or 0),
         }

@@ -1,6 +1,8 @@
-param(
+﻿param(
     [switch] $DryRun
 )
+
+$script:SandboxGuestFileCopyMode = $null
 
 function Get-LogTimestamp {
     return Get-Date -Format "HH:mm:ss"
@@ -430,7 +432,7 @@ function New-UnattendVhdx {
         # Copiar conte-do (incluindo autounattend.xml) para a raiz
         Copy-Item -Path (Join-Path $SourceFolder "*") -Destination $drive -Recurse -Force
 
-        # Sanity check - falhar de forma expl-cita se o XML n-o estiver onde o Setup espera
+        # Sanity check - falhar de forma expl-cita se o XML n-o est- onde o Setup espera
         if (-not (Test-Path (Join-Path $drive "autounattend.xml"))) {
             throw "autounattend.xml n-o est- na raiz do VHDX ($drive). Verifique o conte-do de $SourceFolder."
         }
@@ -1032,6 +1034,38 @@ function Set-SandboxHostIpIfNeeded {
     }
 }
 
+function Test-SandboxVmHostLowMemoryError {
+    param([object] $Err)
+    if (-not $Err) { return $false }
+    $ex = $null
+    $text = ""
+    if ($Err -is [Management.Automation.ErrorRecord]) {
+        $ex = $Err.Exception
+        $text = [string]$Err.Exception.Message
+        if ($Err.ErrorDetails -and $Err.ErrorDetails.Message) {
+            $text += " " + [string]$Err.ErrorDetails.Message
+        }
+    } elseif ($Err -is [System.Exception]) {
+        $ex = $Err
+        $text = [string]$Err.Message
+    } else {
+        return $false
+    }
+    $wordPattern = "0x800705AA|0x8007000E|recursos de sistema|insufficient system resources|not enough memory|cannot allocate|mem[óo]ria insuficiente|n[aã]o existe mem[óo]ria|out of memory"
+    while ($ex) {
+        $m = [string]$ex.Message
+        $text += " $m"
+        if ($m -match $wordPattern) { return $true }
+        try {
+            $u = [uint32]$ex.HResult
+            if ($u -eq 0x800705AA -or $u -eq 0x8007000E) { return $true }
+        } catch { }
+        $ex = $ex.InnerException
+    }
+    if ($text -match $wordPattern) { return $true }
+    return $false
+}
+
 function Start-SandboxVM {
     param(
         [string] $VMName,
@@ -1050,7 +1084,109 @@ function Start-SandboxVM {
         if ($script:DryRun) {
             Write-LogHost "[DRY-RUN] Arrancaria a VM '$VMName'."
         } else {
-            Start-VM -Name $VMName | Out-Null
+            $started = $false
+            $changedStartup = $false
+            $originalStartupBytes = $null
+            $originalMinBytes = $null
+            $originalMaxBytes = $null
+            $originalDyn = $false
+            try {
+                Start-VM -Name $VMName -ErrorAction Stop | Out-Null
+                $started = $true
+            } catch {
+                $firstErr = $_
+                if (-not (Test-SandboxVmHostLowMemoryError $firstErr)) { throw }
+
+                # Best-effort: reduzir StartupBytes (e Minimum se DynamicMemory) e re-tentar.
+                try {
+                    $snapMem = Get-VMMemory -VMName $VMName -ErrorAction Stop
+                    $originalStartupBytes = [int64]$snapMem.Startup
+                    $originalMinBytes = [int64]$snapMem.Minimum
+                    $originalMaxBytes = [int64]$snapMem.Maximum
+                    $originalDyn = [bool]$snapMem.DynamicMemoryEnabled
+                } catch {
+                    $originalStartupBytes = $null
+                    $originalMinBytes = $null
+                    $originalMaxBytes = $null
+                    $originalDyn = $false
+                }
+
+                $candidates = New-Object System.Collections.Generic.List[long]
+                if ($originalStartupBytes -and $originalStartupBytes -gt 0) {
+                    foreach ($mib in @(1536, 1408, 1280, 1152, 1024, 896, 768)) {
+                        $b = [int64]$mib * 1MB
+                        if ($b -lt $originalStartupBytes) { [void]$candidates.Add($b) }
+                    }
+                } else {
+                    foreach ($mib in @(1536, 1280, 1152, 1024, 896, 768)) { [void]$candidates.Add([int64]$mib * 1MB) }
+                }
+
+                foreach ($startupBytes in $candidates) {
+                    try {
+                        Write-LogWarning "Start-VM falhou por falta de RAM no host. A ajustar RAM (startup $([math]::Round($startupBytes / 1MB)) MiB) e a re-tentar..."
+                        try {
+                            $cur = Get-VM -Name $VMName -ErrorAction SilentlyContinue
+                            if ($cur -and $cur.State -ne 'Off') {
+                                Stop-VM -Name $VMName -TurnOff -Force -ErrorAction SilentlyContinue | Out-Null
+                            }
+                            $deadline = (Get-Date).AddSeconds(15)
+                            while ((Get-Date) -lt $deadline) {
+                                $cur = Get-VM -Name $VMName -ErrorAction SilentlyContinue
+                                if (-not $cur -or $cur.State -eq 'Off') { break }
+                                Start-Sleep -Milliseconds 500
+                            }
+                        } catch { }
+
+                        $setOk = $false
+                        for ($attempt = 1; $attempt -le 2; $attempt++) {
+                            try {
+                                $curMem = Get-VMMemory -VMName $VMName -ErrorAction Stop
+                                if ($curMem.DynamicMemoryEnabled) {
+                                    $minB = [Math]::Min([int64]$curMem.Minimum, $startupBytes)
+                                    $floorB = 512MB
+                                    if ($minB -lt $floorB) { $minB = $floorB }
+                                    if ($minB -gt $startupBytes) { $minB = $startupBytes }
+                                    $maxB = [Math]::Max([int64]$curMem.Maximum, $startupBytes)
+                                    Set-VMMemory -VMName $VMName -DynamicMemoryEnabled $true -MinimumBytes $minB -StartupBytes $startupBytes -MaximumBytes $maxB -ErrorAction Stop | Out-Null
+                                } else {
+                                    Set-VMMemory -VMName $VMName -DynamicMemoryEnabled $false -StartupBytes $startupBytes -ErrorAction Stop | Out-Null
+                                }
+                                $setOk = $true
+                                break
+                            } catch {
+                                $setMsg = $_.Exception.Message
+                                if ($setMsg -match 'estado atual|current state|InvalidState') {
+                                    try { Stop-VM -Name $VMName -TurnOff -Force -ErrorAction SilentlyContinue | Out-Null } catch { }
+                                    Start-Sleep -Milliseconds 900
+                                    continue
+                                }
+                                throw
+                            }
+                        }
+                        if (-not $setOk) { throw "Set-VMMemory falhou (StartupBytes=$startupBytes): VM não ficou em estado 'Off'." }
+                        $changedStartup = $true
+                        Start-VM -Name $VMName -ErrorAction Stop | Out-Null
+                        $started = $true
+                        Write-LogHost "VM '$VMName' arrancou após ajustar Startup RAM para $([math]::Round($startupBytes / 1MB)) MiB."
+                        break
+                    } catch {
+                        if (-not (Test-SandboxVmHostLowMemoryError $_)) { throw }
+                    }
+                }
+
+                if (-not $started) {
+                    if ($changedStartup -and $null -ne $originalStartupBytes -and $originalStartupBytes -gt 0) {
+                        try {
+                            if ($originalDyn -and $null -ne $originalMinBytes -and $null -ne $originalMaxBytes) {
+                                Set-VMMemory -VMName $VMName -DynamicMemoryEnabled $true -MinimumBytes $originalMinBytes -StartupBytes $originalStartupBytes -MaximumBytes $originalMaxBytes -ErrorAction SilentlyContinue | Out-Null
+                            } else {
+                                Set-VMMemory -VMName $VMName -DynamicMemoryEnabled $false -StartupBytes $originalStartupBytes -ErrorAction SilentlyContinue | Out-Null
+                            }
+                        } catch { }
+                    }
+                    throw $firstErr
+                }
+            }
         }
     }
 
@@ -1063,7 +1199,7 @@ function Start-SandboxVM {
             throw "Start-SandboxVM: espera por PowerShell Direct requer -Credential ou -CredentialCandidates (ou use apenas -BootWaitSeconds sem credenciais)."
         }
         # Default mais rápido e determinístico: evitar espera "sem timeout" (0) quando há credenciais.
-        if ($PowerShellDirectTimeoutSeconds -le 0) { $PowerShellDirectTimeoutSeconds = 60 }
+        if ($PowerShellDirectTimeoutSeconds -le 0) { $PowerShellDirectTimeoutSeconds = 240 }
         Write-LogHost "A aguardar arranque da VM (PowerShell Direct, verificação a cada 2s)..."
         return (Wait-VMPowerShellDirectReady -VMName $VMName -Credential $Credential -CredentialCandidates $CredentialCandidates -TimeoutSeconds $PowerShellDirectTimeoutSeconds -LogPath $LogPath -LogIntervalSeconds 2)
     }
@@ -1098,6 +1234,294 @@ function Wait-SandboxGuestServiceReady {
         Start-Sleep -Milliseconds 750
     }
     return $false
+}
+
+# --- Canal serial COM1 (Gen1) ↔ Named Pipe no host (relatório texto, START_OF_REPORT … END_OF_REPORT) ---
+
+function Set-SandboxVMComPortPipe {
+    param(
+        [Parameter(Mandatory = $true)][string] $VMName,
+        [Parameter(Mandatory = $true)][string] $PipeShortName
+    )
+    if ($script:DryRun) {
+        Write-LogHost "[DRY-RUN] Configuraria COM1 -> \\.\pipe\$PipeShortName na VM '$VMName'."
+        return
+    }
+    $vm = Get-VM -Name $VMName -ErrorAction Stop
+    if ($vm.Generation -ne 1) {
+        throw "COM1/pipe só é suportado em VM Generation 1. VM '$VMName' é Gen$($vm.Generation)."
+    }
+    if ($vm.State -ne 'Off') {
+        throw "A VM '$VMName' tem de estar Off para Set-VMComPort. Estado: $($vm.State)."
+    }
+    $path = "\\.\pipe\$PipeShortName"
+    Set-VMComPort -VMName $VMName -Number 1 -Path $path -ErrorAction Stop | Out-Null
+}
+
+function Test-SandboxSerialTransportApplicable {
+    param(
+        [Parameter(Mandatory = $true)][string] $VMName
+    )
+    try {
+        $vm = Get-VM -Name $VMName -ErrorAction Stop
+        return ($vm.Generation -eq 1)
+    } catch {
+        return $false
+    }
+}
+
+function New-SandboxNamedPipeServer {
+    param(
+        [string] $PipeName,
+        [int]    $InBufferSize = 4096,
+        [int]    $OutBufferSize = 4096
+    )
+    $pipeSecurity = New-Object System.IO.Pipes.PipeSecurity
+
+    # DACL explícito: não basta Administradores — o worker do Hyper-V que liga o COM1 da VM
+    # ao named pipe corre como SYSTEM / contas de VM; sem estas regras WaitForConnection()
+    # pode ficar bloqueado para sempre enquanto o guest acredita que escreveu com sucesso.
+    foreach ($sidString in @(
+            "S-1-5-32-544",  # BUILTIN\Administrators
+            "S-1-5-18",      # NT AUTHORITY\SYSTEM
+            "S-1-5-83-0"     # NT VIRTUAL MACHINE\Virtual Machines (Hyper-V)
+        )) {
+        try {
+            $sid = New-Object System.Security.Principal.SecurityIdentifier($sidString)
+            $acct = $sid.Translate([System.Security.Principal.NTAccount]).Value
+            $rule = New-Object System.IO.Pipes.PipeAccessRule(
+                $acct,
+                [System.IO.Pipes.PipeAccessRights]::FullControl,
+                [System.Security.AccessControl.AccessControlType]::Allow
+            )
+            $pipeSecurity.AddAccessRule($rule)
+        } catch {
+            # SIDs opcionais podem falhar em SO antigos — ignorar silenciosamente
+        }
+    }
+
+    # Várias instâncias (>1) evitam ERROR_PIPE_BUSY
+    $pipe = New-Object System.IO.Pipes.NamedPipeServerStream(
+        $PipeName,
+        [System.IO.Pipes.PipeDirection]::In,
+        254,
+        [System.IO.Pipes.PipeTransmissionMode]::Byte,
+        [System.IO.Pipes.PipeOptions]::None,
+        $InBufferSize,
+        $OutBufferSize,
+        $pipeSecurity
+    )
+    return $pipe
+}
+
+function Receive-SandboxReportFromPipe {
+    param(
+        [string] $PipeName,
+        [string] $OutputPath,
+        [int]    $TimeoutSeconds = 600
+    )
+
+    $pipe = $null
+    try {
+        $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+        Write-Host "[PIPE] ---- inicio receptor pid=$PID utc=$([DateTime]::UtcNow.ToString('o')) pipe='$PipeName' timeout=${TimeoutSeconds}s out='$OutputPath'"
+
+        # Tentativa 1: como servidor
+        $useClient = $false
+        try {
+            $pipe = New-SandboxNamedPipeServer -PipeName $PipeName
+            Write-Host "[PIPE] Servidor criado (NamedPipeServerStream In). Nome curto: '$PipeName'"
+        } catch {
+            $msg = $_.Exception.Message
+            if ($msg -match "ocupad|busy") {
+                $useClient = $true
+                Write-Host "[PIPE] Servidor ocupado, a tentar como cliente..."
+            } else {
+                throw
+            }
+        }
+
+        # Se necessário, ligar como cliente
+        if ($useClient) {
+            $pipe = New-Object System.IO.Pipes.NamedPipeClientStream(".", $PipeName, [System.IO.Pipes.PipeDirection]::In)
+            while (-not $pipe.IsConnected -and ([DateTime]::UtcNow -lt $deadline)) {
+                try {
+                    $remainingMs = [int][Math]::Max(100, [Math]::Min(2000, ($deadline - [DateTime]::UtcNow).TotalMilliseconds))
+                    $pipe.Connect($remainingMs)
+                } catch {
+                    Start-Sleep -Milliseconds 200
+                }
+            }
+            if (-not $pipe.IsConnected) { throw "Timeout ao ligar como client ao pipe '$PipeName'." }
+            Write-Host "[PIPE] Cliente ligado ao pipe: $PipeName"
+        }
+
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        try { $pipe.ReadTimeout = 1000 } catch { }
+
+        $inReport = $false
+        $reportLines = @()
+        $seenAny = $false
+        $lastProgress = [DateTime]::UtcNow
+        $rxLines = 0
+        $reader = $null
+        $gotEndOfReport = $false
+        # Após WaitForConnection, o worker do Hyper-V pode reportar IsConnected=$false brevemente antes do guest abrir COM1.
+        $connectEstablishedUtc = $null
+        $lastEscutaLogUtc = [DateTime]::MinValue
+        $acceptCount = 0
+        $lastGraceLogUtc = [DateTime]::MinValue
+        $disconnectCount = 0
+
+        # Servidor: o Hyper-V pode ligar ao pipe cedo e fechar antes do guest abrir COM1 para enviar.
+        # Nesse caso é preciso Disconnect + novo WaitForConnection; uma única aceitação fica à espera sem dados.
+        while ([DateTime]::UtcNow -lt $deadline -and -not $gotEndOfReport) {
+            if (-not $useClient -and $null -eq $reader) {
+                $nowListen = [DateTime]::UtcNow
+                if (($nowListen - $lastEscutaLogUtc).TotalSeconds -ge 25) {
+                    $remListen = [int]($deadline - $nowListen).TotalSeconds
+                    Write-Host "[PIPE] À escuta (WaitForConnection) pipe='$PipeName' restante~${remListen}s aceitesAnteriores=$acceptCount disconnects=$disconnectCount"
+                    $lastEscutaLogUtc = $nowListen
+                }
+                $pipe.WaitForConnection()
+                $acceptCount++
+                $connectEstablishedUtc = [DateTime]::UtcNow
+                Write-Host "[PIPE] WaitForConnection OK #$acceptCount utc=$($connectEstablishedUtc.ToString('o')) IsConnected=$($pipe.IsConnected) useClient=$useClient"
+                $reader = New-Object System.IO.StreamReader($pipe, $utf8NoBom, $false)
+                Write-Host "[PIPE] StreamReader criado; a ler linhas (ReadTimeout=$($pipe.ReadTimeout)ms)"
+            } elseif ($useClient -and $null -eq $reader) {
+                $reader = New-Object System.IO.StreamReader($pipe, $utf8NoBom, $false)
+                $connectEstablishedUtc = [DateTime]::UtcNow
+                Write-Host "[PIPE] Modo cliente: StreamReader criado utc=$($connectEstablishedUtc.ToString('o'))"
+            }
+
+            $raw = $null
+            try {
+                $raw = $reader.ReadLine()
+            } catch [System.IO.IOException] {
+                # Timeout de leitura – continua
+                $raw = $null
+            } catch {
+                throw
+            }
+
+            if ($null -ne $raw) {
+                $seenAny = $true
+                $rxLines++
+                $line = ($raw -replace "`0", "").Trim()
+                if ([string]::IsNullOrWhiteSpace($line)) { continue }
+
+                if ($line -eq "START_OF_REPORT") {
+                    $inReport = $true
+                    Write-Host "[PIPE] START_OF_REPORT recebido (aceitacao #$acceptCount) utc=$([DateTime]::UtcNow.ToString('o'))"
+                    continue
+                }
+
+                if ($line -eq "END_OF_REPORT" -or $line -eq "END_OF_REPORT_CHECKSUM") {
+                    Write-Host "[PIPE] Marcador fim: '$line' linhasCorpo=$($reportLines.Count) aceitacao#$acceptCount utc=$([DateTime]::UtcNow.ToString('o'))"
+                    $gotEndOfReport = $true
+                    break
+                }
+
+                if ($inReport) {
+                    $reportLines += $line
+                }
+            }
+
+            # Ligação fechada no lado do hypervisor/guest antes do fim do protocolo → aceitar de novo.
+            if (-not $useClient -and $null -ne $reader -and (-not $pipe.IsConnected)) {
+                # Não fazer Disconnect imediato: o Hyper-V liga/desliga o pipe antes do SerialPort do guest abrir.
+                $postConnectGraceSec = 18
+                if ($null -ne $connectEstablishedUtc -and ([DateTime]::UtcNow - $connectEstablishedUtc).TotalSeconds -lt $postConnectGraceSec) {
+                    $gnow = [DateTime]::UtcNow
+                    if (($gnow - $lastGraceLogUtc).TotalSeconds -ge 5) {
+                        $gs = [int]($gnow - $connectEstablishedUtc).TotalSeconds
+                        Write-Host "[PIPE] Graca pos-ligacao ${gs}s/${postConnectGraceSec}s IsConnected=$($pipe.IsConnected) seenAny=$seenAny rxLines=$rxLines ace#$acceptCount"
+                        $lastGraceLogUtc = $gnow
+                    }
+                    Start-Sleep -Milliseconds 200
+                    continue
+                }
+                # IsConnected pode ficar falso brevemente com dados ainda em buffer do StreamReader.
+                $hasBuffered = $false
+                $peekVal = $null
+                try { $peekVal = $reader.Peek(); $hasBuffered = ($peekVal -ge 0) } catch { $hasBuffered = $false; $peekVal = "peek_erro" }
+                if ($hasBuffered) {
+                    Start-Sleep -Milliseconds 50
+                    continue
+                }
+                $secSinceAccept = if ($null -ne $connectEstablishedUtc) { [int]([DateTime]::UtcNow - $connectEstablishedUtc).TotalSeconds } else { -1 }
+                $disconnectCount++
+                Write-Host "[PIPE] Pre-Disconnect #$disconnectCount ace#$acceptCount apos ${secSinceAccept}s seenAny=$seenAny rxLines=$rxLines inReport=$inReport peek=$peekVal"
+                try { $reader.Close() } catch { }
+                try { $reader.Dispose() } catch { }
+                $reader = $null
+                $connectEstablishedUtc = $null
+                if (-not $gotEndOfReport) {
+                    try { $pipe.Disconnect() } catch { }
+                    $inReport = $false
+                    $reportLines = @()
+                    $seenAny = $false
+                    $rxLines = 0
+                    Write-Host "[PIPE] Pipe desligado; novo WaitForConnection (aceitacoes totais=$acceptCount disconnects=$disconnectCount)"
+                }
+                Start-Sleep -Milliseconds 200
+                continue
+            }
+
+            # Log de progresso
+            if (([DateTime]::UtcNow - $lastProgress).TotalSeconds -ge 10) {
+                $remaining = [int]($deadline - [DateTime]::UtcNow).TotalSeconds
+                if (-not $seenAny) {
+                    Write-Host "[PIPE] Heartbeat: sem linhas brutas ainda ace#$acceptCount disc#$disconnectCount (restante ~${remaining}s)"
+                } elseif (-not $inReport) {
+                    Write-Host "[PIPE] Heartbeat: rxLines=$rxLines sem START_OF_REPORT ace#$acceptCount (restante ~${remaining}s)"
+                } else {
+                    Write-Host "[PIPE] Heartbeat: corpo $($reportLines.Count) linhas ace#$acceptCount (restante ~${remaining}s)"
+                }
+                $lastProgress = [DateTime]::UtcNow
+            }
+            Start-Sleep -Milliseconds 100
+        }
+
+        if ($null -ne $reader) {
+            try { $reader.Close() } catch { }
+        }
+        try { $pipe.Close() } catch { }
+
+        if ($reportLines.Count -eq 0) {
+            Write-Host "[PIPE] ---- fim sem dados utc=$([DateTime]::UtcNow.ToString('o')) aceitacoes=$acceptCount disconnects=$disconnectCount seenAny=$seenAny rxLines=$rxLines gotEnd=$gotEndOfReport"
+            throw "Nenhum dado recebido do pipe"
+        }
+
+        # Remover linhas de cabeçalho (se existirem)
+        $cleanLines = @()
+        $skipHeader = $true
+        foreach ($line in $reportLines) {
+            if ($skipHeader) {
+                if ($line -match "^(VERSION|TIMESTAMP|SHA256|REPORT_SIZE|CHECKSUM)=") { continue }
+                if ($line -eq "END_HEADER") { $skipHeader = $false; continue }
+                $skipHeader = $false
+                $cleanLines += $line
+            } else {
+                $cleanLines += $line
+            }
+        }
+
+        $content = $cleanLines -join "`r`n"
+        [System.IO.File]::WriteAllText($OutputPath, $content, [System.Text.Encoding]::UTF8)
+        Write-Host "[PIPE] Relatorio guardado: $OutputPath ($($cleanLines.Count) linhas) aceitacoes=$acceptCount disconnects=$disconnectCount utc=$([DateTime]::UtcNow.ToString('o'))"
+        return $cleanLines.Count
+
+    } catch {
+        Write-Host "[PIPE] ---- excecao utc=$([DateTime]::UtcNow.ToString('o')): $($_.Exception.Message)"
+        Write-Error "[PIPE] Erro: $_"
+        throw
+    } finally {
+        if ($null -ne $pipe -and $pipe.IsConnected) {
+            try { $pipe.Close() } catch { }
+        }
+    }
 }
 
 function Copy-SandboxVMFile {
@@ -1156,234 +1580,221 @@ function Stop-SandboxVM {
     }
 }
 
-function New-SandboxNamedPipeServer {
+function Test-SandboxGuestPathExists {
     param(
-        [string] $PipeName,
-        [int]    $InBufferSize = 4096,
-        [int]    $OutBufferSize = 4096
+        [Parameter(Mandatory = $true)][string] $VMName,
+        [Parameter(Mandatory = $true)][pscredential] $Credential,
+        [Parameter(Mandatory = $true)][string] $GuestLiteralPath
     )
-    $pipeSecurity = New-Object System.IO.Pipes.PipeSecurity
-
-    # Usar SID do grupo Builtin\Administrators para funcionar em qualquer idioma (ex.: "Administradores").
-    $adminSid = New-Object System.Security.Principal.SecurityIdentifier("S-1-5-32-544")
-    $adminNtAccount = $adminSid.Translate([System.Security.Principal.NTAccount])
-    $adminRule = New-Object System.IO.Pipes.PipeAccessRule(
-        $adminNtAccount.Value,
-        [System.IO.Pipes.PipeAccessRights]::FullControl,
-        [System.Security.AccessControl.AccessControlType]::Allow
-    )
-    $pipeSecurity.AddAccessRule($adminRule)
-
-    # maxNumberOfServerInstances > 1 evita ERROR_PIPE_BUSY se houver tentativas sobrepostas com o mesmo nome
-    $pipe = New-Object System.IO.Pipes.NamedPipeServerStream(
-        $PipeName,
-        [System.IO.Pipes.PipeDirection]::In,
-        254,
-        [System.IO.Pipes.PipeTransmissionMode]::Byte,
-        [System.IO.Pipes.PipeOptions]::None,
-        $InBufferSize,
-        $OutBufferSize,
-        $pipeSecurity
-    )
-    return $pipe
-}
-
-function New-SandboxNamedPipeServerEnhanced {
-    param(
-        [string] $PipeName,
-        [int]    $InBufferSize = 65536,  # Buffer maior para chunks
-        [int]    $OutBufferSize = 65536
-    )
-
-    $pipeSecurity = New-Object System.IO.Pipes.PipeSecurity
-
-    # Adicionar regras de acesso para Administradores e SYSTEM
-    $adminSid = New-Object System.Security.Principal.SecurityIdentifier("S-1-5-32-544")
-    $adminAccount = $adminSid.Translate([System.Security.Principal.NTAccount])
-    $adminRule = New-Object System.IO.Pipes.PipeAccessRule(
-        $adminAccount.Value,
-        [System.IO.Pipes.PipeAccessRights]::FullControl,
-        [System.Security.AccessControl.AccessControlType]::Allow
-    )
-    $pipeSecurity.AddAccessRule($adminRule)
-
-    $systemSid = New-Object System.Security.Principal.SecurityIdentifier("S-1-5-18")
-    $systemAccount = $systemSid.Translate([System.Security.Principal.NTAccount])
-    $systemRule = New-Object System.IO.Pipes.PipeAccessRule(
-        $systemAccount.Value,
-        [System.IO.Pipes.PipeAccessRights]::FullControl,
-        [System.Security.AccessControl.AccessControlType]::Allow
-    )
-    $pipeSecurity.AddAccessRule($systemRule)
-
-    # PipeOptions::None (não Asynchronous): o modo async é incompatível com StreamReader.ReadLine()
-    # síncrono — provoca bloqueios indefinidos ou leituras vazias quando o pipe usa COM1 no Hyper-V.
-    # maxNumberOfServerInstances = 1: só a VM se liga a este pipe por run.
-    $pipe = New-Object System.IO.Pipes.NamedPipeServerStream(
-        $PipeName,
-        [System.IO.Pipes.PipeDirection]::InOut,
-        1,
-        [System.IO.Pipes.PipeTransmissionMode]::Byte,
-        [System.IO.Pipes.PipeOptions]::None,
-        $InBufferSize,
-        $OutBufferSize,
-        $pipeSecurity
-    )
-
-    return $pipe
-}
-
-function Receive-SandboxReportFromPipe {
-    param(
-        [string] $PipeName,
-        [string] $OutputPath,
-        [int]    $TimeoutSeconds = 600
-    )
-
-    $pipe = $null
     try {
-        $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
-
-        # Em COM1->NamedPipe no Hyper-V, a ponta "server" pode variar.
-        # Tentar SERVER primeiro; se estiver ocupado, ligar como CLIENT.
-        $useClient = $false
-        try {
-            # Preferir InOut para maximizar compatibilidade (mesmo que só leiamos)
-            $pipe = New-SandboxNamedPipeServerEnhanced -PipeName $PipeName
-            Write-Host "[PIPE] Servidor à escuta em: $PipeName"
-        } catch {
-            $msg = $_.Exception.Message
-            if ($msg -match "ocupad|busy") {
-                $useClient = $true
-                Write-Host "[PIPE] Servidor ocupado, a tentar como cliente..."
-            } else {
-                throw
-            }
-        }
-
-        if ($useClient) {
-            $pipe = New-Object System.IO.Pipes.NamedPipeClientStream(".", $PipeName, [System.IO.Pipes.PipeDirection]::InOut)
-            while (-not $pipe.IsConnected -and ([DateTime]::UtcNow -lt $deadline)) {
-                try {
-                    $remainingMs = [int][Math]::Max(100, [Math]::Min(2000, ($deadline - [DateTime]::UtcNow).TotalMilliseconds))
-                    $pipe.Connect($remainingMs)
-                } catch {
-                    Start-Sleep -Milliseconds 200
-                }
-            }
-            if (-not $pipe.IsConnected) { throw "Timeout ao ligar como client ao pipe '$PipeName'." }
-            Write-Host "[PIPE] Cliente ligado ao pipe: $PipeName"
-        } else {
-            $pipe.WaitForConnection()
-            Write-Host "[PIPE] VM ligada ao pipe"
-        }
-
-        # Usar UTF-8 sem BOM para evitar ruído/auto-deteção no início do stream
-        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-        $reader = New-Object System.IO.StreamReader($pipe, $utf8NoBom, $false)
-        try { $pipe.ReadTimeout = 1000 } catch { }
-
-        $inReport = $false
-        $reportLines = @()
-        $seenAny = $false
-        $lastProgress = [DateTime]::UtcNow
-        $rxLines = 0
-
-        while ([DateTime]::UtcNow -lt $deadline) {
-            $raw = $null
-            try {
-                $raw = $reader.ReadLine()
-            } catch [System.IO.IOException] {
-                # Tipicamente timeout de ReadTimeout em streams - continuar até ao deadline global
-                $raw = $null
-            } catch {
-                throw
-            }
-
-            if ($null -ne $raw) {
-                $seenAny = $true
-                $rxLines++
-
-                $line = ($raw -replace "`0","").Trim()
-                if ([string]::IsNullOrWhiteSpace($line)) { continue }
-
-                # Detetar início do relatório
-                if ($line -eq "START_OF_REPORT") {
-                    $inReport = $true
-                    Write-Host "[PIPE] Início do relatório detetado"
-                    continue
-                }
-
-                # Detetar fim do relatório
-                if ($line -eq "END_OF_REPORT" -or $line -eq "END_OF_REPORT_CHECKSUM") {
-                    Write-Host "[PIPE] Fim do relatório detetado"
-                    break
-                }
-
-                # Recolher linhas do relatório
-                if ($inReport) {
-                    $reportLines += $line
-                    Write-Host "[PIPE] Linha $($reportLines.Count): $line"
-                }
-            }
-
-            # Heartbeat enquanto está à espera (para não parecer bloqueado)
-            if (([DateTime]::UtcNow - $lastProgress).TotalSeconds -ge 10) {
-                $remaining = [int]($deadline - [DateTime]::UtcNow).TotalSeconds
-                if (-not $seenAny) {
-                    Write-Host "[PIPE] À espera de dados... (restante ~${remaining}s)"
-                } elseif (-not $inReport) {
-                    Write-Host "[PIPE] Dados recebidos ($rxLines linhas), à espera de START_OF_REPORT... (restante ~${remaining}s)"
-                } else {
-                    Write-Host "[PIPE] A receber relatório... ($($reportLines.Count) linhas) (restante ~${remaining}s)"
-                }
-                $lastProgress = [DateTime]::UtcNow
-            }
-            Start-Sleep -Milliseconds 100
-        }
-
-        $reader.Close()
-        $pipe.Close()
-
-        if ($reportLines.Count -eq 0) {
-            throw "Nenhum dado recebido do pipe"
-        }
-
-        # Remover linhas de cabeçalho (VERSION, TIMESTAMP, SHA256, etc.)
-        $cleanLines = @()
-        $skipHeader = $true
-        foreach ($line in $reportLines) {
-            if ($skipHeader) {
-                # Pular linhas que parecem cabeçalho
-                if ($line -match "^(VERSION|TIMESTAMP|SHA256|REPORT_SIZE|CHECKSUM)=") {
-                    Write-Host "[PIPE] Cabeçalho ignorado: $line"
-                    continue
-                }
-                if ($line -eq "END_HEADER") {
-                    $skipHeader = $false
-                    continue
-                }
-                # Se não for cabeçalho, já estamos no corpo
-                $skipHeader = $false
-                $cleanLines += $line
-            } else {
-                $cleanLines += $line
-            }
-        }
-
-        # Gravar relatório
-        $content = $cleanLines -join "`r`n"
-        [System.IO.File]::WriteAllText($OutputPath, $content, [System.Text.Encoding]::UTF8)
-
-        Write-Host "[PIPE] Relatório guardado: $OutputPath ($($cleanLines.Count) linhas)"
-        return $cleanLines.Count
-
+        $r = Invoke-Command -VMName $VMName -Credential $Credential -ScriptBlock {
+            param($p)
+            Test-Path -LiteralPath $p
+        } -ArgumentList $GuestLiteralPath -ErrorAction Stop
+        return [bool]$r
     } catch {
-        Write-Error "[PIPE] Erro: $_"
-        throw
+        return $false
+    }
+}
+
+function Test-SandboxGuestAnalysisReportComplete {
+    param(
+        [Parameter(Mandatory = $true)][string] $VMName,
+        [Parameter(Mandatory = $true)][pscredential] $Credential,
+        [string] $ReportPath = "C:\analysis.txt",
+        [string] $ReportEndMarker = "REPORT_END;"
+    )
+    try {
+        $r = Invoke-Command -VMName $VMName -Credential $Credential -ScriptBlock {
+            param($ReportPath, $ReportEndMarker)
+            $result = [ordered]@{
+                complete     = $false
+                reportExists = $false
+                reportBytes  = 0
+                hasEndMarker = $false
+            }
+            if (-not (Test-Path -LiteralPath $ReportPath)) {
+                return [pscustomobject]$result
+            }
+
+            $result.reportExists = $true
+            $item = Get-Item -LiteralPath $ReportPath
+            $result.reportBytes = [long]$item.Length
+            if ($result.reportBytes -le 0) {
+                return [pscustomobject]$result
+            }
+
+            $markerBytes = [System.Text.Encoding]::UTF8.GetBytes($ReportEndMarker)
+            $scanBytes = [Math]::Max($markerBytes.Length, 8192)
+            $fs = [System.IO.File]::Open($ReportPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+            try {
+                $scan = [int][Math]::Min($scanBytes, $result.reportBytes)
+                $null = $fs.Seek($result.reportBytes - $scan, [System.IO.SeekOrigin]::Begin)
+                $buffer = New-Object byte[] $scan
+                $read = $fs.Read($buffer, 0, $scan)
+                if ($read -gt 0) {
+                    $tail = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $read)
+                    if ($tail.Contains($ReportEndMarker)) {
+                        $result.hasEndMarker = $true
+                        $result.complete = $true
+                    }
+                }
+            } finally {
+                $fs.Dispose()
+            }
+            return [pscustomobject]$result
+        } -ArgumentList $ReportPath, $ReportEndMarker -ErrorAction Stop
+        return $r
+    } catch {
+        return [pscustomobject]@{
+            complete     = $false
+            reportExists = $false
+            reportBytes  = 0
+            hasEndMarker = $false
+        }
+    }
+}
+
+function Get-SandboxGuestFileCopyMode {
+    if ($script:SandboxGuestFileCopyMode) { return $script:SandboxGuestFileCopyMode }
+
+    try {
+        Import-Module Hyper-V -ErrorAction SilentlyContinue | Out-Null
+        $names = [enum]::GetNames([Microsoft.HyperV.PowerShell.CopyFileSourceType])
+        if ($names -contains 'Guest') {
+            $script:SandboxGuestFileCopyMode = 'CmdletGuest'
+        } else {
+            $script:SandboxGuestFileCopyMode = 'PsDirect'
+        }
+    } catch {
+        $script:SandboxGuestFileCopyMode = 'PsDirect'
+    }
+
+    return $script:SandboxGuestFileCopyMode
+}
+
+function Copy-SandboxVMFileFromGuestViaPsDirect {
+    param(
+        [Parameter(Mandatory = $true)][string] $VMName,
+        [Parameter(Mandatory = $true)][pscredential] $Credential,
+        [Parameter(Mandatory = $true)][string] $GuestSourcePath,
+        [Parameter(Mandatory = $true)][string] $HostDestinationPath
+    )
+
+    $chunkSize = 524288
+    $offset = 0
+    $parent = Split-Path -Parent -Path $HostDestinationPath
+    if ($parent -and -not (Test-Path -LiteralPath $parent)) {
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    }
+    if (Test-Path -LiteralPath $HostDestinationPath) {
+        Remove-Item -LiteralPath $HostDestinationPath -Force -ErrorAction SilentlyContinue
+    }
+
+    $fs = [System.IO.File]::Open($HostDestinationPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+    try {
+        while ($true) {
+            $chunk = Invoke-Command -VMName $VMName -Credential $Credential -ScriptBlock {
+                param($Path, $Offset, $Size)
+                if (-not (Test-Path -LiteralPath $Path)) {
+                    throw "Ficheiro guest não encontrado: $Path"
+                }
+
+                $fsIn = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+                try {
+                    $null = $fsIn.Seek($Offset, [System.IO.SeekOrigin]::Begin)
+                    $buffer = New-Object byte[] $Size
+                    $read = $fsIn.Read($buffer, 0, $Size)
+                    if ($read -le 0) {
+                        return @{ eof = $true; data = $null }
+                    }
+
+                    if ($read -lt $Size) {
+                        $trim = New-Object byte[] $read
+                        [Array]::Copy($buffer, 0, $trim, 0, $read)
+                        $buffer = $trim
+                    }
+
+                    return @{
+                        eof = ($read -lt $Size)
+                        data = [Convert]::ToBase64String($buffer)
+                    }
+                } finally {
+                    $fsIn.Dispose()
+                }
+            } -ArgumentList $GuestSourcePath, $offset, $chunkSize -ErrorAction Stop
+
+            if ($chunk.data) {
+                $bytes = [Convert]::FromBase64String([string]$chunk.data)
+                if ($bytes.Length -gt 0) {
+                    $fs.Write($bytes, 0, $bytes.Length)
+                }
+                $offset += $bytes.Length
+            }
+
+            if ($chunk.eof) { break }
+        }
     } finally {
-        if ($null -ne $pipe -and $pipe.IsConnected) {
-            try { $pipe.Close() } catch { }
+        $fs.Dispose()
+    }
+}
+
+function Copy-SandboxVMFileFromGuest {
+    param(
+        [Parameter(Mandatory = $true)][string] $VMName,
+        [Parameter(Mandatory = $true)][pscredential] $Credential,
+        [Parameter(Mandatory = $true)][string] $GuestSourcePath,
+        [Parameter(Mandatory = $true)][string] $HostDestinationPath,
+        [int] $Retries = 12,
+        [int] $DelaySeconds = 4
+    )
+    if ($script:DryRun) {
+        Write-LogHost "[DRY-RUN] Copiaria da VM '${VMName}': ${GuestSourcePath} -> ${HostDestinationPath}"
+        return
+    }
+
+    $copyMode = Get-SandboxGuestFileCopyMode
+    if ($copyMode -eq 'PsDirect') {
+        for ($i = 1; $i -le $Retries; $i++) {
+            try {
+                if ($i -eq 1) {
+                    Write-LogHost "      Copy guest->host via PowerShell Direct (Copy-VMFile Guest indisponível neste Hyper-V)."
+                }
+                Copy-SandboxVMFileFromGuestViaPsDirect -VMName $VMName -Credential $Credential `
+                    -GuestSourcePath $GuestSourcePath -HostDestinationPath $HostDestinationPath
+                return
+            } catch {
+                if ($i -eq $Retries) { throw }
+                Write-LogWarning "PowerShell Direct (guest->host) falhou (tentativa $i/$Retries): $($_.Exception.Message). Repetição em ${DelaySeconds}s..."
+                Start-Sleep -Seconds $DelaySeconds
+            }
+        }
+        return
+    }
+
+    $svcName = Get-SandboxGuestServiceName -VMName $VMName
+    if (-not $svcName) {
+        throw "Guest Services não disponível na VM '${VMName}'."
+    }
+    Enable-VMIntegrationService -VMName $VMName -Name $svcName -ErrorAction SilentlyContinue
+    $null = Wait-SandboxGuestServiceReady -VMName $VMName -TimeoutSeconds 120
+
+    $parent = Split-Path -Parent -Path $HostDestinationPath
+    if ($parent -and -not (Test-Path -LiteralPath $parent)) {
+        New-Item -ItemType Directory -Path $parent -Force -ErrorAction Stop | Out-Null
+    }
+    if (Test-Path -LiteralPath $HostDestinationPath) {
+        Remove-Item -LiteralPath $HostDestinationPath -Force -ErrorAction SilentlyContinue
+    }
+
+    for ($i = 1; $i -le $Retries; $i++) {
+        try {
+            Copy-VMFile -VMName $VMName -SourcePath $GuestSourcePath -DestinationPath $HostDestinationPath -CreateFullPath -FileSource Guest -ErrorAction Stop
+            return
+        } catch {
+            if ($i -eq $Retries) { throw }
+            Write-LogWarning "Copy-VMFile (guest->host) falhou (tentativa $i/$Retries): $($_.Exception.Message). Repetição em ${DelaySeconds}s..."
+            Start-Sleep -Seconds $DelaySeconds
         }
     }
 }

@@ -29,6 +29,8 @@ def slugify(text: str, max_len: int = 32) -> str:
     norm = _SAFE_RE.sub("_", norm)
     norm = re.sub(r"_+", "_", norm).strip("_")
     out = norm or "x"
+    # Segmentos que começam por '.' falham em algumas APIs Java (Ghidra/JDK).
+    out = out.lstrip(".") or "x"
     return out[:max_len] if len(out) > max_len else out
 
 

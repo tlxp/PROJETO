@@ -1,31 +1,30 @@
-# Sandbox Hyper-V com relatório via porta serial (Named Pipe)
+# Sandbox Hyper-V — análise comportamental (Guest Service + COM1 opcional)
 
-Ambiente isolado para análise comportamental de malware: VM Hyper-V sem internet, snapshot limpo, e **exfiltração do relatório via porta serial virtual** (Named Pipe), sem usar rede nem partilhas.
+Ambiente isolado para análise comportamental de malware: VM Hyper-V sem internet, snapshot limpo. Por defeito (**`_Config.ps1`:** `GuestService`) o relatório chega só por **Copy-VMFile**. Para **COM1 → Named Pipe** (SBXREP1), use `-ReportTransport Both` ou `Serial`, ou defina `PROJETOVM_ReportTransport` em `_Config.ps1`.
 
 - **Pasta base:** `D:\PROJETOVM` (VM, Reports, Samples, Logs).
-- **Fluxo:** criar VM → colocar .exe/.dll → executar na VM → monitorizar alterações (ficheiros, registry, processos, rede, serviços, tarefas) → relatório em terceira pessoa → restaurar snapshot → encerrar VM → relatório guardado no host.
+- **Fluxo:** criar VM (Gen1 recomendada para COM1) → colocar .exe/.dll → executar na VM → monitorizar alterações → relatório em terceira pessoa → recolher no host por **pipe serial** e/ou **Copy-VMFile** nos caminhos de `D:\PROJETOVM\Reports\` → restaurar snapshot → encerrar VM.
 
 ## Pré-requisitos
 
 - Windows 10/11 Pro ou Enterprise (ou Server) com **Hyper-V**.
 - PowerShell **como Administrador** para setup e orquestração.
 - **ISO do Windows:** **en-US** (English United States) apenas — mais nada é suportado para instalação unattended.
-- VM com Windows instalado e **porta COM1** configurada para o Named Pipe no host.
+- VM com Windows instalada; **COM1/pipe** exige **VM Generation 1** (definido em `_Config.ps1`). Em Gen2 o `04` usa automaticamente só Guest Service.
 
 ## Estrutura de ficheiros
 
 ```
 scripts/hyperv-sandbox/
-├── _Config.ps1                  # Configuração central (D:\PROJETOVM, nomes VM/pipe/snapshot)
-├── 01-Setup-MalwareSandbox.ps1  # Setup único: pastas, VM, switch, IP host, snapshot, COM1→Pipe
-├── 02-Host-ReceiveReport.ps1    # Host: recebe relatório no pipe, grava em D:\PROJETOVM\Reports
+├── _Config.ps1                  # Configuração central (D:\PROJETOVM, VM, snapshot)
+├── 01-Setup-MalwareSandbox.ps1  # Setup único: pastas, VM, switch, IP host, snapshot
 ├── 03-Install-SysmonInGuest.ps1 # Host: instala Sysmon dentro da VM (após Windows instalado)
-├── 04-Run-Sample.ps1            # Host: orquestração (restore, start, copy, run, receive, restore)
+├── 04-Run-Sample.ps1            # Host: orquestração (restore, COM1+pipe por run, start, copy, run, relatórios, restore)
+├── SERIAL_REPORT_PROTOCOL.md    # Especificação SBXREP1 (COM1 / Named Pipe)
 ├── 05-FirstTimeVmSetup.ps1      # Host: primeira entrada — valida guest, garante isolamento e cria snapshot
 ├── vm/
 │   ├── Prepare-RealisticEnvironment.ps1  # VM: prepara ambiente "realista" (sem instalar apps)
-│   ├── Run-MalwareAnalysis.ps1   # VM: baseline → executa sample → diff → relatório → COM1
-│   └── Send-ReportViaCom.ps1    # VM: envia C:\analysis.txt via COM1
+│   └── Run-MalwareAnalysis.ps1   # VM: baseline → executa sample → diff → relatório em C:\
 └── README.md
 ```
 
@@ -51,7 +50,7 @@ D:\PROJETOVM\
    .\01-Setup-MalwareSandbox.ps1
    ```
    - Se o Hyper-V não estiver ativo, o script ativa-o e pede **reinício**; após reiniciar, execute o script novamente.
-   - O script cria `D:\PROJETOVM`, a VM `MalwareSandbox`, o switch interno `SandboxSwitch`, atribui 192.168.100.1/24 ao adaptador do host (se existir), configura COM1→Named Pipe e cria o snapshot `CleanState` (se a VM estiver desligada).
+   - O script cria `D:\PROJETOVM`, a VM `MalwareSandbox`, o switch interno `SandboxSwitch`, atribui 192.168.100.1/24 ao adaptador do host (se existir), e cria o snapshot `CleanState` (se a VM estiver desligada).
    - Se a VM `MalwareSandbox` e/ou o VHDX `Sandbox.vhdx` já existirem, o script pergunta se quer **eliminar e reinstalar de raiz**.
    - Para reinstalar **sem pedir confirmação** (opção usada pela GUI quando deteta recursos existentes), execute:
      ```powershell
@@ -68,9 +67,8 @@ D:\PROJETOVM\
      -SysmonExePath "D:\Tools\Sysmon\Sysmon64.exe" `
      -SysmonConfigPath "D:\Tools\Sysmon\sysmon-config.xml"
    ```
-7. Copie para a VM os scripts da pasta `vm\` (ex.: para `C:\analysis_work\`):
+7. (Opcional manual) copie para a VM o script da pasta `vm\` apenas se não usar apenas o `04-Run-Sample.ps1` para cópias:
    - `Run-MalwareAnalysis.ps1`
-   - `Send-ReportViaCom.ps1`
 8. Desligue a VM e crie/atualize o snapshot limpo:
    ```powershell
    Stop-VM -Name MalwareSandbox -Force
@@ -88,30 +86,22 @@ cd "C:\Users\jmigu\Desktop\PROJETO\PROJETO\scripts\hyperv-sandbox"
 .\04-Run-Sample.ps1 -SamplePath "D:\PROJETOVM\Samples\suspeito.exe" -TimeoutSeconds 120
 ```
 
-O relatório será guardado em `D:\PROJETOVM\Reports\analysis_<timestamp>.txt`.
+O relatório será guardado em `D:\PROJETOVM\Reports\analysis_<RunId>.txt` (e JSON/artefactos ao lado). O ficheiro `D:\PROJETOVM\Logs\Runs\<RunId>\run_<RunId>.json` regista `report_transport`, estado do pipe e caminhos.
 
-Se `Invoke-Command -VMName` não funcionar (ex.: versões diferentes de Windows), use:
+**Transporte de relatórios:** por defeito só **Guest Service**. Para ativar COM1 + pipe: `-ReportTransport Both` (serial + cópia de refugo) ou `Serial`. Em `_Config.ps1`, `PROJETOVM_ReportTransport` pode fixar o modo por omissão.
 
 ```powershell
-.\04-Run-Sample.ps1 -SamplePath "D:\PROJETOVM\Samples\suspeito.exe" -NoInvokeCommand
+.\04-Run-Sample.ps1 -SamplePath "D:\PROJETOVM\Samples\suspeito.exe" -TimeoutSeconds 120 -ReportTransport Serial
 ```
 
-Neste caso, o script copia a amostra e fica à espera do relatório; **dentro da VM** execute manualmente:
+Se o PowerShell Direct falhar de forma persistente, copie a amostra com o `04` até ao passo de cópia ou use `Copy-VMFile` manualmente; **dentro da VM** pode executar:
 
 ```powershell
 cd C:\analysis_work
-.\Run-MalwareAnalysis.ps1 -SamplePath "C:\analysis_work\suspeito.exe" -TimeoutSeconds 120
+.\Run-MalwareAnalysis.ps1 -SamplePath "C:\analysis_work\suspeito.exe" -TimeoutSeconds 120 -HostRunId "<mesmo RunId do host>" -SerialReport:$true
 ```
 
-### Receber apenas o relatório (manual)
-
-Se quiser correr o listener do pipe à parte:
-
-```powershell
-.\02-Host-ReceiveReport.ps1 -OutputPath "D:\PROJETOVM\Reports\meu_relatorio.txt"
-```
-
-Na VM, após a análise, o envio é feito por `Send-ReportViaCom.ps1` (chamado automaticamente por `Run-MalwareAnalysis.ps1`).
+O `04` continua a aceitar ficheiros em `C:\analysis.txt` via **Copy-VMFile** quando o transporte inclui Guest Service ou como retorno se o serial falhar.
 
 ## Conteúdo do relatório
 
@@ -125,18 +115,16 @@ Na VM, após a análise, o envio é feito por `Send-ReportViaCom.ps1` (chamado a
 
 ## Configuração
 
-Todas as variáveis (pasta base, nome da VM, snapshot, pipe) estão em **`_Config.ps1`**. A pasta base é **`D:\PROJETOVM`**. Para usar outra pasta, edite `$script:PROJETOVM_BasePath` em `_Config.ps1`.
+Todas as variáveis (pasta base, nome da VM, snapshot, **ReportTransport** por defeito, limite de tamanho por ficheiro no serial) estão em **`_Config.ps1`**. A pasta base é **`D:\PROJETOVM`**. Para usar outra pasta, edite `$script:PROJETOVM_BasePath` em `_Config.ps1`.
 
 ## Segurança
 
 - VM com rede **Internal**: sem acesso à internet.
 - Snapshot limpo antes/depois de cada análise.
-- Comunicação host↔VM: **Copy-VMFile** (Guest Service ativado apenas durante a orquestração) e **Named Pipe** para o relatório (unidirecional VM→host).
+- Comunicação host↔VM: **Guest Service** (`Copy-VMFile`, activado só durante `04-Run-Sample.ps1`; desactivado ao terminar) e, opcionalmente, **COM1** para relatórios (Named Pipe; só **Gen1**).
 - Evitar: partilhas de pastas, clipboard, drag-and-drop, bridge para a internet.
 
 ## Integração com o backend (opcional)
 
-O driver `backend/vm_drivers/hyperv.py` usa atualmente o **VM Agent HTTP** (upload/run/report). Para usar **apenas** o fluxo com serial/pipe, pode:
+O driver `backend/vm_drivers/hyperv.py` pode **lançar** `04-Run-Sample.ps1` com o caminho da amostra e **ler os ficheiros** em `D:\PROJETOVM\Reports\`.
 
-- Correr `04-Run-Sample.ps1` a partir do backend (por exemplo via `subprocess` ou agendamento) com o `SamplePath` do job e ler o relatório em `D:\PROJETOVM\Reports\`.
-- Ou implementar um driver alternativo (ex.: `hyperv_serial`) que execute estes scripts e leia o ficheiro de relatório gerado.

@@ -225,6 +225,44 @@ def archive_cold_jobs(older_than_days: int) -> dict:
     return {"archivedJobs": archived, "freedBytes": freed_bytes, "olderThanDays": older_than_days}
 
 
+def purge_all_storage() -> dict:
+    """
+    Limpeza completa: remove todo o conteúdo de sandbox_jobs, reports e decompiled
+    em DATA_DIR e recria a base de dados vazia.
+    """
+    targets = [
+        Path(config.SANDBOX_JOBS_DIR),
+        Path(config.REPORTS_DIR),
+        Path(config.DECOMPILED_DIR),
+    ]
+
+    removed_paths: list[str] = []
+    freed_bytes = 0
+    for target in targets:
+        if target.exists():
+            freed_bytes += _dir_size_bytes(target)
+            try:
+                shutil.rmtree(target)
+                removed_paths.append(str(target))
+            except Exception:
+                continue
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+
+    try:
+        job_store.init_db()
+    except Exception:
+        pass
+
+    return {
+        "removedPaths": removed_paths,
+        "freedBytes": freed_bytes,
+        "dataDir": str(config.DATA_DIR),
+    }
+
+
 def read_text_artifact_from_job(job_id: str, relative_path: str) -> Optional[str]:
     """
     Leitura transparente de artefactos texto dentro de sandbox_jobs/<job_id>:
@@ -260,6 +298,7 @@ __all__ = [
     "estimate_storage",
     "cleanup_job_artifacts",
     "archive_cold_jobs",
+    "purge_all_storage",
     "StorageEstimate",
 ]
 

@@ -82,6 +82,24 @@ const XrefExplorerPage: React.FC = () => {
   }, [location.search]);
 
   useEffect(() => {
+    if (jobId) return;
+    const session = readXrefSession();
+    if (!session) {
+      if (!wordFromQuery) setPayload(null);
+      return;
+    }
+    const nextWord = wordFromQuery || session.word;
+    if (!nextWord) return;
+    setPayload((prev) => {
+      const next = { ...session, word: nextWord };
+      if (prev?.word === next.word && prev?.code === next.code) return prev;
+      return next;
+    });
+    setWindowFocusLine(null);
+    setExpandedMentionsByNode({});
+  }, [jobId, wordFromQuery]);
+
+  useEffect(() => {
     // Se existe jobId no URL, carregamos o pseudo-C do backend e ignoramos a sessão local.
     if (!jobId) return;
     if (!wordFromQuery) return;
@@ -198,7 +216,7 @@ const XrefExplorerPage: React.FC = () => {
         fileName: payload.fileName,
         flaggedIndicators: payload.flaggedIndicators,
       });
-      openXrefExplorerTab("/xref");
+      openXrefExplorerTab(`/xref?word=${encodeURIComponent(w)}`);
     },
     [payload, jobId]
   );
@@ -221,7 +239,7 @@ const XrefExplorerPage: React.FC = () => {
               <Terminal className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <h1 className="font-mono text-lg font-bold text-foreground tracking-tight">CodeAnalyzer</h1>
+              <h1 className="font-mono text-lg font-bold text-foreground tracking-tight">RAT Analyzer</h1>
               <p className="text-[11px] text-muted-foreground">Xrefs</p>
             </div>
           </div>
@@ -250,7 +268,7 @@ const XrefExplorerPage: React.FC = () => {
               <Terminal className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <h1 className="font-mono text-lg font-bold text-foreground tracking-tight">CodeAnalyzer</h1>
+              <h1 className="font-mono text-lg font-bold text-foreground tracking-tight">RAT Analyzer</h1>
               <p className="text-[11px] text-muted-foreground">Mapa de xrefs (pseudo-C)</p>
             </div>
           </div>

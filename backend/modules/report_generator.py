@@ -162,10 +162,15 @@ class ReportGenerator:
                     report_lines.append(f"Ficheiros .cs gerados: {decomp.get('files_count')}")
                 report_lines.append(f"Comando executado: {decomp.get('command', 'N/A')}")
             else:
-                report_lines.append("Status: ✗ Falhou")
-                if decomp.get('is_dotnet') is False:
-                    report_lines.append(f"Motivo: {decomp.get('error', 'N/A')}")
+                if decomp.get("error_type") == "no_managed_metadata" or decomp.get("is_dotnet") is False:
+                    report_lines.append("Status: — Não aplicável (binário nativo ou .NET AOT)")
+                    motivo = (
+                        decomp.get("log_message")
+                        or (decomp.get("error_short") or decomp.get("error", "N/A")).split("\n", 1)[0]
+                    )
+                    report_lines.append(f"Motivo: {motivo}")
                 else:
+                    report_lines.append("Status: ✗ Falhou")
                     report_lines.append(f"Erro: {decomp.get('error', 'N/A')}")
             
             report_lines.append("")
@@ -189,6 +194,20 @@ class ReportGenerator:
             report_lines.append("Status: ✓ Gerado com PyGhidra")
             report_lines.append(f"Ficheiro: {ghidra.get('output_file', 'N/A')}")
             report_lines.append(f"Funções decompiladas: {ghidra.get('functions_decompiled', 0)}")
+            report_lines.append("")
+        elif (ghidra.get('error') or '').strip():
+            report_lines.append("-" * 80)
+            report_lines.append("DESCOMPILAÇÃO GHIDRA (PSEUDO-C)")
+            report_lines.append("-" * 80)
+            report_lines.append("Status: ✗ Falhou")
+            err = (ghidra.get('error') or '').strip()
+            if len(err) > 500:
+                err = err[:497] + "..."
+            report_lines.append(f"Erro: {err}")
+            if disasm.get('success'):
+                report_lines.append(
+                    f"Fallback: assembly disponível em {disasm.get('output_file', 'N/A')}."
+                )
             report_lines.append("")
         
         # Deobfuscação

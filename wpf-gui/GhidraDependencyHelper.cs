@@ -35,8 +35,29 @@ internal static class GhidraDependencyHelper
                 return trim;
         }
 
-        return null;
+        var baseDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "RatAnalyzer",
+            "Ghidra");
+        if (!Directory.Exists(baseDir))
+            return null;
+
+        string? best = null;
+        foreach (var d in Directory.GetDirectories(baseDir))
+        {
+            if (!IsValidGhidraDirectory(d))
+                continue;
+            if (best == null || string.Compare(d, best, StringComparison.OrdinalIgnoreCase) > 0)
+                best = d;
+        }
+
+        return best;
     }
+
+    /// <summary>
+    /// Instalação Ghidra válida para o processo uvicorn (ignora GHIDRA_INSTALL_DIR obsoleto).
+    /// </summary>
+    internal static string? ResolveGhidraInstallDirForBackend() => GetEffectiveGhidraInstallDir();
 
     public static bool IsValidGhidraDirectory(string path)
     {

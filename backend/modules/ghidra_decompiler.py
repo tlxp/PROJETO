@@ -39,6 +39,7 @@ Por defeito tem limites conservadores para evitar explosão de tempo/memória.
 import os
 import shutil
 import sys
+import uuid
 from pathlib import Path
 from typing import Callable, Dict, Optional
 
@@ -163,6 +164,65 @@ def _ensure_java_home_for_ghidra() -> None:
             pass
 
 
+def _is_valid_ghidra_directory(path: Path) -> bool:
+    if not path.is_dir():
+        return False
+    if (path / "ghidraRun.bat").is_file():
+        return True
+    if (path / "Ghidra").is_dir() and (path / "support" / "launch.properties").is_file():
+        return True
+    if (path / "support" / "ghidraRun.bat").is_file():
+        return True
+    return False
+
+
+def _discover_ghidra_install_dirs() -> list[Path]:
+    candidates: list[Path] = []
+    local_app = (os.environ.get("LOCALAPPDATA") or "").strip()
+    if local_app:
+        base = Path(local_app) / "RatAnalyzer" / "Ghidra"
+        if base.is_dir():
+            try:
+                for child in sorted(base.iterdir(), key=lambda p: p.name, reverse=True):
+                    if child.is_dir():
+                        candidates.append(child)
+            except OSError:
+                pass
+    return candidates
+
+
+def resolve_ghidra_install_dir(ghidra_install_dir: Optional[str] = None) -> tuple[Optional[str], str]:
+    """
+    Resolve a pasta de instalação do Ghidra, ignorando GHIDRA_INSTALL_DIR obsoleto e
+    procurando instalações em %LOCALAPPDATA%\\RatAnalyzer\\Ghidra.
+    """
+    stale: list[str] = []
+    for raw in (ghidra_install_dir, os.environ.get("GHIDRA_INSTALL_DIR")):
+        if not raw or not str(raw).strip():
+            continue
+        candidate = Path(str(raw).strip())
+        if _is_valid_ghidra_directory(candidate):
+            return str(candidate.resolve()), ""
+        stale.append(str(candidate))
+
+    for candidate in _discover_ghidra_install_dirs():
+        if _is_valid_ghidra_directory(candidate):
+            return str(candidate.resolve()), ""
+
+    if stale:
+        unique = list(dict.fromkeys(stale))
+        shown = unique[0]
+        extra = ""
+        if len(unique) > 1:
+            extra = f" (e mais {len(unique) - 1} caminho(s) inválido(s))"
+        return (
+            None,
+            f"GHIDRA_INSTALL_DIR aponta para uma instalação em falta ou inválida: {shown}{extra}. "
+            "Reinstale o Ghidra pela interface do RatAnalyzer ou defina GHIDRA_INSTALL_DIR para a pasta extraída.",
+        )
+    return None, ""
+
+
 def _format_pyghidra_start_error(exc: BaseException) -> str:
     """
     Erros típicos: LaunchSupport / -jdk_home / exit status 1 → JDK em falta ou versão errada.
@@ -274,6 +334,49 @@ def _build_decompile_options(program=None):
         return None
 
 
+def _cleanup_ghidra_project_artifacts(workspace: Path, project_name: str) -> None:
+    """Remove artefactos de projeto Ghidra que podem deixar locks entre execuções."""
+    candidates = [
+        workspace / project_name,
+        workspace / f"{project_name}.gpr",
+        workspace / f"{project_name}.rep",
+        workspace / f"{project_name}.lock",
+    ]
+    for candidate in candidates:
+        try:
+            if candidate.is_dir():
+                shutil.rmtree(candidate, ignore_errors=True)
+            elif candidate.is_file():
+                candidate.unlink(missing_ok=True)
+        except Exception:
+            pass
+    try:
+        for lock in workspace.glob(f"{project_name}*.lock"):
+            lock.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
+def _summarize_ghidra_error(exc: BaseException) -> str:
+    msg = str(exc).strip()
+    low = msg.lower()
+    if "unable to lock project" in low or "lockexception" in low:
+        return (
+            "O Ghidra não conseguiu bloquear o projeto (pasta .rep/.gpr presa ou outra análise com o mesmo nome). "
+            "Fecha o Ghidra GUI, apaga a pasta do projeto em decompiled/ se existir, ou reinicia o backend e tenta outra vez."
+        )
+    if "GHIDRA_INSTALL_DIR" in msg or "Ghidra" in msg:
+        return msg + " Defina GHIDRA_INSTALL_DIR ou instale Ghidra 12+."
+    return msg
+
+
+def _ghidra_error_type(exc: BaseException) -> str:
+    low = str(exc).lower()
+    if "unable to lock project" in low or "lockexception" in low:
+        return "project_locked"
+    return ""
+
+
 def decompile_binary_to_c(
     binary_path: str,
     output_path: Optional[str] = None,
@@ -310,136 +413,149 @@ def decompile_binary_to_c(
     out_file = Path(output_path) if output_path else (Path(output_root).resolve() / sstem / f"{sstem}_decompiled.c")
     out_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Forçar re-análise: apagar projeto Ghidra existente (.rep/.gpr) para que as opções
-    # e a análise sejam aplicadas de raiz (evita cache com limites antigos).
-    project_name = f"{sstem}_ghidra"
-    project_dir = out_file.parent / f"{project_name}.rep"
-    project_file = out_file.parent / f"{project_name}.gpr"
-    try:
-        if project_dir.exists() and project_dir.is_dir():
-            shutil.rmtree(project_dir)
-        if project_file.exists():
-            project_file.unlink()
-    except Exception:
-        pass
+    # Limpar projetos antigos no mesmo directório (nome fixo de versões anteriores).
+    legacy_project = f"{sstem}_ghidra"
+    _cleanup_ghidra_project_artifacts(out_file.parent, legacy_project)
+
+    # Não usar nome de pasta começado por '.' — o JVM/Ghidra pode rejeitar
+    # ("Path element starting with '.' is not permitted" em validação de Path).
+    project_workspace = out_file.parent / "ghidra_projects"
+    project_workspace.mkdir(parents=True, exist_ok=True)
+
+    resolved_install_dir, install_error = resolve_ghidra_install_dir(ghidra_install_dir)
+    if install_error:
+        result["error"] = install_error
+        return result
+    if not resolved_install_dir:
+        result["error"] = (
+            "Ghidra não encontrado. Defina GHIDRA_INSTALL_DIR ou instale o Ghidra 12+ "
+            "(por exemplo pela interface do RatAnalyzer)."
+        )
+        return result
 
     try:
         if not pyghidra.started():
-            pyghidra.start(verbose=False, install_dir=ghidra_install_dir)
+            pyghidra.start(verbose=False, install_dir=resolved_install_dir)
     except Exception as e:
         result["error"] = _format_pyghidra_start_error(e)
         return result
 
-    try:
-        with pyghidra.open_program(
-            str(path),
-            project_location=str(out_file.parent),
-            project_name=f"{sstem}_ghidra",
-            analyze=True,
-        ) as flat_api:
-            program = flat_api.getCurrentProgram()
-            # Usar DecompInterface diretamente e aplicar opções ANTES de openProgram(),
-            # senão o processo do decompilador arranca com defaults e ignora max jumptable/timeout.
-            from ghidra.app.decompiler import DecompInterface
-            from ghidra.util.task import TaskMonitor
+    last_error = ""
+    last_error_type = ""
+    for attempt in range(2):
+        project_name = f"{sstem}_ghidra_{uuid.uuid4().hex[:8]}"
+        _cleanup_ghidra_project_artifacts(project_workspace, project_name)
+        try:
+            with pyghidra.open_program(
+                str(path),
+                project_location=str(project_workspace),
+                project_name=project_name,
+                analyze=True,
+            ) as flat_api:
+                program = flat_api.getCurrentProgram()
+                # Usar DecompInterface diretamente e aplicar opções ANTES de openProgram(),
+                # senão o processo do decompilador arranca com defaults e ignora max jumptable/timeout.
+                from ghidra.app.decompiler import DecompInterface
+                from ghidra.util.task import TaskMonitor
 
-            opts = _build_decompile_options(program)
-            decomp = DecompInterface()
-            if opts is not None:
-                decomp.setOptions(opts)
-            if not decomp.openProgram(program):
-                result["error"] = "Falha ao abrir o programa no decompilador."
-                return result
+                opts = _build_decompile_options(program)
+                decomp = DecompInterface()
+                if opts is not None:
+                    decomp.setOptions(opts)
+                if not decomp.openProgram(program):
+                    result["error"] = "Falha ao abrir o programa no decompilador."
+                    return result
 
-            function_manager = program.getFunctionManager()
-            try:
-                total_functions = int(function_manager.getFunctionCount())
-            except Exception:
-                total_functions = 0
-            lines = []
-            lines.append(f"/* Decompilado com Ghidra (PyGhidra) - {path.name} */")
-            lines.append("")
-            count = 0
-            total_len = 0
-            processed = 0
-            try:
-                it = function_manager.getFunctions(True)
-                while it.hasNext() and count < MAX_FUNCTIONS and (
-                    MAX_OUTPUT_CHARS is None or total_len < MAX_OUTPUT_CHARS
-                ):
-                    func = it.next()
-                    name = str(func.getName()) if func.getName() else "sub"
-                    addr = func.getEntryPoint()
-                    addr_str = str(addr) if addr else "?"
-                    try:
-                        res = decomp.decompileFunction(func, DECOMPILER_TIMEOUT_SECS, TaskMonitor.DUMMY)
-                        c_code = ""
-                        if res.decompileCompleted():
-                            df = res.getDecompiledFunction()
-                            if df is not None:
-                                c_code = df.getC() or ""
-                        if isinstance(c_code, str):
-                            c_code = c_code.strip()
-                        else:
+                function_manager = program.getFunctionManager()
+                try:
+                    total_functions = int(function_manager.getFunctionCount())
+                except Exception:
+                    total_functions = 0
+                lines = []
+                lines.append(f"/* Decompilado com Ghidra (PyGhidra) - {path.name} */")
+                lines.append("")
+                count = 0
+                total_len = 0
+                processed = 0
+                try:
+                    it = function_manager.getFunctions(True)
+                    while it.hasNext() and count < MAX_FUNCTIONS and (
+                        MAX_OUTPUT_CHARS is None or total_len < MAX_OUTPUT_CHARS
+                    ):
+                        func = it.next()
+                        name = str(func.getName()) if func.getName() else "sub"
+                        addr = func.getEntryPoint()
+                        addr_str = str(addr) if addr else "?"
+                        try:
+                            res = decomp.decompileFunction(func, DECOMPILER_TIMEOUT_SECS, TaskMonitor.DUMMY)
                             c_code = ""
-                        if c_code:
-                            lines.append(f"/* ----- {name} @ {addr_str} ----- */")
-                            lines.append(c_code)
-                            lines.append("")
-                            count += 1
-                            total_len += len(c_code)
-                        else:
+                            if res.decompileCompleted():
+                                df = res.getDecompiledFunction()
+                                if df is not None:
+                                    c_code = df.getC() or ""
+                            if isinstance(c_code, str):
+                                c_code = c_code.strip()
+                            else:
+                                c_code = ""
+                            if c_code:
+                                lines.append(f"/* ----- {name} @ {addr_str} ----- */")
+                                lines.append(c_code)
+                                lines.append("")
+                                count += 1
+                                total_len += len(c_code)
+                            else:
+                                lines.append(f"/* ----- {name} @ {addr_str} ----- (decompilação falhou) */")
+                                lines.append("")
+                        except Exception:
                             lines.append(f"/* ----- {name} @ {addr_str} ----- (decompilação falhou) */")
                             lines.append("")
+                        processed += 1
+                        if progress_callback is not None and total_functions > 0:
+                            try:
+                                pct = max(0.0, min(100.0, (processed / total_functions) * 100.0))
+                                progress_callback(pct)
+                            except Exception:
+                                pass
+                        if MAX_OUTPUT_CHARS is not None and total_len >= MAX_OUTPUT_CHARS:
+                            lines.append("/* ... (limite de tamanho atingido) */")
+                            break
+                finally:
+                    decomp.dispose()
+
+                if count == 0:
+                    result["error"] = (
+                        "Nenhuma função foi decompilada (pode ser binário não suportado ou sem funções reconhecidas)."
+                    )
+                    return result
+
+                full_text = "\n".join(lines)
+                out_file.write_text(full_text, encoding="utf-8")
+                result["success"] = True
+                result["output_file"] = str(out_file)
+                result["functions_decompiled"] = count
+                if progress_callback is not None and total_functions > 0:
+                    try:
+                        progress_callback(100.0)
                     except Exception:
-                        lines.append(f"/* ----- {name} @ {addr_str} ----- (decompilação falhou) */")
-                        lines.append("")
-                    processed += 1
-                    if progress_callback is not None and total_functions > 0:
-                        try:
-                            pct = max(0.0, min(100.0, (processed / total_functions) * 100.0))
-                            progress_callback(pct)
-                        except Exception:
-                            pass
-                    if MAX_OUTPUT_CHARS is not None and total_len >= MAX_OUTPUT_CHARS:
-                        lines.append("/* ... (limite de tamanho atingido) */")
-                        break
-            finally:
-                decomp.dispose()
+                        pass
 
-            if count == 0:
-                result["error"] = "Nenhuma função foi decompilada (pode ser binário não suportado ou sem funções reconhecidas)."
-                return result
-
-            full_text = "\n".join(lines)
-            out_file.write_text(full_text, encoding="utf-8")
-            result["success"] = True
-            result["output_file"] = str(out_file)
-            result["functions_decompiled"] = count
-            if progress_callback is not None and total_functions > 0:
+                # Poupança de espaço: opcionalmente remover o projeto Ghidra (.rep/.gpr) após gerar o pseudo-C.
                 try:
-                    progress_callback(100.0)
+                    if not getattr(config, "KEEP_GHIDRA_PROJECT", True):
+                        _cleanup_ghidra_project_artifacts(project_workspace, project_name)
                 except Exception:
                     pass
+                return result
+        except Exception as e:
+            last_error = _summarize_ghidra_error(e)
+            last_error_type = _ghidra_error_type(e)
+            _cleanup_ghidra_project_artifacts(project_workspace, project_name)
+            if last_error_type != "project_locked" or attempt >= 1:
+                break
 
-            # Poupança de espaço: opcionalmente remover o projeto Ghidra (.rep/.gpr) após gerar o pseudo-C.
-            try:
-                if not getattr(config, "KEEP_GHIDRA_PROJECT", True):
-                    try:
-                        if project_dir.exists() and project_dir.is_dir():
-                            shutil.rmtree(project_dir)
-                    except Exception:
-                        pass
-                    try:
-                        if project_file.exists():
-                            project_file.unlink()
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-    except Exception as e:
-        result["error"] = str(e)
-        if "GHIDRA_INSTALL_DIR" in str(e) or "Ghidra" in str(e):
-            result["error"] += " Defina GHIDRA_INSTALL_DIR ou instale Ghidra 12+."
+    if last_error:
+        result["error"] = last_error
+        if last_error_type:
+            result["error_type"] = last_error_type
 
     return result

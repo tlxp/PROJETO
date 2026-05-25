@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" role="img" aria-label="RAT Analyzer">
+  <rect width="32" height="32" rx="7" fill="#12161f"/>
+  <rect x="1" y="1" width="30" height="30" rx="6" stroke="#1ecf9a" stroke-opacity="0.35" stroke-width="1.5"/>
+  <path d="M8.5 11.5 12.5 16l-4 4.5" stroke="#1ecf9a" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M14.5 20.5h9" stroke="#1ecf9a" stroke-width="2.25" stroke-linecap="round"/>
+  <circle cx="24.5" cy="20.5" r="1.35" fill="#38bdf8"/>
+</svg>

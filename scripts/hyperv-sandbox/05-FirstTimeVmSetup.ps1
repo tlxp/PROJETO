@@ -20,7 +20,11 @@
 
 param(
     # Evita ficar preso indefinidamente se a VM não aceitar logon (credenciais erradas / OOBE / autounattend não aplicado)
-    [int]    $PowerShellDirectTimeoutSeconds = 1200
+    [int]    $PowerShellDirectTimeoutSeconds = 1200,
+
+    # Staging seguro do WinUtil dentro da VM (NÃO executa automaticamente).
+    # Útil para instalar software manualmente antes do snapshot, sem debloat/remover componentes.
+    [switch] $StageWinutil
 )
 
 $ErrorActionPreference = "Stop"
@@ -35,6 +39,9 @@ $SandboxSwitch   = $script:PROJETOVM_SwitchName
 $VMScriptsPath   = "C:\analysis_work"
 $GuestUser       = $script:PROJETOVM_GuestUser
 $GuestPassword   = $script:PROJETOVM_GuestPassword
+$PsDirectTimeoutSeconds = if ($script:PROJETOVM_PowerShellDirectTimeoutSeconds -gt 0) {
+    $script:PROJETOVM_PowerShellDirectTimeoutSeconds
+} else { 240 }
 
 # Recarregar sempre o módulo (evita cache com versões antigas durante troubleshooting)
 try { Remove-Module SandboxCommon -ErrorAction SilentlyContinue } catch {}
@@ -222,7 +229,7 @@ Get-VMNetworkAdapter -VMName $VMName | ForEach-Object {
 # Com switch `Internal` e remoção de adaptadores externos, o risco de fuga é residual.
 # ---------------------------------------------------------------------------
 Write-LogHost '       A arrancar VM (isolamento assumido: Switch Internal + adaptadores externos removidos)...'
-$ps2 = Start-SandboxVM -VMName $VMName -Credential $cred -PowerShellDirectTimeoutSeconds 120
+$ps2 = Start-SandboxVM -VMName $VMName -Credential $cred -PowerShellDirectTimeoutSeconds $PsDirectTimeoutSeconds
 if ($ps2 -is [pscredential]) { $cred = $ps2 }
 
 # ---------------------------------------------------------------------------
@@ -232,11 +239,55 @@ Write-LogHost ""
 Write-LogHost '       A instalar runtimes essenciais (offline) na VM (se disponíveis)...'
 
 $offlineDir = Join-Path $scriptRoot "offline\runtimes"
+$toolsDir = Join-Path $scriptRoot "tools"
 $vmInstallDir = "C:\analysis_work\installers"
 
-if (-not (Test-Path -LiteralPath $offlineDir)) {
-    Write-LogWarning ('       Pasta offline não encontrada: {0}' -f $offlineDir)
-    Write-LogWarning '       Vou prosseguir sem instalar runtimes. (Recomendado: copiar instaladores para scripts/hyperv-sandbox/offline/runtimes/)'
+function Resolve-SandboxInstallerSource {
+    param(
+        [Parameter(Mandatory = $true)][string] $FileName,
+        [Parameter(Mandatory = $true)][string[]] $SearchRoots,
+        [switch] $AllowPattern
+    )
+
+    foreach ($root in @($SearchRoots)) {
+        if ([string]::IsNullOrWhiteSpace($root) -or -not (Test-Path -LiteralPath $root)) { continue }
+        if ($AllowPattern -and ($FileName -match "[\*\?]")) {
+            try {
+                $hit = Get-ChildItem -LiteralPath $root -File -Filter $FileName -ErrorAction SilentlyContinue |
+                    Sort-Object Name -Descending |
+                    Select-Object -First 1
+                if ($hit) { return $hit.FullName }
+            } catch { }
+            continue
+        }
+
+        $candidate = Join-Path $root $FileName
+        if (Test-Path -LiteralPath $candidate) { return $candidate }
+    }
+
+    return $null
+}
+if ($StageWinutil) {
+    try {
+        $toolsDir = Join-Path $scriptRoot "tools"
+        $winutil = Join-Path $toolsDir "winutil.ps1"
+        if (Test-Path -LiteralPath $winutil) {
+            Write-LogHost ""
+            Write-LogHost "       A copiar WinUtil (staging seguro, sem executar) para a VM..."
+            Copy-SandboxVMFile -VMName $VMName -SourcePath $winutil -DestinationPath "C:\analysis_work\deps\winutil.ps1"
+            Write-LogHost "       WinUtil staged em: C:\analysis_work\deps\winutil.ps1"
+            Write-LogHost "       Nota: execute manualmente apenas ações de INSTALL no WinUtil."
+        } else {
+            Write-LogWarning "       StageWinutil pedido, mas não encontrei scripts/hyperv-sandbox/tools/winutil.ps1. Use 06-Prepare-GuestDependencies.ps1 -StageWinutil."
+        }
+    } catch {
+        Write-LogWarning "       Falha ao fazer staging do WinUtil na VM (ignorado): $($_.Exception.Message)"
+    }
+}
+
+if (-not (Test-Path -LiteralPath $offlineDir) -and -not (Test-Path -LiteralPath $toolsDir)) {
+    Write-LogWarning ('       Nenhuma pasta de runtimes offline encontrada ({0} ou {1}).' -f $offlineDir, $toolsDir)
+    Write-LogWarning '       Vou prosseguir sem instalar runtimes. (Recomendado: scripts/hyperv-sandbox/tools/ ou offline/runtimes/)'
 }
 else {
     # Garantir diretório destino na VM
@@ -259,18 +310,7 @@ else {
     )
 
     foreach ($it in $installers) {
-        $src = $null
-        if ($it.AllowPattern -and ($it.File -match "[\*\?]")) {
-            try {
-                $hit = Get-ChildItem -LiteralPath $offlineDir -File -Filter $it.File -ErrorAction SilentlyContinue |
-                    Sort-Object Name -Descending |
-                    Select-Object -First 1
-                if ($hit) { $src = $hit.FullName }
-            } catch { }
-        } else {
-            $candidate = Join-Path $offlineDir $it.File
-            if (Test-Path -LiteralPath $candidate) { $src = $candidate }
-        }
+        $src = Resolve-SandboxInstallerSource -FileName $it.File -SearchRoots @($offlineDir, $toolsDir) -AllowPattern:([bool]$it.AllowPattern)
 
         if (-not $src) {
             Write-LogHost ('         [SKIP] {0} — instalador não encontrado: {1}' -f $it.Name, $it.File)

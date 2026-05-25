@@ -1,0 +1,91 @@
+﻿{
+    "generated_at":  "2026-05-07T19:24:06.0835870+01:00",
+    "tools_dir":  "D:\\Codigo\\PROJETO\\PROJETO\\scripts\\hyperv-sandbox\\tools",
+    "deps":  [
+                 {
+                     "family":  "vcpp",
+                     "name":  "VC_redist.x64.exe",
+                     "url":  "https://aka.ms/vs/17/release/vc_redist.x64.exe",
+                     "integrity":  {
+                                       "path":  "D:\\Codigo\\PROJETO\\PROJETO\\scripts\\hyperv-sandbox\\tools\\VC_redist.x64.exe",
+                                       "sha256":  "CC0FF0EB1DC3F5188AE6300FAEF32BF5BEEBA4BDD6E8E445A9184072096B713B",
+                                       "length":  25635768,
+                                       "last_write_utc":  "2026-05-07T18:24:30.8235170Z",
+                                       "signature":  {
+                                                         "status":  "Valid",
+                                                         "thumbprint":  "8F985BE8FD256085C90A95D3C74580511A1DB975",
+                                                         "signer":  "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+                                                         "status_message":  "Signature verified."
+                                                     }
+                                   }
+                 },
+                 {
+                     "family":  "vcpp",
+                     "name":  "VC_redist.x86.exe",
+                     "url":  "https://aka.ms/vs/17/release/vc_redist.x86.exe",
+                     "integrity":  {
+                                       "path":  "D:\\Codigo\\PROJETO\\PROJETO\\scripts\\hyperv-sandbox\\tools\\VC_redist.x86.exe",
+                                       "sha256":  "0C09F2611660441084CE0DF425C51C11E147E6447963C3690F97E0B25C55ED64",
+                                       "length":  13953392,
+                                       "last_write_utc":  "2026-05-07T18:24:44.3583167Z",
+                                       "signature":  {
+                                                         "status":  "Valid",
+                                                         "thumbprint":  "245D262748012A4FE6CE8BA6C951A4C4AFBC3E5D",
+                                                         "signer":  "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+                                                         "status_message":  "Signature verified."
+                                                     }
+                                   }
+                 },
+                 {
+                     "family":  "webview2",
+                     "name":  "MicrosoftEdgeWebView2RuntimeInstallerX64.exe",
+                     "url":  "https://go.microsoft.com/fwlink/p/?LinkId=2124703",
+                     "integrity":  {
+                                       "path":  "D:\\Codigo\\PROJETO\\PROJETO\\scripts\\hyperv-sandbox\\tools\\MicrosoftEdgeWebView2RuntimeInstallerX64.exe",
+                                       "sha256":  "CB9B76A6DACE90F5D4635F2D49CBB55A62F41E5E365A22CEF4265C013AF0BCDD",
+                                       "length":  1700056,
+                                       "last_write_utc":  "2026-05-07T18:24:46.4877598Z",
+                                       "signature":  {
+                                                         "status":  "Valid",
+                                                         "thumbprint":  "4028CAD637509D4744B17EC5B42AED8D7A31E6AF",
+                                                         "signer":  "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+                                                         "status_message":  "Signature verified."
+                                                     }
+                                   }
+                 },
+                 {
+                     "family":  "dotnet",
+                     "name":  "windowsdesktop-runtime-8.0.25-win-x64.exe",
+                     "url":  "https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/8.0.25/windowsdesktop-runtime-8.0.25-win-x64.exe",
+                     "integrity":  {
+                                       "path":  "D:\\Codigo\\PROJETO\\PROJETO\\scripts\\hyperv-sandbox\\tools\\windowsdesktop-runtime-8.0.25-win-x64.exe",
+                                       "sha256":  "2B118648B91D43A773FCE18A7E934E80F9AFF590EE6500C221693074310A6CFE",
+                                       "length":  58461256,
+                                       "last_write_utc":  "2026-05-07T18:25:43.8941550Z",
+                                       "signature":  {
+                                                         "status":  "Valid",
+                                                         "thumbprint":  "860AB2B78578D8EF61F692CF81AE4B1198CCBC94",
+                                                         "signer":  "CN=.NET, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+                                                         "status_message":  "Signature verified."
+                                                     }
+                                   }
+                 },
+                 {
+                     "family":  "winutil",
+                     "name":  "winutil.ps1",
+                     "url":  "https://christitus.com/win",
+                     "integrity":  {
+                                       "path":  "D:\\Codigo\\PROJETO\\PROJETO\\scripts\\hyperv-sandbox\\tools\\winutil.ps1",
+                                       "sha256":  "4C2595118EDD3355065C1F449CD7E0092614DFC2552E8AC8E4EC4231A6D9A719",
+                                       "length":  699222,
+                                       "last_write_utc":  "2026-05-07T18:25:45.6610858Z",
+                                       "signature":  {
+                                                         "status":  "NotSigned",
+                                                         "thumbprint":  "",
+                                                         "signer":  "",
+                                                         "status_message":  "The file D:\\Codigo\\PROJETO\\PROJETO\\scripts\\hyperv-sandbox\\tools\\winutil.ps1 is not digitally signed. You cannot run this script on the current system. For more information about running scripts and setting execution policy, see about_Execution_Policies at https:/go.microsoft.com/fwlink/?LinkID=135170"
+                                                     }
+                                   }
+                 }
+             ]
+}

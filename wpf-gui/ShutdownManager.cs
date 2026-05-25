@@ -1,6 +1,6 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using RatAnalyzer.Desktop.Views;
 
@@ -10,16 +10,25 @@ internal static class ShutdownManager
 {
     private const int FrontendPort = 8080;
     private const int BackendPort = 8000;
+    private static bool _cleanupCompleted;
 
     /// <summary>
     /// Limpa recursos locais ao sair da aplicação:
     /// - Termina o backend uvicorn gerido pelo WPF (se estiver ativo)
     /// - Termina o dev server do frontend (npm run dev) gerido pelo WPF (se estiver ativo)
     /// - Liberta as portas do frontend e backend (processos que estejam a escutar nessas portas)
-    /// - Apaga a cache local de jobs em sandbox_jobs (não afeta cache do browser).
+    /// - Remove pastas temporárias de análise em %TEMP% (rat_*, rat_stream_*, RatAnalyzerAdk)
+    /// - Remove amostras e artefactos em disco em sandbox_jobs (mantém analysis.db).
     /// </summary>
     public static void CleanupOnExit()
     {
+        if (_cleanupCompleted)
+        {
+            return;
+        }
+
+        _cleanupCompleted = true;
+
         try
         {
             LoadingPage.StopManagedBackend();
@@ -54,22 +63,24 @@ internal static class ShutdownManager
 
         try
         {
-            var backendDir = LoadingPage.FindBackendWorkingDirectory();
-            var projectRoot = backendDir != null
-                ? Directory.GetParent(backendDir)?.FullName
-                : null;
+            KillOrphanedBackendUvicornProcesses();
+        }
+        catch { /* ignorar */ }
 
-            if (string.IsNullOrWhiteSpace(projectRoot))
-            {
-                return;
-            }
+        try
+        {
+            KillProcessesListeningOnPort(FrontendPort);
+            KillProcessesListeningOnPort(BackendPort);
+        }
+        catch { /* ignorar */ }
 
-            // Nota: outputs já não vivem no repo por defeito (agora são guardados em %LOCALAPPDATA%\\RatAnalyzer).
-            // Não apagar dados automaticamente ao sair (comportamento destrutivo).
+        try
+        {
+            LocalArtifactCleanup.CleanupOnApplicationExit();
         }
         catch
         {
-            // Se a limpeza da cache falhar não impedimos o fecho da aplicação.
+            // Se a limpeza local falhar não impedimos o fecho da aplicação.
         }
     }
 
@@ -78,6 +89,14 @@ internal static class ShutdownManager
     /// Usa netstat no Windows para encontrar PIDs e garante que as portas são libertadas ao fechar o WPF.
     /// </summary>
     private static void KillProcessesListeningOnPort(int port)
+    {
+        foreach (var pid in GetListeningProcessIds(port))
+        {
+            TerminateProcessTree(pid);
+        }
+    }
+
+    private static IEnumerable<int> GetListeningProcessIds(int port)
     {
         try
         {
@@ -98,7 +117,8 @@ internal static class ShutdownManager
 
             // Linhas LISTENING com :PORT (ex.: "TCP    0.0.0.0:8080    0.0.0.0:0    LISTENING    12345")
             var portStr = $":{port}";
-            var pids = output
+            var currentPid = Environment.ProcessId;
+            return output
                 .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
                 .Where(line => line.IndexOf(portStr, StringComparison.Ordinal) >= 0 &&
                                line.IndexOf("LISTENING", StringComparison.OrdinalIgnoreCase) >= 0)
@@ -107,30 +127,66 @@ internal static class ShutdownManager
                     var parts = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
                     return parts.Length > 0 && int.TryParse(parts[^1], out var id) ? id : (int?)null;
                 })
-                .Where(id => id.HasValue)
+                .Where(id => id.HasValue && id.Value != currentPid)
                 .Select(id => id!.Value)
                 .Distinct()
                 .ToList();
+        }
+        catch
+        {
+            return Array.Empty<int>();
+        }
+    }
 
-            var currentPid = Environment.ProcessId;
-            foreach (var pid in pids)
+    private static void TerminateProcessTree(int pid)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            if (!process.HasExited)
             {
-                if (pid == currentPid)
-                    continue;
-                try
-                {
-                    using var p = Process.GetProcessById(pid);
-                    p.Kill();
-                }
-                catch
-                {
-                    // Processo já terminou ou sem permissão; ignorar.
-                }
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(5000);
             }
         }
         catch
         {
-            // Falha ao executar netstat ou matar processo; não bloquear o fecho.
+            // Processo já terminou ou sem permissão; tentar taskkill como fallback.
+        }
+
+        try
+        {
+            using var killer = Process.Start(new ProcessStartInfo
+            {
+                FileName = "taskkill",
+                Arguments = $"/F /T /PID {pid}",
+                UseShellExecute = false,
+                CreateNoWindow = true
+            });
+            killer?.WaitForExit(3000);
+        }
+        catch
+        {
+            // Ignorar falhas no fallback.
+        }
+    }
+
+    private static void KillOrphanedBackendUvicornProcesses()
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = "powershell",
+                Arguments = "-NoProfile -NonInteractive -Command \"Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'uvicorn' -and $_.CommandLine -match 'api:app' } | ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop } catch {} }\"",
+                UseShellExecute = false,
+                CreateNoWindow = true
+            });
+            process?.WaitForExit(5000);
+        }
+        catch
+        {
+            // Ignorar falhas ao varrer processos Python/uvicorn.
         }
     }
 }

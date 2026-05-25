@@ -22,6 +22,11 @@ public partial class VmAnalysisWindow : Window
     private bool _completed;
     private string? _runId;
     private string? _runDir;
+    private string? _expectedReportPath;
+    private string? _expectedReportJsonPath;
+    private readonly Stopwatch _sw = Stopwatch.StartNew();
+    private DispatcherTimer? _statusTimer;
+    private const int MaxLogChars = 400_000;
 
     public VmAnalysisWindow(string samplePath, bool runFirstTimeSetup)
     {
@@ -50,6 +55,7 @@ public partial class VmAnalysisWindow : Window
     {
         try
         {
+            StartStatusTimer();
             await RunAnalysisAsync();
         }
         catch (Exception ex)
@@ -61,11 +67,57 @@ public partial class VmAnalysisWindow : Window
         finally
         {
             _completed = true;
+            StopStatusTimer();
             ProgressBar.Visibility = Visibility.Collapsed;
             CloseButton.IsEnabled = true;
+            OpenRunFolderButton.IsEnabled = !string.IsNullOrWhiteSpace(_runDir);
+            CopyRunIdButton.IsEnabled = !string.IsNullOrWhiteSpace(_runId);
+            OpenReportButton.IsEnabled = File.Exists(_expectedReportPath ?? "") || File.Exists(_expectedReportJsonPath ?? "");
             if (StatusText.Text == "A iniciar..." || StatusText.Text.Contains("A executar"))
                 StatusText.Text = "Concluído.";
         }
+    }
+
+    private void StartStatusTimer()
+    {
+        _statusTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _statusTimer.Tick += (_, _) =>
+        {
+            var elapsed = _sw.Elapsed;
+            var run = string.IsNullOrWhiteSpace(_runId) ? "-" : _runId;
+            var phase = ExtractLastPhase(_logBuilder.ToString());
+            TechStatusText.Text = $"RunId={run} | phase={phase} | elapsed={elapsed:hh\\:mm\\:ss}";
+        };
+        _statusTimer.Start();
+    }
+
+    private static string ExtractLastPhase(string logText)
+    {
+        // Parse simples dos marcadores do host: "[x/y]" e mensagens chave.
+        if (string.IsNullOrEmpty(logText)) return "-";
+        var lines = logText.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+        for (var i = lines.Length - 1; i >= 0; i--)
+        {
+            var l = lines[i];
+            if (l.Contains("[2/7]") || l.Contains("[3/7]") || l.Contains("[4/7]") || l.Contains("[5/7]") || l.Contains("[6/7]") || l.Contains("[7/7]") || l.Contains("[8/8]"))
+                return l.Trim();
+            if (l.Contains("A executar amostra") || l.Contains("Setup da sandbox") || l.Contains("Primeira entrada"))
+                return l.Trim();
+        }
+        return "-";
+    }
+
+    private void StopStatusTimer()
+    {
+        try
+        {
+            if (_statusTimer != null)
+            {
+                _statusTimer.Stop();
+                _statusTimer = null;
+            }
+        }
+        catch { }
     }
 
     private void AppendLine(string line, bool withTimestamp = false)
@@ -74,6 +126,12 @@ public partial class VmAnalysisWindow : Window
         {
             var text = withTimestamp ? $"[{DateTime.Now:HH:mm:ss}] {line}" : line;
             _logBuilder.AppendLine(text);
+            if (_logBuilder.Length > MaxLogChars)
+            {
+                // Evitar degradar a UI em runs longos; manter a parte mais recente.
+                _logBuilder.Remove(0, Math.Min(_logBuilder.Length, 60_000));
+                _logBuilder.Insert(0, "[log truncado: mantendo o final do output]\r\n");
+            }
             TerminalOutput.Text = _logBuilder.ToString();
             if (TerminalScrollViewer != null)
                 TerminalScrollViewer.ScrollToVerticalOffset(TerminalScrollViewer.ScrollableHeight);
@@ -166,6 +224,20 @@ public partial class VmAnalysisWindow : Window
             dir = dir.Parent;
         }
         return null;
+    }
+
+    private static string GetPowerShellExe()
+    {
+        // Em Windows, preferir Windows PowerShell 5.1 por compatibilidade com Hyper-V cmdlets.
+        // (pwsh pode existir, mas nem sempre tem os mesmos módulos/paths resolvidos.)
+        return "powershell.exe";
+    }
+
+    private static string ToEncodedCommand(string command)
+    {
+        // PowerShell espera UTF-16LE (Unicode) no -EncodedCommand.
+        var bytes = Encoding.Unicode.GetBytes(command);
+        return Convert.ToBase64String(bytes);
     }
 
     private async Task RunAnalysisAsync()
@@ -351,14 +423,40 @@ public partial class VmAnalysisWindow : Window
             return;
         }
 
+        // Caminhos esperados (o script grava em D:\PROJETOVM\Reports\analysis_<runId>.{txt,json})
+        if (!string.IsNullOrWhiteSpace(_runId))
+        {
+            _expectedReportPath = Path.Combine("D:\\PROJETOVM", "Reports", $"analysis_{_runId}.txt");
+            _expectedReportJsonPath = Path.Combine("D:\\PROJETOVM", "Reports", $"analysis_{_runId}.json");
+        }
+
         var runIdArg = !string.IsNullOrWhiteSpace(_runId) ? $"-RunId \"{_runId}\"" : "";
         var sampleArg = $"-SamplePath \"{_samplePath}\" {runIdArg}";
         var exitCode2 = await RunPowerShellScriptAsync(runSampleScript, sampleArg);
         AppendLine("", withTimestamp: true);
-        if (exitCode2 == 0)
+
+        var runJsonPath = !string.IsNullOrWhiteSpace(_runId) && !string.IsNullOrWhiteSpace(_runDir)
+            ? Path.Combine(_runDir, $"run_{_runId}.json")
+            : null;
+        var reportReady = !string.IsNullOrWhiteSpace(_expectedReportPath) && File.Exists(_expectedReportPath);
+        var runStatus = TryReadRunStatus(runJsonPath);
+
+        if (exitCode2 == 0 && reportReady)
             AppendLine("[*] Análise comportamental concluída. Consulte D:\\PROJETOVM\\Reports\\ para o relatório.", withTimestamp: true);
+        else if (reportReady)
+            AppendLine("[AVISO] O script terminou com erros, mas o relatório foi gerado.", withTimestamp: true);
+        else if (exitCode2 == 0)
+            AppendLine("[AVISO] O script terminou sem erros, mas o relatório não foi encontrado no host.", withTimestamp: true);
         else
-            AppendLine($"[*] Script terminou com código de saída: {exitCode2}", withTimestamp: true);
+            AppendLine($"[ERRO] A análise na VM falhou (código de saída: {exitCode2}).", withTimestamp: true);
+
+        if (!string.IsNullOrWhiteSpace(runStatus) && !string.Equals(runStatus, "ok", StringComparison.OrdinalIgnoreCase))
+            AppendLine($"[*] Estado registado no run: {runStatus}", withTimestamp: true);
+
+        if (!string.IsNullOrWhiteSpace(_expectedReportPath))
+            AppendLine($"[*] Relatório esperado: {_expectedReportPath}", withTimestamp: true);
+        if (!string.IsNullOrWhiteSpace(_expectedReportJsonPath))
+            AppendLine($"[*] JSON esperado: {_expectedReportJsonPath}", withTimestamp: true);
 
         await PersistGuiLogAsync();
     }
@@ -378,50 +476,73 @@ public partial class VmAnalysisWindow : Window
         });
     }
 
-    private Task<int> RunPowerShellScriptAsync(string scriptPath, string? arguments)
+    private async Task<int> RunPowerShellScriptAsync(string scriptPath, string? arguments)
     {
-        return Task.Run(() =>
+        var psi = new ProcessStartInfo
         {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "powershell.exe",
-                Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\" {arguments ?? ""}",
-                WorkingDirectory = Path.GetDirectoryName(scriptPath) ?? "",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-                StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding = Encoding.UTF8
-            };
+            FileName = GetPowerShellExe(),
+            Arguments = $"-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{scriptPath}\" {arguments ?? ""}",
+            WorkingDirectory = Path.GetDirectoryName(scriptPath) ?? "",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8
+        };
 
-            using var process = new Process { StartInfo = psi };
-            var outputDone = new ManualResetEventSlim(false);
-            var errorDone = new ManualResetEventSlim(false);
+        using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
 
-            process.OutputDataReceived += (_, e) =>
-            {
-                if (e.Data != null)
-                    AppendLine(e.Data);
-            };
-            process.ErrorDataReceived += (_, e) =>
-            {
-                if (e.Data != null)
-                    AppendLine("[stderr] " + e.Data);
-            };
+        process.OutputDataReceived += (_, e) =>
+        {
+            if (!string.IsNullOrEmpty(e.Data))
+                AppendLine(e.Data);
+        };
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (!string.IsNullOrEmpty(e.Data))
+                AppendLine("[stderr] " + e.Data);
+        };
 
-            process.Start();
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
+        process.Start();
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
 
-            _cts.Token.Register(() =>
-            {
-                try { process.Kill(true); } catch { }
-            });
+        await using var reg = _cts.Token.Register(() =>
+        {
+            try { if (!process.HasExited) process.Kill(true); } catch { }
+        });
 
-            process.WaitForExit();
-            return process.ExitCode;
-        }, _cts.Token);
+        try
+        {
+            await process.WaitForExitAsync(_cts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            AppendLine("[*] Execução cancelada pelo utilizador.", withTimestamp: true);
+            throw;
+        }
+
+        return process.ExitCode;
+    }
+
+    private static string? TryReadRunStatus(string? runJsonPath)
+    {
+        if (string.IsNullOrWhiteSpace(runJsonPath) || !File.Exists(runJsonPath))
+            return null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(runJsonPath));
+            if (doc.RootElement.TryGetProperty("status", out var status))
+                return status.GetString();
+        }
+        catch
+        {
+            // Ignorar JSON inválido ou incompleto.
+        }
+
+        return null;
     }
 
     private sealed record SetupPreflight(string VmName, bool VmExists, string VhdPath, bool VhdExists);
@@ -460,8 +581,8 @@ public partial class VmAnalysisWindow : Window
 
                 var psi = new ProcessStartInfo
                 {
-                    FileName = "powershell.exe",
-                    Arguments = $"-NoProfile -ExecutionPolicy Bypass -Command \"{command}\"",
+                    FileName = GetPowerShellExe(),
+                    Arguments = $"-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {ToEncodedCommand(command)}",
                     WorkingDirectory = scriptsPath,
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
@@ -517,8 +638,8 @@ public partial class VmAnalysisWindow : Window
 
                 var psi = new ProcessStartInfo
                 {
-                    FileName = "powershell.exe",
-                    Arguments = $"-NoProfile -ExecutionPolicy Bypass -Command \"{command}\"",
+                    FileName = GetPowerShellExe(),
+                    Arguments = $"-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {ToEncodedCommand(command)}",
                     WorkingDirectory = scriptsPath,
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
@@ -554,5 +675,49 @@ public partial class VmAnalysisWindow : Window
     private void CloseButton_Click(object sender, RoutedEventArgs e)
     {
         Close();
+    }
+
+    private void OpenRunFolderButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(_runDir) && Directory.Exists(_runDir))
+            {
+                Process.Start(new ProcessStartInfo { FileName = _runDir, UseShellExecute = true });
+            }
+        }
+        catch { }
+    }
+
+    private void OpenReportButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var p = File.Exists(_expectedReportPath ?? "") ? _expectedReportPath : _expectedReportJsonPath;
+            if (!string.IsNullOrWhiteSpace(p) && File.Exists(p))
+            {
+                Process.Start(new ProcessStartInfo { FileName = p, UseShellExecute = true });
+            }
+            else
+            {
+                // fallback: abrir pasta Reports
+                var reports = "D:\\PROJETOVM\\Reports";
+                if (Directory.Exists(reports))
+                    Process.Start(new ProcessStartInfo { FileName = reports, UseShellExecute = true });
+            }
+        }
+        catch { }
+    }
+
+    private void CopyRunIdButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(_runId))
+            {
+                Clipboard.SetText(_runId);
+            }
+        }
+        catch { }
     }
 }

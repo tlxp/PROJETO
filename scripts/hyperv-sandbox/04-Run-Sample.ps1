@@ -43,6 +43,9 @@ $ReportsDir = $script:PROJETOVM_ReportsPath
 $VMScriptsPath = "C:\analysis_work"
 $GuestUser = $script:PROJETOVM_GuestUser
 $GuestPassword = $script:PROJETOVM_GuestPassword
+$PsDirectTimeoutSeconds = if ($script:PROJETOVM_PowerShellDirectTimeoutSeconds -gt 0) {
+    $script:PROJETOVM_PowerShellDirectTimeoutSeconds
+} else { 240 }
 
 function Resolve-AutoSamplePath {
     param([string] $ProvidedPath, [string] $SamplesDir)
@@ -86,7 +89,7 @@ public static class Program
     }
 
     if (-not [string]::IsNullOrWhiteSpace($ProvidedPath)) {
-        if (Test-Path -LiteralPath $ProvidedPath) { return (Resolve-Path -LiteralPath $ProvidedPath).Path }
+        if ([System.IO.File]::Exists($ProvidedPath)) { return [System.IO.Path]::GetFullPath($ProvidedPath) }
         Write-Error "Amostra não encontrada: $ProvidedPath"
         exit 1
     }
@@ -114,7 +117,7 @@ public static class Program
 
 $SamplePath = Resolve-AutoSamplePath -ProvidedPath $SamplePath -SamplesDir $script:PROJETOVM_SamplesPath
 
-if (-not (Test-Path $SamplePath)) {
+if (-not [System.IO.File]::Exists($SamplePath)) {
     Write-Error "Amostra não encontrada: $SamplePath"
     exit 1
 }
@@ -182,7 +185,7 @@ if (-not $snap) {
     exit 1
 }
 
-$sampleHash = Get-FileHash -Path $SamplePath -Algorithm SHA256
+$sampleHash = Get-FileHash -LiteralPath $SamplePath -Algorithm SHA256
 $sampleSha256 = $sampleHash.Hash
 
 $sampleFileName = [System.IO.Path]::GetFileName($SamplePath)
@@ -211,6 +214,10 @@ Add-LogLine -Path $HostLogPath -Value "Sample SHA256: $sampleSha256"
 Add-LogLine -Path $HostLogPath -Value "VM: $VMName  Snapshot: $SnapshotName"
 Add-LogLine -Path $HostLogPath -Value "Report: $ReportOutputPath"
 Add-LogLine -Path $HostLogPath -Value "RunDir: $RunDir"
+if ($vmObj.Generation -ge 2) {
+    Write-LogWarning "      VM '$VMName' é Gen$($vmObj.Generation): COM1→Named Pipe costuma não funcionar (use VM Gen1 / PROJETOVM_VMGeneration=1, ou relatório só por Guest Service)."
+    Add-LogLine -Path $HostLogPath -Value "WARNING: Gen$($vmObj.Generation) VM — serial pipe transport often unavailable"
+}
 
 Write-LogHost "=== Orquestração Sandbox Hyper-V ==="
 Write-LogHost "Amostra: $SamplePath"
@@ -237,13 +244,15 @@ $pipeTimeoutSeconds = $TimeoutSeconds + 900
 
 $pipeJob = Start-Job -ScriptBlock {
     param($PipeName, $OutputPath, $TimeoutSecondsLocal, $ModulePath)
+    Write-Host "[PIPE] Job worker arrancou pid=$PID utc=$([DateTime]::UtcNow.ToString('o'))"
     Import-Module $ModulePath -DisableNameChecking -ErrorAction Stop
     return (Receive-SandboxReportFromPipe -PipeName $PipeName -OutputPath $OutputPath -TimeoutSeconds $TimeoutSecondsLocal)
 } -ArgumentList $RunPipeName, $ReportOutputPath, $pipeTimeoutSeconds, $modulePath
 
-# Pequena margem para o job arrancar; o restore do snapshot demora o suficiente
-# para o pipe ficar em escuta antes de iniciar a VM.
-Start-Sleep -Milliseconds 200
+Add-LogLine -Path $HostLogPath -Value "Pipe job started: Id=$($pipeJob.Id) Name=$($pipeJob.Name) path=\\.\pipe\$RunPipeName timeout=${pipeTimeoutSeconds}s"
+Write-LogHost "      [PIPE-HOST] Job receptor id=$($pipeJob.Id) pipe=\\.\pipe\$RunPipeName (logs [PIPE] vêm do job)"
+# Margem para o job arrancar e o pipe ficar genuinamente em escuta antes do restore/arranque da VM.
+Start-Sleep -Seconds 2
 Write-LogHost "      Receptor do relatório iniciado (background)."
 
 # 3) Restaurar snapshot limpo
@@ -264,7 +273,7 @@ try {
 
 # 4) Arrancar VM (espera pelo arranque = PowerShell Direct, sem sleep fixo)
 Write-LogHost "[4/7] A arrancar a VM..."
-$psDirectOk = Start-SandboxVM -VMName $VMName -CredentialCandidates $credCandidates -PowerShellDirectTimeoutSeconds 120 -LogPath $HostLogPath
+$psDirectOk = Start-SandboxVM -VMName $VMName -CredentialCandidates $credCandidates -PowerShellDirectTimeoutSeconds $PsDirectTimeoutSeconds -LogPath $HostLogPath
 if ($psDirectOk -is [pscredential]) {
     $cred = $psDirectOk
     Add-LogLine -Path $HostLogPath -Value "PowerShell Direct ready with credential: $($cred.UserName)"
@@ -408,56 +417,97 @@ try {
     $analysisSuccess = $false
     Write-LogWarning "Invoke-Command falhou (tentativa 1): $($_.Exception.Message)"
     Add-LogLine -Path $HostLogPath -Value "Invoke-Command failed (try1): $($_.Exception.Message)"
-    Write-LogWarning "Invoke-Command falhou. Vou continuar para recolha de relatório via pipe. Erro: $($_.Exception.Message)"
+
+    # Retry if VM is still up
+    $vmState = (Get-VM -Name $VMName -ErrorAction SilentlyContinue).State
+    if ($vmState -eq 'Running') {
+        Write-LogWarning "VM ainda em execução. A tentar re-invocar análise..."
+        Start-Sleep -Seconds 5
+        try {
+            Invoke-RunAnalysisInVm -VM $VMName -Cred $cred -VmSamplePath $VMSamplePath `
+                -TimeoutSec $TimeoutSeconds -VmScriptDir $VMScriptsPath -SampleSha256 $sampleSha256
+            $analysisSuccess = $true
+            Add-LogLine -Path $HostLogPath -Value "Analysis re-invoked successfully (try2)"
+        } catch {
+            Add-LogLine -Path $HostLogPath -Value "Invoke-Command failed (try2): $($_.Exception.Message)"
+            Write-LogWarning "Segunda tentativa também falhou: $($_.Exception.Message)"
+        }
+    } else {
+        Write-LogWarning "VM não está Running (estado: $vmState). Não é possível re-invocar."
+    }
+}
+
+Start-Sleep -Seconds 1
+$earlyState = $null
+try { $earlyState = (Get-Job -Id $pipeJob.Id -ErrorAction SilentlyContinue).State } catch { }
+$pipeReportAlreadyReceived = ($earlyState -eq "Completed")
+if ($pipeReportAlreadyReceived) {
+    Write-LogHost "      [PIPE] Relatório já recebido durante execução da análise."
 }
 
 # 7) Aguardar o relatório via pipe
 Write-LogHost "      A aguardar relatório via pipe (timeout: ${pipeTimeoutSeconds}s)..."
+Add-LogLine -Path $HostLogPath -Value "Pipe wait begin: jobId=$($pipeJob.Id) earlyDone=$pipeReportAlreadyReceived analysisSuccess=$analysisSuccess"
 
-# Calcular tempo restante dentro do timeout global
-$elapsed = [int]([DateTime]::UtcNow - $analysisStart.ToUniversalTime()).TotalSeconds
-$remainingGlobal = $GlobalTimeoutSeconds - $elapsed
-if ($remainingGlobal -lt 0) { $remainingGlobal = 0 }
-$waitSec = [Math]::Min($pipeTimeoutSeconds, $remainingGlobal)
+# O pipe tem o seu próprio timeout ($pipeTimeoutSeconds); não cortar com $GlobalTimeoutSeconds.
+$waitSec = $pipeTimeoutSeconds
 
 if ($waitSec -gt 0) {
     $waitDeadline = (Get-Date).AddSeconds($waitSec)
     $lastJobLog = Get-Date
-    $pipeJobLastText = ""
-    while ((Get-Date) -lt $waitDeadline) {
+    $guestDonePath = "$VMScriptsPath\guest_analysis_done.txt"
+    $guestReportPath = "C:\analysis.txt"
+    while (-not $pipeReportAlreadyReceived -and (Get-Date) -lt $waitDeadline) {
         $st = $null
         try { $st = (Get-Job -Id $pipeJob.Id -ErrorAction SilentlyContinue).State } catch { }
         if ($st -eq "Completed" -or $st -eq "Failed" -or $st -eq "Stopped") { break }
 
-        # Puxar logs intermédios do job (sem consumir) para dar visibilidade de progresso do pipe.
+        # Puxar logs intermédios do job (drena só output novo desde a última chamada).
         try {
-            $tmp = Receive-Job $pipeJob -Keep -ErrorAction SilentlyContinue 2>&1
-            $allText = ""
-            if ($tmp) {
-                # Transformar em texto estável (muitas vezes Receive-Job devolve 1 objeto com várias linhas acumuladas)
-                $allText = (@($tmp) | ForEach-Object { ($_ | Out-String).TrimEnd() } | Where-Object { $_ -ne "" }) -join "`n"
-            }
-
-            if (-not [string]::IsNullOrWhiteSpace($allText)) {
-                $delta = $allText
-                if (-not [string]::IsNullOrEmpty($pipeJobLastText) -and $allText.StartsWith($pipeJobLastText)) {
-                    $delta = $allText.Substring($pipeJobLastText.Length)
-                }
-                $pipeJobLastText = $allText
-
-                foreach ($line in ($delta -split "`r?`n")) {
-                    $s = $line.TrimEnd()
-                    if ([string]::IsNullOrWhiteSpace($s)) { continue }
-                    Write-LogHost ("      [PIPE] {0}" -f $s)
-                    Add-LogLine -Path $HostLogPath -Value ("[PIPE] " + $s)
-                }
+            $tmp = Receive-Job $pipeJob -ErrorAction SilentlyContinue 2>&1
+            foreach ($item in @($tmp)) {
+                $s = ($item | Out-String).TrimEnd()
+                if ([string]::IsNullOrWhiteSpace($s) -or $s -eq "True") { continue }
+                Write-LogHost ("      [PIPE] {0}" -f $s)
+                Add-LogLine -Path $HostLogPath -Value ("[PIPE] " + $s)
             }
         } catch { }
+
+        # Guest concluiu mas COM1/pipe não entregou — saída antecipada com Copy-VMFile
+        if ($st -ne "Completed") {
+            try {
+                $guestDone = Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
+                    param($Path)
+                    Test-Path -LiteralPath $Path
+                } -ArgumentList $guestDonePath -ErrorAction SilentlyContinue
+                if ($guestDone -eq $true) {
+                    Write-LogWarning "      Guest análise concluída ($guestDonePath) mas pipe ainda não recebeu relatório. A tentar Copy-VMFile..."
+                    Add-LogLine -Path $HostLogPath -Value "Guest done detected; pipe not complete — fallback Copy-VMFile"
+                    try {
+                        Copy-SandboxVMFileFromGuest -VMName $VMName -Credential $cred `
+                            -GuestSourcePath $guestReportPath -HostDestinationPath $ReportOutputPath
+                        if (Test-Path -LiteralPath $ReportOutputPath) {
+                            Write-LogHost "      Relatório obtido via Copy-VMFile (fallback): $ReportOutputPath"
+                            Add-LogLine -Path $HostLogPath -Value "Report pulled via Copy-VMFile fallback"
+                            $pipeReportAlreadyReceived = $true
+                            break
+                        }
+                    } catch {
+                        Write-LogWarning "      Fallback Copy-VMFile falhou: $($_.Exception.Message)"
+                        Add-LogLine -Path $HostLogPath -Value "Copy-VMFile fallback failed: $($_.Exception.Message)"
+                    }
+                }
+            } catch { }
+        }
 
         # Heartbeat no host a cada ~10s
         if (((Get-Date) - $lastJobLog).TotalSeconds -ge 10) {
             $remain = [int]($waitDeadline - (Get-Date)).TotalSeconds
-            Write-LogHost "      [PIPE] A aguardar... (restante ~${remain}s)"
+            $pj = Get-Job -Id $pipeJob.Id -ErrorAction SilentlyContinue
+            $hm = if ($pj) { [string]$pj.HasMoreData } else { "?" }
+            $loc = if ($pj) { [string]$pj.Location } else { "" }
+            Write-LogHost "      [PIPE-HOST] job id=$($pipeJob.Id) state=$st hasMoreData=$hm loc='$loc' resto~${remain}s"
+            Add-LogLine -Path $HostLogPath -Value "PIPE-HOST heartbeat state=$st hasMore=$hm rest=${remain}s"
             $lastJobLog = Get-Date
         }
 
@@ -471,8 +521,10 @@ if ($waitSec -gt 0) {
     } catch { }
 
     if (-not $jobCompleted) {
-        Write-LogWarning "      Listener do pipe não terminou a tempo (timeout após ${waitSec}s)."
-        Add-LogLine -Path $HostLogPath -Value "Pipe listener timeout after ${waitSec}s"
+        if (-not $pipeReportAlreadyReceived) {
+            Write-LogWarning "      Listener do pipe não terminou a tempo (timeout após ${waitSec}s)."
+            Add-LogLine -Path $HostLogPath -Value "Pipe listener timeout after ${waitSec}s"
+        }
         Stop-Job $pipeJob -ErrorAction SilentlyContinue
     }
 } else {
@@ -503,6 +555,9 @@ if ($pipeState -eq "Completed") {
         Write-LogWarning "      Pipe concluído mas ficheiro de relatório não encontrado."
         Add-LogLine -Path $HostLogPath -Value "Pipe completed but report file not found"
     }
+} elseif (Test-Path -LiteralPath $ReportOutputPath) {
+    Write-LogHost "      Relatório obtido via fallback (Copy-VMFile), pipe estado=$pipeState"
+    Add-LogLine -Path $HostLogPath -Value "Report from Copy-VMFile fallback; pipe state=$pipeState"
 } else {
     Write-LogWarning "      Listener do pipe não completou (estado=$pipeState). O relatório não foi obtido."
     Add-LogLine -Path $HostLogPath -Value "Pipe state=$pipeState; report not obtained"

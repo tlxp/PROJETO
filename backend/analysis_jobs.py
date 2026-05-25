@@ -355,7 +355,7 @@ def get_job_payload(job_id: str) -> Optional[dict]:
             c_code = _read_file_safe(consolidated)
         if not c_code and decompiled_c:
             c_code = _read_file_safe(decompiled_c)
-        if not c_code and last.get("decompilation_error_summary"):
+        if not c_code and should_compose_decompilation_fallback(last):
             c_code = compose_fallback_descompilation_ccode(last)
         if not c_code:
             c_code = "# Código não disponível."
@@ -459,7 +459,7 @@ def _run_static(job: AnalysisJob) -> AnalysisResult:
             c_code = _read_file_safe(consolidated)
         if not c_code and decompiled_c:
             c_code = _read_file_safe(decompiled_c)
-        if not c_code and last.get("decompilation_error_summary"):
+        if not c_code and should_compose_decompilation_fallback(last):
             c_code = compose_fallback_descompilation_ccode(last)
 
         disasm = last.get("disassembly_file")
@@ -570,6 +570,16 @@ def _build_windows_around_indicators(lines: List[str], indicators: List[str], ra
     return merged
 
 
+def should_compose_decompilation_fallback(last: dict) -> bool:
+    """Indica se a UI deve mostrar o painel de resumo em vez de pseudo-C/C#."""
+    if not last:
+        return False
+    if (last.get("decompilation_error_summary") or "").strip():
+        return True
+    ghidra = last.get("ghidra_decompilation") or {}
+    return bool((ghidra.get("error") or "").strip())
+
+
 def compose_fallback_descompilation_ccode(last: dict) -> str:
     """
     Monta o texto do painel quando não há ficheiro C# nem pseudo-C carregável,
@@ -577,14 +587,27 @@ def compose_fallback_descompilation_ccode(last: dict) -> str:
     não mostrar só o erro ILSpy (o pipeline corre Ghidra em [7b] quando ILSpy falha).
     """
     ilspy = (last.get("decompilation_error_summary") or "").strip()
-    lines: List[str] = [
-        "# Descompilação não disponível (detalhe ILSpy)",
-        ilspy if ilspy else "(Sem resumo ILSpy.)",
-    ]
+    lines: List[str] = ["# Descompilação para C# / pseudo-C não disponível"]
+
+    if ilspy:
+        lines.append("")
+        lines.append("## .NET (ILSpy)")
+        lines.append(ilspy)
+    else:
+        lines.append("")
+        lines.append("## .NET (ILSpy)")
+        lines.append("(Não aplicável ou sem resumo registado.)")
+
+    disasm = (last.get("disassembly_file") or "").strip()
+    if disasm:
+        lines.append("")
+        lines.append("## Assembly (fallback)")
+        lines.append(f"Desmontagem concluída: {disasm}")
+        lines.append("Abre o separador IL/assembly na interface para rever o listing.")
 
     ghidra = last.get("ghidra_decompilation") or {}
     lines.append("")
-    lines.append("# --- Fallback: pseudo-C (Ghidra), após falha ILSpy ---")
+    lines.append("## Pseudo-C (Ghidra)")
 
     if ghidra.get("success"):
         op = ghidra.get("output_file") or ""

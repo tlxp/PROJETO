@@ -7,6 +7,7 @@ import os
 import sys
 import uuid
 import tempfile
+import shutil
 import time
 import logging
 from pathlib import Path
@@ -31,10 +32,11 @@ from analysis_jobs import (
     create_job,
     get_job,
     get_job_payload,
+    should_compose_decompilation_fallback,
     summarize_c_code,
 )
 import job_store
-from storage_maintenance import estimate_storage, cleanup_job_artifacts, archive_cold_jobs, read_text_artifact_from_job
+from storage_maintenance import estimate_storage, cleanup_job_artifacts, archive_cold_jobs, purge_all_storage, read_text_artifact_from_job
 
 logging.basicConfig(
     level=logging.INFO,
@@ -193,99 +195,95 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
 
     logger.info("Recebido pedido /api/analyze de %s para ficheiro %s (ext=%s)", client_host, name, ext)
     try:
-        contents = await file.read()
-        target_path.write_bytes(contents)
-    except Exception as e:
-        raise HTTPException(500, f"Erro ao guardar ficheiro: {e}")
-
-    start_time = time.perf_counter()
-    try:
-        # Usar diretório de saída dedicado a este pedido
-        output_dir = tmp_dir / "out"
-        output_dir.mkdir(exist_ok=True)
-
-        def log_cb(msg: str) -> None:
-            logger.info("[ANALYZE %s] %s", name, msg)
-
-        analyzer = RATAnalyzer(
-            str(target_path),
-            output_dir=str(output_dir),
-            use_dotnet_decompiler=(ext in (".exe", ".dll")),
-            log_callback=log_cb,
-        )
-        logger.info("Iniciar análise estática para %s", target_path)
-        results = analyzer.analyze()
-        elapsed = time.perf_counter() - start_time
-        logger.info("Análise terminada para %s em %.1f segundos (risk_score=%s, risk_level=%s)",
-                    name, elapsed, results.get("risk_score"), results.get("risk_level"))
-    except FileNotFoundError as e:
-        logger.error("Erro FileNotFound durante análise de %s: %s", name, e)
-        raise HTTPException(400, str(e))
-    except Exception as e:
-        logger.exception("Erro inesperado durante análise de %s", name)
-        raise HTTPException(500, f"Erro na análise: {str(e)}")
-    finally:
-        # Limpeza: remover ficheiro temporário (opcional manter out_dir por um tempo)
         try:
-            if target_path.exists():
-                target_path.unlink()
-        except Exception:
-            pass
+            contents = await file.read()
+            target_path.write_bytes(contents)
+        except Exception as e:
+            raise HTTPException(500, f"Erro ao guardar ficheiro: {e}")
 
-    # Ler last_analysis.json para obter caminhos do relatório e códigos
-    last_path = output_dir / "last_analysis.json"
-    report_content = ""
-    c_code = ""
-    il_code = ""
+        start_time = time.perf_counter()
+        try:
+            # Usar diretório de saída dedicado a este pedido
+            output_dir = tmp_dir / "out"
+            output_dir.mkdir(exist_ok=True)
 
-    flagged_indicators: list[str] = []
-    flagged_functions: list[dict] = []
-    if last_path.exists():
-        import json
-        with open(last_path, encoding="utf-8") as f:
-            last = json.load(f)
-        report_path = last.get("report_path")
-        report_content = _read_file_safe(report_path)
-        flagged_indicators = last.get("flagged_indicators") or []
-        flagged_functions = last.get("flagged_functions") or []
+            def log_cb(msg: str) -> None:
+                logger.info("[ANALYZE %s] %s", name, msg)
 
-        # Código “C”: preferir C# descompilado (desobfuscado ou consolidado) ou pseudo-C
-        deobf = last.get("deobfuscated_file")
-        consolidated = last.get("consolidated_file")
-        decompiled_c = last.get("decompiled_c_file")
-        if deobf:
-            c_code = _read_file_safe(deobf)
-        if not c_code and consolidated:
-            c_code = _read_file_safe(consolidated)
-        if not c_code and decompiled_c:
-            c_code = _read_file_safe(decompiled_c)
-        if not c_code and last.get("decompilation_error_summary"):
-            c_code = compose_fallback_descompilation_ccode(last)
-        # Aplicar resumo para evitar payloads gigantes no frontend
-        c_code = summarize_c_code(c_code, flagged_indicators)
+            analyzer = RATAnalyzer(
+                str(target_path),
+                output_dir=str(output_dir),
+                use_dotnet_decompiler=(ext in (".exe", ".dll")),
+                log_callback=log_cb,
+            )
+            logger.info("Iniciar análise estática para %s", target_path)
+            results = analyzer.analyze()
+            elapsed = time.perf_counter() - start_time
+            logger.info("Análise terminada para %s em %.1f segundos (risk_score=%s, risk_level=%s)",
+                        name, elapsed, results.get("risk_score"), results.get("risk_level"))
+        except FileNotFoundError as e:
+            logger.error("Erro FileNotFound durante análise de %s: %s", name, e)
+            raise HTTPException(400, str(e))
+        except Exception as e:
+            logger.exception("Erro inesperado durante análise de %s", name)
+            raise HTTPException(500, f"Erro na análise: {str(e)}")
 
-        # IL / Bytecode: assembly (desmontagem) ou mensagem
-        disasm = last.get("disassembly_file")
-        if disasm:
-            il_code = _read_file_safe(disasm, errors="replace")
-        if not il_code:
-            il_code = "# Nenhum bytecode/assembly disponível para este ficheiro."
-    else:
-        report_content = "# Relatório não gerado."
-        c_code = "# Código não disponível."
-        il_code = "# Bytecode não disponível."
+        # Ler last_analysis.json para obter caminhos do relatório e códigos
+        last_path = output_dir / "last_analysis.json"
+        report_content = ""
+        c_code = ""
+        il_code = ""
 
-    return {
-        "report": report_content,
-        "cCode": c_code,
-        "ilCode": il_code,
-        "fileName": name,
-        "riskScore": results.get("risk_score", 0),
-        "riskLevel": results.get("risk_level", ""),
-        "flaggedIndicators": flagged_indicators,
-        # Funções suspeitas com ranges exatos no pseudo-C (quando existir pseudo-C da Ghidra).
-        "flaggedFunctions": flagged_functions,
-    }
+        flagged_indicators: list[str] = []
+        flagged_functions: list[dict] = []
+        if last_path.exists():
+            import json
+            with open(last_path, encoding="utf-8") as f:
+                last = json.load(f)
+            report_path = last.get("report_path")
+            report_content = _read_file_safe(report_path)
+            flagged_indicators = last.get("flagged_indicators") or []
+            flagged_functions = last.get("flagged_functions") or []
+
+            # Código “C”: preferir C# descompilado (desobfuscado ou consolidado) ou pseudo-C
+            deobf = last.get("deobfuscated_file")
+            consolidated = last.get("consolidated_file")
+            decompiled_c = last.get("decompiled_c_file")
+            if deobf:
+                c_code = _read_file_safe(deobf)
+            if not c_code and consolidated:
+                c_code = _read_file_safe(consolidated)
+            if not c_code and decompiled_c:
+                c_code = _read_file_safe(decompiled_c)
+            if not c_code and should_compose_decompilation_fallback(last):
+                c_code = compose_fallback_descompilation_ccode(last)
+            # Aplicar resumo para evitar payloads gigantes no frontend
+            c_code = summarize_c_code(c_code, flagged_indicators)
+
+            # IL / Bytecode: assembly (desmontagem) ou mensagem
+            disasm = last.get("disassembly_file")
+            if disasm:
+                il_code = _read_file_safe(disasm, errors="replace")
+            if not il_code:
+                il_code = "# Nenhum bytecode/assembly disponível para este ficheiro."
+        else:
+            report_content = "# Relatório não gerado."
+            c_code = "# Código não disponível."
+            il_code = "# Bytecode não disponível."
+
+        return {
+            "report": report_content,
+            "cCode": c_code,
+            "ilCode": il_code,
+            "fileName": name,
+            "riskScore": results.get("risk_score", 0),
+            "riskLevel": results.get("risk_level", ""),
+            "flaggedIndicators": flagged_indicators,
+            # Funções suspeitas com ranges exatos no pseudo-C (quando existir pseudo-C da Ghidra).
+            "flaggedFunctions": flagged_functions,
+        }
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 @app.post("/api/analyze_stream")
@@ -367,7 +365,7 @@ async def analyze_file_stream(file: UploadFile = File(...)):
                     c_code = _read_file_safe_local(consolidated)
                 if not c_code and decompiled_c:
                     c_code = _read_file_safe_local(decompiled_c)
-                if not c_code and last.get("decompilation_error_summary"):
+                if not c_code and should_compose_decompilation_fallback(last):
                     c_code = compose_fallback_descompilation_ccode(last)
                 # Aplicar resumo também no modo streaming
                 c_code = summarize_c_code(c_code, flagged_indicators)
@@ -401,11 +399,7 @@ async def analyze_file_stream(file: UploadFile = File(...)):
             q.put({"type": "error", "message": f"Erro na análise: {e}"})
         finally:
             q.put(None)
-            try:
-                if target_path.exists():
-                    target_path.unlink()
-            except Exception:
-                pass
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
     threading.Thread(target=worker, daemon=True).start()
 
@@ -810,4 +804,11 @@ class StorageArchiveRequest(BaseModel):
 async def storage_archive(req: StorageArchiveRequest) -> dict:
     """Arquivo frio: zip de out/ e remoção do diretório original."""
     result = archive_cold_jobs(req.olderThanDays)
+    return {"ok": True, "result": result}
+
+
+@app.post("/api/storage/purge")
+async def storage_purge() -> dict:
+    """Limpeza completa: apaga todo o histórico e artefactos persistidos em DATA_DIR."""
+    result = purge_all_storage()
     return {"ok": True, "result": result}
