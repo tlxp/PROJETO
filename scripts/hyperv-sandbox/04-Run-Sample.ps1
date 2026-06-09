@@ -38,6 +38,10 @@ $VMName = $script:PROJETOVM_VMName
 $SnapshotName = $script:PROJETOVM_SnapshotName
 $PipeName = $script:PROJETOVM_PipeName
 $ReportsDir = $script:PROJETOVM_ReportsPath
+# Raiz da pasta hyperv-sandbox. As fases são dot-sourced a partir de .\RunSample\,
+# por isso DENTRO delas $PSScriptRoot aponta para ...\RunSample (e não para esta raiz).
+# Guardamos a raiz aqui para que as fases possam localizar SandboxCommon.psm1 e .\vm\.
+$SandboxRoot = $PSScriptRoot
 $VMScriptsPath = "C:\analysis_work"
 $GuestUser = $script:PROJETOVM_GuestUser
 $GuestPassword = $script:PROJETOVM_GuestPassword

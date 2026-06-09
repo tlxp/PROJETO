@@ -10,7 +10,7 @@ namespace RatAnalyzer.Desktop;
 
 /// <summary>
 /// Na abertura do WPF: verifica e instala dependências comuns à análise estática (Python/pip, npm, YARA em Python,
-/// JDK 21 para Ghidra, ILSpy CLI, Ghidra) e à análise em VM (Hyper-V, ADK/oscdimg, scripts). Depois <see cref="LoadingPage.RunFullStartupSequenceAsync"/>
+/// JDK 21 para Ghidra, ILSpy CLI, Ghidra) e à análise em VM (Hyper-V, ADK/oscdimg, scripts). Depois <see cref="StartupSequence.RunFullStartupSequenceAsync"/>
 /// continua para as portas 8000/8080.
 /// </summary>
 public static class ProjectDependencyBootstrap
@@ -27,7 +27,7 @@ public static class ProjectDependencyBootstrap
         await CheckExecutableAsync("node", "--version", "Node.js (frontend)", log, cancellationToken).ConfigureAwait(false);
         await CheckExecutableAsync("npm", "--version", "npm (frontend)", log, cancellationToken).ConfigureAwait(false);
 
-        var backendDir = LoadingPage.FindBackendWorkingDirectory();
+        var backendDir = StartupSequence.FindBackendWorkingDirectory();
         if (string.IsNullOrWhiteSpace(backendDir))
         {
             log("[AVISO] Pasta 'backend' não encontrada a partir do executável — pip em falta.");
@@ -37,7 +37,7 @@ public static class ProjectDependencyBootstrap
             log($"[OK] Pasta backend: {backendDir}");
             try
             {
-                await LoadingPage.EnsureBackendPythonDependenciesAsync(backendDir, log).ConfigureAwait(false);
+                await StartupSequence.EnsureBackendPythonDependenciesAsync(backendDir, log).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -48,7 +48,7 @@ public static class ProjectDependencyBootstrap
             await CheckPythonImportAsync(backendDir, "import yara", "yara-python (binário YARA no sistema)", log, cancellationToken).ConfigureAwait(false);
         }
 
-        var frontendDir = LoadingPage.FindFrontendWorkingDirectory();
+        var frontendDir = StartupSequence.FindFrontendWorkingDirectory();
         if (string.IsNullOrWhiteSpace(frontendDir))
         {
             log("[AVISO] Pasta 'frontend' não encontrada — npm em falta.");
@@ -58,7 +58,7 @@ public static class ProjectDependencyBootstrap
             log($"[OK] Pasta frontend: {frontendDir}");
             try
             {
-                await LoadingPage.EnsureFrontendNpmDependenciesAsync(frontendDir, log).ConfigureAwait(false);
+                await StartupSequence.EnsureFrontendNpmDependenciesAsync(frontendDir, log).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

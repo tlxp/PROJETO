@@ -26,7 +26,17 @@ if ($snap) {
     Ensure-DirectoryExists -Path $unattendDir
     $unattendXml = Join-Path $unattendDir "autounattend.xml"
 
-    $customUnattendPath = Join-Path $PSScriptRoot "autounattend-malware-behavior-detection-user-gen1.xml"
+    # NOTA: este ficheiro (Phase8) é dot-sourced, por isso $PSScriptRoot = ...\hyperv-sandbox\Setup.
+    # O autounattend custom vive na pasta PAI (...\hyperv-sandbox\). Procurar primeiro na pai e,
+    # como fallback, em Setup\. Usar o caminho errado fazia o custom "nunca existir", forçando o
+    # XML gerado + Remove-UnattendInternationalSettings -> Setup deixava de ser silencioso.
+    $customUnattendName = "autounattend-malware-behavior-detection-user-gen1.xml"
+    $customUnattendCandidates = @(
+        (Join-Path (Split-Path -Parent $PSScriptRoot) $customUnattendName),
+        (Join-Path $PSScriptRoot $customUnattendName)
+    )
+    $customUnattendPath = $customUnattendCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+    if (-not $customUnattendPath) { $customUnattendPath = $customUnattendCandidates[0] }
     $usedSource = $null
 
     # Verificar se o ficheiro customizado existe antes de começar a instalação.

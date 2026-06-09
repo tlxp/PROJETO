@@ -328,7 +328,7 @@ public partial class MainDashboardView : UserControl
 
         // Reutiliza a mesma lógica de arranque usada no ecrã de loading,
         // garantindo que o backend é gerido de forma centralizada.
-        await LoadingPage.StartBackendAsync(client);
+        await StartupSequence.StartBackendAsync(client);
     }
 
     private void DynamicAnalysis_Click(object sender, RoutedEventArgs e)

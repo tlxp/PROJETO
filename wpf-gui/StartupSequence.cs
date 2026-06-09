@@ -1,24 +1,20 @@
 using System;
-using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Media.Animation;
-using RatAnalyzer.Desktop;
 
-namespace RatAnalyzer.Desktop.Views;
+namespace RatAnalyzer.Desktop;
 
-public partial class LoadingPage : Page
+/// <summary>
+/// Sequência de arranque do ambiente: verifica/inicia o backend (uvicorn, porta 8000) e o dev server
+/// do frontend (npm run dev, porta 8080), garantindo dependências Python/npm. Os processos arrancados
+/// pelo WPF ficam registados aqui para que o <see cref="ShutdownManager"/> os possa terminar ao fechar.
+/// </summary>
+public static class StartupSequence
 {
-    public event EventHandler? LoadingCompleted;
-
-    private readonly ObservableCollection<string> _logs = new();
-
     private const string ApiBaseUrl = "http://localhost:8000";
     private const string FrontendUrl = "http://localhost:8080";
 
@@ -26,90 +22,6 @@ public partial class LoadingPage : Page
     private static Process? _managedBackendProcess;
     // Dev server do frontend (npm run dev) gerido pelo WPF.
     private static Process? _managedFrontendProcess;
-
-    public LoadingPage()
-    {
-        InitializeComponent();
-
-        LogsList.ItemsSource = _logs;
-        Loaded += OnLoaded;
-    }
-
-    private void OnLoaded(object sender, RoutedEventArgs e)
-    {
-        if (FindResource("SpinnerStoryboard") is Storyboard storyboard)
-        {
-            storyboard.Begin();
-        }
-
-        _ = RunStartupSequenceAsync();
-    }
-
-    private async Task RunStartupSequenceAsync()
-    {
-        try
-        {
-            await ProjectDependencyBootstrap.EnsureAndInstallAsync(
-                msg => Dispatcher.Invoke(() => AddLog(msg)),
-                CancellationToken.None).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            Dispatcher.Invoke(() => AddLog($"[AVISO] Dependências: {ex.Message}"));
-        }
-
-        using var client = new HttpClient();
-
-        AddLog("[INFO] A verificar backend em http://localhost:8000 ...");
-        StatusText.Text = "A verificar backend...";
-
-        var backendAlreadyRunning = await IsBackendUpAsync(client);
-        if (!backendAlreadyRunning)
-        {
-            AddLog("[INFO] Backend não encontrado. A iniciar servidor uvicorn...");
-            StatusText.Text = "A iniciar servidor backend (uvicorn)...";
-
-            try
-            {
-                await StartBackendAsync(client, msg => Dispatcher.Invoke(() => AddLog(msg)));
-                AddLog("[OK] Backend iniciado com sucesso em http://localhost:8000.");
-            }
-            catch (Exception ex)
-            {
-                AddLog("[ERRO] Falha ao iniciar backend automaticamente.");
-                AddLog(ex.Message);
-                StatusText.Text = "Falha ao iniciar backend.";
-
-                MessageBox.Show(
-                    "Não foi possível iniciar automaticamente o backend Python.\n\n" +
-                    "Por favor inicie manualmente, na pasta 'backend', com:\n\n" +
-                    "uvicorn api:app --reload --host 0.0.0.0 --port 8000",
-                    "Erro ao iniciar backend",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
-
-                await Task.Delay(1200);
-                LoadingCompleted?.Invoke(this, EventArgs.Empty);
-                return;
-            }
-        }
-        else
-        {
-            AddLog("[OK] Backend já se encontra em execução.");
-        }
-
-        StatusText.Text = "Backend pronto. A iniciar frontend...";
-
-        AddLog("[INFO] A verificar dev server do frontend...");
-        await EnsureFrontendRunningAsync(msg => Dispatcher.Invoke(() => AddLog(msg)));
-
-        StatusText.Text = "Frontend pronto.";
-        AddLog("[OK] Frontend pronto.");
-
-        await Task.Delay(800);
-
-        LoadingCompleted?.Invoke(this, EventArgs.Empty);
-    }
 
     /// <summary>
     /// Executa a sequência completa de arranque: verifica/inicia backend (porta 8000),
@@ -156,23 +68,6 @@ public partial class LoadingPage : Page
         await Task.WhenAll(backendTask, frontendTask);
         // Não abrir automaticamente o browser no arranque.
         // A interface web deve ser aberta por ação explícita do utilizador (ex.: clicar em "Análise estática").
-    }
-
-    private static void OpenFrontendInBrowser(Action<string>? addLog)
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = FrontendUrl,
-                UseShellExecute = true
-            });
-        }
-        catch (Exception ex)
-        {
-            addLog?.Invoke("[ERRO] Não foi possível abrir automaticamente o navegador.");
-            addLog?.Invoke(ex.Message);
-        }
     }
 
     private static async Task<bool> IsBackendUpAsync(HttpClient client)
@@ -563,27 +458,5 @@ public partial class LoadingPage : Page
             _managedFrontendProcess?.Dispose();
             _managedFrontendProcess = null;
         }
-    }
-
-    private void TryOpenFrontend()
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = FrontendUrl,
-                UseShellExecute = true
-            });
-        }
-        catch (Exception ex)
-        {
-            AddLog("[ERRO] Não foi possível abrir automaticamente o navegador.");
-            AddLog(ex.Message);
-        }
-    }
-
-    private void AddLog(string message)
-    {
-        _logs.Add(message);
     }
 }

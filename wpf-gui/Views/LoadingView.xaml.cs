@@ -28,7 +28,7 @@ public partial class LoadingView : UserControl
     {
         try
         {
-            await LoadingPage.RunFullStartupSequenceAsync(AddLog);
+            await StartupSequence.RunFullStartupSequenceAsync(AddLog);
         }
         catch (Exception ex)
         {

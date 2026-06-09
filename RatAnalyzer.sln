@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RatAnalyzer.Desktop", "wpf-gui\RatAnalyzer.Desktop.csproj", "{73D492CC-0C2E-4F46-B92F-1D9731EFB3EC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VmAgent", "vm-agent\VmAgent.csproj", "{8C2BF9A4-462F-49D4-94EE-98BB5D890829}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BenignVmTest", "benign-vm-test\BenignVmTest.csproj", "{89D09D85-38CA-486E-A766-2B782637B064}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{73D492CC-0C2E-4F46-B92F-1D9731EFB3EC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{73D492CC-0C2E-4F46-B92F-1D9731EFB3EC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{73D492CC-0C2E-4F46-B92F-1D9731EFB3EC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{73D492CC-0C2E-4F46-B92F-1D9731EFB3EC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8C2BF9A4-462F-49D4-94EE-98BB5D890829}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8C2BF9A4-462F-49D4-94EE-98BB5D890829}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8C2BF9A4-462F-49D4-94EE-98BB5D890829}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8C2BF9A4-462F-49D4-94EE-98BB5D890829}.Release|Any CPU.Build.0 = Release|Any CPU
+		{89D09D85-38CA-486E-A766-2B782637B064}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{89D09D85-38CA-486E-A766-2B782637B064}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{89D09D85-38CA-486E-A766-2B782637B064}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{89D09D85-38CA-486E-A766-2B782637B064}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

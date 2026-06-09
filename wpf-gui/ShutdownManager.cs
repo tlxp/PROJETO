@@ -31,13 +31,13 @@ internal static class ShutdownManager
 
         try
         {
-            LoadingPage.StopManagedBackend();
+            StartupSequence.StopManagedBackend();
         }
         catch { /* ignorar */ }
 
         try
         {
-            LoadingPage.StopManagedFrontend();
+            StartupSequence.StopManagedFrontend();
         }
         catch { /* ignorar */ }
 

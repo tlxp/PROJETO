@@ -70,7 +70,7 @@ Add-LogLine -Path $HostLogPath -Value "Pipe name: $RunPipeName"
 # O Named Pipe tem de existir no host antes da VM arrancar, senão o Hyper-V
 # não consegue ligar o COM1 ao pipe e a VM recebe sempre respostas vazias.
 Write-LogHost "[2/7] A iniciar receptor do relatório (Named Pipe) em background..."
-$modulePath = Join-Path $PSScriptRoot "SandboxCommon.psm1"
+$modulePath = Join-Path $SandboxRoot "SandboxCommon.psm1"
 # Com o envio simplificado (linha-a-linha) a transmissão pode demorar bastante.
 # Dar margem generosa para evitar timeouts prematuros.
 $pipeTimeoutSeconds = $TimeoutSeconds + 900

@@ -14,17 +14,44 @@ Ambiente isolado para análise comportamental de malware: VM Hyper-V sem interne
 
 ## Estrutura de ficheiros
 
+Os scripts de topo são **numerados** pela ordem em que normalmente se executam. Cada um delega o
+trabalho pesado em módulos dentro de uma sub-pasta com o mesmo nome (decomposição por fases para
+facilitar leitura e manutenção). Os módulos partilhados estão em `SandboxCommon/` (importados via
+`SandboxCommon.psm1`).
+
 ```
 scripts/hyperv-sandbox/
-├── _Config.ps1                  # Configuração central (D:\PROJETOVM, VM, snapshot)
-├── 01-Setup-MalwareSandbox.ps1  # Setup único: pastas, VM, switch, IP host, snapshot
-├── 03-Install-SysmonInGuest.ps1 # Host: instala Sysmon dentro da VM (após Windows instalado)
-├── 04-Run-Sample.ps1            # Host: orquestração (restore, COM1+pipe por run, start, copy, run, relatórios, restore)
-├── SERIAL_REPORT_PROTOCOL.md    # Especificação SBXREP1 (COM1 / Named Pipe)
-├── 05-FirstTimeVmSetup.ps1      # Host: primeira entrada — valida guest, garante isolamento e cria snapshot
-├── vm/
-│   ├── Prepare-RealisticEnvironment.ps1  # VM: prepara ambiente "realista" (sem instalar apps)
-│   └── Run-MalwareAnalysis.ps1   # VM: baseline → executa sample → diff → relatório em C:\
+├── _Config.ps1                      # Configuração central (D:\PROJETOVM, VM, snapshot, transporte)
+├── SandboxCommon.psm1               # Módulo agregador (importa SandboxCommon/*.ps1)
+│
+├── 00-Reset-Sandbox.ps1             # Host: repõe a sandbox a partir do snapshot limpo
+├── 01-Setup-MalwareSandbox.ps1      # Host: setup único (pastas, VM, switch, IP host, snapshot)
+├── 02-Host-ReceiveReport.ps1        # Host: escuta o Named Pipe (COM1) e grava o relatório
+├── 03-Install-SysmonInGuest.ps1     # Host: instala Sysmon dentro da VM
+├── 04-Run-Sample.ps1                # Host: orquestra uma análise (restore → run → relatório → restore)
+├── 05-FirstTimeVmSetup.ps1          # Host: primeira entrada (valida guest, isola, cria snapshot)
+├── 06-Prepare-GuestDependencies.ps1 # Host: descarrega/encena runtimes para o guest
+├── 07-Ensure-Runtimes.ps1           # Host: garante runtimes (.NET, VC++, WebView2) no guest
+│
+├── Setup/                           # Fases do 01 (HyperV, dirs, ISO, switch, VM, firmware, install…)
+├── FirstTimeVmSetup/                # Fases do 05 (pré-check, boot, guest service, isolamento…)
+├── RunSample/                       # Fases do 04 (setup, boot, cópia, execução, espera, recolha…)
+├── EnsureRuntimes/                  # Fases do 07 (plano, resolução, boot, cópia/instalação, verify)
+├── PrepareGuestDependencies/        # Fluxos do 06 (download, staging)
+├── InstallSysmon/                   # Apoio do 03 (resolução do Sysmon)
+├── SandboxCommon/                   # Módulos partilhados (logging, hashing, ISO/unattend, pipe…)
+│
+├── tools/                           # Ferramentas e manifestos (winutil.ps1 é de terceiros)
+├── offline/runtimes/                # Runtimes em modo offline
+├── vm/                              # Scripts executados DENTRO da VM
+│   ├── Run-MalwareAnalysis.ps1      # VM: baseline → executa sample → diff → relatório
+│   ├── RunMalwareAnalysis/          # Fases da análise dentro da VM (baseline, execução, scoring…)
+│   ├── Prepare-RealisticEnvironment.ps1
+│   ├── Launch-AnalysisDetached.ps1
+│   └── Send-ReportViaCom.ps1        # VM: envia o relatório pelo COM1 (SBXREP1)
+│
+├── SERIAL_REPORT_PROTOCOL.md        # Especificação SBXREP1 (COM1 / Named Pipe)
+├── autounattend-*.xml               # Resposta unattend para instalação do Windows
 └── README.md
 ```
 
@@ -43,7 +70,7 @@ D:\PROJETOVM\
 1. Abra **PowerShell como Administrador**.
 2. Navegue até à pasta dos scripts:
    ```powershell
-   cd "C:\Users\jmigu\Desktop\PROJETO\PROJETO\scripts\hyperv-sandbox"
+   cd "<RAIZ-DO-REPO>\scripts\hyperv-sandbox"
    ```
 3. Execute o setup:
    ```powershell
@@ -62,7 +89,7 @@ D:\PROJETOVM\
 6. (Opcional mas recomendado) Instale **Sysmon** na VM com configuração personalizada:
    ```powershell
    # No host, após o Windows estar instalado na VM e Sysmon existir em D:\Tools\Sysmon\
-   cd "C:\Users\jmigu\Desktop\PROJETO\PROJETO\scripts\hyperv-sandbox"
+   cd "<RAIZ-DO-REPO>\scripts\hyperv-sandbox"
    .\03-Install-SysmonInGuest.ps1 `
      -SysmonExePath "D:\Tools\Sysmon\Sysmon64.exe" `
      -SysmonConfigPath "D:\Tools\Sysmon\sysmon-config.xml"
@@ -82,7 +109,7 @@ D:\PROJETOVM\
 Coloque o ficheiro suspeito em `D:\PROJETOVM\Samples\` (ou use outro caminho). No **host**, como Administrador:
 
 ```powershell
-cd "C:\Users\jmigu\Desktop\PROJETO\PROJETO\scripts\hyperv-sandbox"
+cd "<RAIZ-DO-REPO>\scripts\hyperv-sandbox"
 .\04-Run-Sample.ps1 -SamplePath "D:\PROJETOVM\Samples\suspeito.exe" -TimeoutSeconds 120
 ```
 

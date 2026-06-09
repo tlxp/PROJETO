@@ -153,7 +153,7 @@ internal static class LocalArtifactCleanup
     {
         try
         {
-            var backendDir = LoadingPage.FindBackendWorkingDirectory();
+            var backendDir = StartupSequence.FindBackendWorkingDirectory();
             var projectRoot = backendDir != null
                 ? Directory.GetParent(backendDir)?.FullName
                 : null;
@@ -241,7 +241,7 @@ internal static class LocalArtifactCleanup
 
         try
         {
-            var backendDir = LoadingPage.FindBackendWorkingDirectory();
+            var backendDir = StartupSequence.FindBackendWorkingDirectory();
             var projectRoot = backendDir != null
                 ? Directory.GetParent(backendDir)?.FullName
                 : null;

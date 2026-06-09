@@ -78,27 +78,34 @@ try {
 }
 
 # Copiar scripts de análise para a VM
-$scriptDir = Join-Path $PSScriptRoot "vm"
+# NOTA: esta fase é dot-sourced a partir de .\RunSample\, por isso $PSScriptRoot aqui
+# aponta para ...\RunSample. A pasta vm\ está na raiz hyperv-sandbox ($SandboxRoot).
+$scriptDir = Join-Path $SandboxRoot "vm"
 $runScript = Join-Path $scriptDir "Run-MalwareAnalysis.ps1"
 $sendScript = Join-Path $scriptDir "Send-ReportViaCom.ps1"
-if (Test-Path $runScript) {
-    try { Copy-SandboxVMFile -VMName $VMName -SourcePath $runScript -DestinationPath "$VMScriptsPath\Run-MalwareAnalysis.ps1" } catch { 
-        Write-Warning "      Falha ao copiar Run-MalwareAnalysis.ps1"
-    }
+if (-not (Test-Path -LiteralPath $runScript)) {
+    throw "Run-MalwareAnalysis.ps1 não encontrado no host em: $runScript"
 }
+Copy-SandboxVMFile -VMName $VMName -SourcePath $runScript -DestinationPath "$VMScriptsPath\Run-MalwareAnalysis.ps1"
+
 # Run-MalwareAnalysis.ps1 faz dot-source das suas funções da subpasta RunMalwareAnalysis\.
 # Essas bibliotecas têm de existir na VM no mesmo diretório do script (mesmo $PSScriptRoot).
 $analysisLibDir = Join-Path $scriptDir "RunMalwareAnalysis"
-if (Test-Path $analysisLibDir) {
-    foreach ($lib in (Get-ChildItem -LiteralPath $analysisLibDir -Filter "*.ps1" -File)) {
-        try { Copy-SandboxVMFile -VMName $VMName -SourcePath $lib.FullName -DestinationPath "$VMScriptsPath\RunMalwareAnalysis\$($lib.Name)" } catch {
-            Write-Warning "      Falha ao copiar biblioteca de analise: $($lib.Name)"
-        }
-    }
+if (-not (Test-Path -LiteralPath $analysisLibDir)) {
+    throw "Pasta de bibliotecas de análise não encontrada no host em: $analysisLibDir"
 }
-if (Test-Path $sendScript) {
-    try { Copy-SandboxVMFile -VMName $VMName -SourcePath $sendScript -DestinationPath "$VMScriptsPath\Send-ReportViaCom.ps1" } catch {
-        Write-Warning "      Falha ao copiar Send-ReportViaCom.ps1"
-    }
+foreach ($lib in (Get-ChildItem -LiteralPath $analysisLibDir -Filter "*.ps1" -File)) {
+    Copy-SandboxVMFile -VMName $VMName -SourcePath $lib.FullName -DestinationPath "$VMScriptsPath\RunMalwareAnalysis\$($lib.Name)"
+}
+if (-not (Test-Path -LiteralPath $sendScript)) {
+    throw "Send-ReportViaCom.ps1 não encontrado no host em: $sendScript"
+}
+Copy-SandboxVMFile -VMName $VMName -SourcePath $sendScript -DestinationPath "$VMScriptsPath\Send-ReportViaCom.ps1"
+
+# Validar que o script principal chegou mesmo à VM antes de tentar executá-lo
+# (evita o erro tardio "'.\Run-MalwareAnalysis.ps1' is not recognized" dentro da VM).
+$runScriptInVm = "$VMScriptsPath\Run-MalwareAnalysis.ps1"
+if (-not (Test-SandboxGuestPathExists -VMName $VMName -Credential $cred -GuestLiteralPath $runScriptInVm)) {
+    throw "Run-MalwareAnalysis.ps1 não chegou à VM em: $runScriptInVm (cópia host->guest falhou)"
 }
 Write-LogHost "      Amostra e scripts copiados."
