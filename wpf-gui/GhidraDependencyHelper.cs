@@ -188,10 +188,7 @@ internal static class GhidraDependencyHelper
             {
                 Directory.Delete(extractRoot, true);
             }
-            catch
-            {
-                // ignorar
-            }
+            catch { /* ignorar */ }
 
             throw;
         }
@@ -203,10 +200,7 @@ internal static class GhidraDependencyHelper
             {
                 Directory.Delete(extractRoot, true);
             }
-            catch
-            {
-                // ignorar
-            }
+            catch { /* ignorar */ }
 
             throw new InvalidOperationException("Estrutura do ZIP inesperada (pasta Ghidra não encontrada).");
         }
@@ -231,10 +225,7 @@ internal static class GhidraDependencyHelper
         {
             Directory.Delete(extractRoot, true);
         }
-        catch
-        {
-            // temporários podem ficar vazios ou bloqueados
-        }
+        catch { /* ignorar */ }
 
         Environment.SetEnvironmentVariable("GHIDRA_INSTALL_DIR", finalDir, EnvironmentVariableTarget.User);
         Environment.SetEnvironmentVariable("GHIDRA_INSTALL_DIR", finalDir, EnvironmentVariableTarget.Process);
@@ -255,10 +246,7 @@ internal static class GhidraDependencyHelper
         {
             File.Delete(zipPath);
         }
-        catch
-        {
-            // libertar espaço é opcional
-        }
+        catch { /* ignorar */ }
     }
 
     private static string? FindGhidraRootInExtract(string extractRoot)

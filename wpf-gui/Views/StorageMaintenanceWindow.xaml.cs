@@ -184,10 +184,7 @@ public partial class StorageMaintenanceWindow : Window
                     backendFreed = purge?.Result?.FreedBytes ?? 0;
                 }
             }
-            catch
-            {
-                // Se o backend não estiver disponível, continuar com a limpeza local.
-            }
+            catch { /* ignorar */ }
 
             var localSummary = LocalArtifactCleanup.CleanupEverything();
             StatusText.Text =

@@ -20,7 +20,6 @@ def _utc_now_iso() -> str:
 
 
 def _db_path() -> Path:
-    # Garantir que a pasta existe
     config.SANDBOX_JOBS_DIR.mkdir(parents=True, exist_ok=True)
     return Path(config.ANALYSIS_DB_PATH)
 

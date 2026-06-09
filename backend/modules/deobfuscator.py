@@ -26,7 +26,6 @@ class Deobfuscator:
         Aplica técnicas de deobfuscação
         
         Nota: Para deobfuscação avançada, pode integrar ferramentas como:
-        - unpyc37 (para Python)
         - de4dot (para .NET)
         - IDA Pro scripts
         - Ghidra scripts
@@ -42,23 +41,16 @@ class Deobfuscator:
         try:
             with open(file_path, 'rb') as f:
                 content = f.read()
-            
-            # Tentar decodificar como texto
+
             try:
                 text = content.decode('utf-8', errors='ignore')
             except:
                 text = content.decode('latin-1', errors='ignore')
-            
-            # Detectar e deobfuscar strings XOR
+
             results['xor_strings'] = self._detect_xor_strings(text)
-            
-            # Detectar strings Base64
             results['base64_strings'] = self._detect_base64_strings(text)
-            
-            # Detectar indicadores de ofuscação
             results['obfuscation_indicators'] = self._detect_obfuscation(text)
-            
-            # Aplicar técnicas de deobfuscação
+
             if results['xor_strings']:
                 results['techniques_applied'].append('XOR deobfuscation')
             if results['base64_strings']:
@@ -70,7 +62,7 @@ class Deobfuscator:
         return results
     
     def _detect_xor_strings(self, text: str) -> List[str]:
-        """Detecta possíveis strings XOR (assembly e C#/.NET)"""
+        """Deteta possíveis strings XOR (assembly e C#/.NET)"""
         xor_strings = []
 
         xor_patterns = [
@@ -143,7 +135,7 @@ class Deobfuscator:
         return decoded
     
     def _detect_base64_strings(self, text: str) -> List[str]:
-        """Detecta e decodifica strings Base64"""
+        """Deteta e decodifica strings Base64"""
         import base64
         
         base64_strings = []
@@ -162,7 +154,7 @@ class Deobfuscator:
         return base64_strings
     
     def _detect_obfuscation(self, text: str) -> List[str]:
-        """Detecta indicadores de ofuscação"""
+        """Deteta indicadores de ofuscação"""
         indicators = []
         
         # Padrões comuns de ofuscação (Python e C#/.NET)
@@ -198,7 +190,7 @@ class Deobfuscator:
             result.append(byte ^ key[i % len(key)])
         return bytes(result)
 
-    # ---------- Deobfuscação de binário (saída = ficheiro para Ghidra) ----------
+    # Deobfuscação de binário (saída = ficheiro para Ghidra)
 
     def _is_upx_packed(self, file_path: str) -> bool:
         """Deteta se o PE está empacotado com UPX (secções UPX0/UPX1 ou assinatura UPX!)."""

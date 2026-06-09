@@ -1,7 +1,8 @@
 ﻿<#
 .SYNOPSIS
     Envia o ficheiro de relatório para o host via porta COM1 (serial virtual -> Named Pipe).
-    Versão SIMPLIFICADA e ROBUSTA - sem handshake complexo.
+.DESCRIPTION
+    Envio sequencial por linhas, com cabeçalho e marcadores de início/fim, com repetição em caso de falha.
 #>
 
 param(

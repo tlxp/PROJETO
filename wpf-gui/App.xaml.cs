@@ -39,10 +39,7 @@ public partial class App : Application
                 }
             }
         }
-        catch
-        {
-            // Se falhar a relançar, deixa a app continuar (scripts vão falhar e mostrar erro).
-        }
+        catch { /* ignorar */ }
 
         base.OnStartup(e);
     }

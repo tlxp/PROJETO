@@ -210,7 +210,6 @@ class RATAnalyzerApp:
         main = ttk.Frame(self.root, padding=12)
         main.pack(fill=tk.BOTH, expand=True)
 
-        # Zona de drop
         drop_frame = ttk.LabelFrame(main, text="Ficheiro a analisar", padding=8)
         drop_frame.pack(fill=tk.X, pady=(0, 8))
 
@@ -224,7 +223,6 @@ class RATAnalyzerApp:
 
         ttk.Button(drop_frame, text="Procurar ficheiro (.cs, .exe ou .dll)...", command=self._on_browse).pack(pady=(0, 4))
 
-        # Projeto e compilar
         build_frame = ttk.LabelFrame(main, text="Compilar projeto", padding=8)
         build_frame.pack(fill=tk.X, pady=(0, 8))
 
@@ -263,7 +261,6 @@ class RATAnalyzerApp:
         self.analyze_btn = ttk.Button(choice_frame, text="Executar análise RAT", command=self._on_analyze)
         self.analyze_btn.pack(pady=8)
 
-        # Log
         log_frame = ttk.LabelFrame(main, text="Log", padding=4)
         log_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
 

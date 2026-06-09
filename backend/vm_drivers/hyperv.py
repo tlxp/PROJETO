@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Driver Hyper-V (Windows host local).
 
@@ -14,6 +12,8 @@ Boas práticas de segurança:
   - Se a config estiver incompleta ou o agent não responder, falha com erro
     explícito (não inventa resultados)
 """
+
+from __future__ import annotations
 
 import os
 import subprocess

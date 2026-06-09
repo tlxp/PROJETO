@@ -1,3 +1,0 @@
-﻿<Project>
-  <Import Project="..\build\vm-agent.props" />
-</Project>

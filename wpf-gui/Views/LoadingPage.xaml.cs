@@ -380,7 +380,6 @@ public partial class LoadingPage : Page
             if (!string.IsNullOrWhiteSpace(ghidraHome))
                 psi.Environment["GHIDRA_INSTALL_DIR"] = ghidraHome;
 
-            // Guardamos o processo para o podermos terminar quando o WPF fechar.
             _managedBackendProcess = Process.Start(psi);
         }
         catch (Exception ex)
@@ -540,10 +539,7 @@ public partial class LoadingPage : Page
                 _managedBackendProcess.WaitForExit(5000);
             }
         }
-        catch
-        {
-            // Ignorar falhas ao terminar o backend; o objetivo é apenas limpar o ambiente.
-        }
+        catch { /* ignorar */ }
         finally
         {
             _managedBackendProcess?.Dispose();
@@ -561,10 +557,7 @@ public partial class LoadingPage : Page
                 _managedFrontendProcess.WaitForExit(5000);
             }
         }
-        catch
-        {
-            // Ignorar falhas ao terminar o frontend; o objetivo é apenas libertar a porta.
-        }
+        catch { /* ignorar */ }
         finally
         {
             _managedFrontendProcess?.Dispose();

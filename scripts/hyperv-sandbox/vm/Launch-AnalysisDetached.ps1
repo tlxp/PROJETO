@@ -137,10 +137,10 @@ try {
     }
 
     # NOTA: Usar ProcessStartInfo em vez de Start-Process -WindowStyle Hidden.
-    # Sob PowerShell Direct (VMBus), nao ha sessao interactiva/window station,
-    # por isso -WindowStyle Hidden pode lancar excepcao Win32 e matar o processo
+    # Sob PowerShell Direct (VMBus), não há sessão interativa/window station,
+    # por isso -WindowStyle Hidden pode lançar exceção Win32 e matar o processo
     # PS Direct, causando "The Hyper-V socket target process has ended."
-    # ProcessStartInfo com CreateNoWindow=$true nao toca na window station.
+    # ProcessStartInfo com CreateNoWindow=$true não toca na window station.
     $psi2 = New-Object System.Diagnostics.ProcessStartInfo
     $psi2.FileName         = $psExe
     # Reconstruir argList como string para ProcessStartInfo

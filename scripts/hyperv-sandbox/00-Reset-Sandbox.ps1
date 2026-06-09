@@ -16,7 +16,6 @@ Import-Module (Join-Path $PSScriptRoot "SandboxCommon.psm1") -ErrorAction Stop
 
 $ErrorActionPreference = "Stop"
 
-# Carregar configuração (_Config.ps1)
 $configScript = Join-Path $PSScriptRoot "_Config.ps1"
 if (Test-Path $configScript) { . $configScript }
 

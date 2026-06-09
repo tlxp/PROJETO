@@ -31,13 +31,14 @@ decompiled/
 # YARA rules compiladas
 *.yarac
 
-# Projeto de exemplo .NET – binários e caches
-programa/bin/
-programa/obj/
-
 # WPF GUI – binários e artefatos de build
 wpf-gui/bin/
 wpf-gui/obj/
+# WPF GUI – pastas temporárias de verificação de build
+wpf-gui/_*/
+
+# Sandbox – instaladores de runtime grandes (obter via EnsureRuntimes/Downloads.ps1 ou 06-Prepare-GuestDependencies.ps1)
+scripts/hyperv-sandbox/tools/*.exe
 
 # .NET (genérico) – ajuda a evitar commits de build em qualquer projeto
 **/bin/
@@ -51,8 +52,9 @@ wpf-gui/obj/
 *.userosscache
 *.sln.docstates
 
-# Sandbox – jobs e base de dados de análise (dados de runtime)
+# Dados de runtime (jobs, DB, reports, decompiled) — ver backend/config.py (DATA_DIR)
 sandbox_jobs/
+data/
 
 # IDE
 .vscode/

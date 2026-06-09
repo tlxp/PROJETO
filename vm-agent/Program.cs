@@ -76,7 +76,7 @@ app.MapPost("/api/run", async (RunRequest req, AnalysisState state) =>
     }
     catch (OperationCanceledException)
     {
-        try { if (!proc.HasExited) proc.Kill(true); } catch { /* ignore */ }
+        try { if (!proc.HasExited) proc.Kill(true); } catch { /* ignorar */ }
         state.LastBehavior["status"] = "timeout";
         state.LastBehavior["exitCode"] = null;
         state.LastBehavior["stdout"] = await proc.StandardOutput.ReadToEndAsync();
@@ -101,7 +101,7 @@ app.MapGet("/api/report", (AnalysisState state) =>
         return Results.BadRequest(new { detail = "Nenhuma execução registada ainda." });
     }
 
-    // Estrutura pensada para ser estendida com Sysmon/ETW no futuro.
+    // NOTA: Estrutura pensada para ser estendida com Sysmon/ETW no futuro.
     var behavior = new
     {
         status = state.LastBehavior.GetValueOrDefault("status") ?? "unknown",

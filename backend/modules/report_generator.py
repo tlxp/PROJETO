@@ -19,14 +19,12 @@ class ReportGenerator:
         
         report_lines = []
         
-        # Cabeçalho
         report_lines.append("=" * 80)
         report_lines.append("RELATÓRIO DE ANÁLISE - RAT ANALYZER")
         report_lines.append("=" * 80)
         report_lines.append(f"Data/Hora: {analysis_results['timestamp']}")
         report_lines.append("")
 
-        # Resumo rápido
         static = analysis_results.get('static_analysis', {})
         report_lines.append("RESUMO")
         report_lines.append("-" * 40)
@@ -46,7 +44,6 @@ class ReportGenerator:
         report_lines.append(f"SHA256: {file_info['sha256']}")
         report_lines.append("")
         
-        # Score de Risco
         report_lines.append("-" * 80)
         report_lines.append("SCORE DE RISCO")
         report_lines.append("-" * 80)

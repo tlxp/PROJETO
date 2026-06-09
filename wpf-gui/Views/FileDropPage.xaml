@@ -15,7 +15,7 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Header -->
+        <!-- Cabeçalho -->
         <StackPanel Orientation="Vertical" Margin="0,0,0,24">
             <TextBlock Text="Análise de ficheiros"
                        Style="{StaticResource TitleTextBlock}" />
@@ -24,7 +24,7 @@
                        Style="{StaticResource SubtitleTextBlock}" />
         </StackPanel>
 
-        <!-- Drop zone -->
+        <!-- Zona de drop -->
         <Border Grid.Row="1"
                 x:Name="DropZone"
                 CornerRadius="{StaticResource Radius.Large}"
@@ -81,7 +81,7 @@
             </Grid>
         </Border>
 
-        <!-- Selected file + options -->
+        <!-- Ficheiro selecionado + opções -->
         <StackPanel Grid.Row="2"
                     Orientation="Vertical"
                     Margin="0,24,0,0">

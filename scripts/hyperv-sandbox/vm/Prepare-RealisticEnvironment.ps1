@@ -10,7 +10,7 @@
     Nota: nenhuma lógica de instalação (winget/offline/downloads) é executada aqui.
 
 .PARAMETER WorkDir
-    Directório de trabalho na VM. Predefinição: C:\analysis_work
+    Diretório de trabalho na VM. Predefinição: C:\analysis_work
 #>
 param(
     [string] $WorkDir = "C:\analysis_work"
@@ -19,9 +19,7 @@ param(
 Set-StrictMode -Off
 $ErrorActionPreference = "Stop"
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+# Auxiliares
 function LogMsg {
     param([string]$msg, [string]$level = "INFO")
     $ts = Get-Date -Format "HH:mm:ss"
@@ -43,13 +41,11 @@ $ReadyFlagPath = Join-Path $WorkDir "prepare_env_ready.flag"
 Remove-Item -LiteralPath $StateJsonPath -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $ReadyFlagPath -Force -ErrorAction SilentlyContinue
 
-# ---------------------------------------------------------------------------
-# [1] Preparar ambiente "realista"
-# ---------------------------------------------------------------------------
+# 1) Preparar ambiente "realista"
 LogMsg "=== Prepare-RealisticEnvironment ==="
 LogMsg "[1] A configurar ambiente realista..."
 
-# Desactivar Windows Update automático (evita que o sample seja perturbado por actualizações)
+# Desativar Windows Update automático (evita que o sample seja perturbado por atualizações)
 try {
     Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" `
         -Name "NoAutoUpdate" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
@@ -58,7 +54,7 @@ try {
     LogWarn "  Não foi possível desactivar Windows Update: $($_.Exception.Message)"
 }
 
-# Desactivar hibernação e ecrã de bloqueio (VM deve ficar activa durante análise)
+# Desativar hibernação e ecrã de bloqueio (VM deve ficar ativa durante análise)
 try {
     powercfg /hibernate off 2>&1 | Out-Null
     powercfg /change standby-timeout-ac 0 2>&1 | Out-Null
@@ -68,7 +64,7 @@ try {
     LogWarn "  Não foi possível configurar power: $($_.Exception.Message)"
 }
 
-# Desactivar SmartScreen para não bloquear samples
+# Desativar SmartScreen para não bloquear samples
 try {
     Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" `
         -Name "SmartScreenEnabled" -Value "Off" -Type String -Force -ErrorAction SilentlyContinue
@@ -79,7 +75,7 @@ try {
     LogWarn "  Não foi possível desactivar SmartScreen: $($_.Exception.Message)"
 }
 
-# Desactivar UAC (facilita a execução de samples como admin)
+# Desativar UAC (facilita a execução de samples como admin)
 try {
     Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" `
         -Name "EnableLUA" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
@@ -88,7 +84,6 @@ try {
     LogWarn "  Não foi possível desactivar UAC: $($_.Exception.Message)"
 }
 
-# Criar pasta de trabalho de análise
 $analysisDir = $WorkDir
 
 # Criar documentos "isca" para o ambiente parecer usado
@@ -109,9 +104,7 @@ foreach ($doc in $decoyDocs) {
 }
 LogMsg "  Ficheiros isca criados."
 
-# ---------------------------------------------------------------------------
-# [2] Gravar estado final
-# ---------------------------------------------------------------------------
+# 2) Gravar estado final
 LogMsg "[2] A gravar estado final..."
 
 $state = @{

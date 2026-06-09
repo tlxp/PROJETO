@@ -170,18 +170,23 @@ PROJETO/
 ├── backend/                 # API FastAPI + pipeline de análise
 │   ├── api.py               # Endpoints /api/analyze, /api/analyze_stream, /api/analysis
 │   ├── analysis_jobs.py     # Jobs static|dynamic|both
-│   ├── config.py            # Configuração central (paths, DB, sandbox_jobs)
+│   ├── config.py            # Configuração central (paths, DB, DATA_DIR)
 │   ├── modules/             # Módulos (static analyzer, yara, deobfuscator, decompilers, etc.)
-│   └── vm_drivers/          # Drivers dinâmicos (stub, hyperv, proxmox)
+│   ├── vm_drivers/          # Drivers dinâmicos (stub, hyperv, proxmox)
+│   └── tests/               # Testes (pytest)
 ├── frontend/                # Interface web (React/Vite) – ver frontend/README.md
 ├── wpf-gui/                 # RatAnalyzer.Desktop — WPF (.NET 8), bootstrap de dependências e VM
-├── vm-agent/                # Agent HTTP para correr dentro da VM sandbox
-├── scripts/hyperv-sandbox/  # Scripts PowerShell de automação Hyper-V
-├── sandbox_jobs/            # Jobs e artefactos (SQLite + outputs por job)
+├── vm-agent/                # Agent HTTP (.NET 8) para correr dentro da VM sandbox
+├── benign-vm-test/          # Programa .NET benigno para validar o pipeline da VM
+├── scripts/hyperv-sandbox/  # Scripts PowerShell de automação Hyper-V (numerados 00–07)
+├── yara_rules/              # Regras YARA (.yar) carregadas pelo scanner
+├── docs/                    # Documentação, diagramas PUML e diagramas de engenharia
 └── README.md
 ```
 
-Os paths de `sandbox_jobs/`, base de dados e diretórios de saída são definidos em `backend/config.py`.
+Os artefactos de runtime (jobs, base de dados SQLite, `reports/`, `decompiled/`) **não** ficam no
+repositório: são guardados sob `DATA_DIR` (por defeito `%LOCALAPPDATA%\RatAnalyzer`, com override via
+`RATANALYZER_DATA_DIR`). Ver `backend/config.py`.
 
 ## Diagramas PUML
 

@@ -100,7 +100,7 @@ def create_job(file_name: str, contents: bytes, analysis_type: AnalysisType) -> 
     pipeline_version = compute_pipeline_version()
     sha = job_store.sha256_bytes(contents)
 
-    # --- Cache/deduplicação: reusar análise anterior quando o ficheiro é igual ---
+    # Cache/deduplicação: reusar análise anterior quando o ficheiro é igual
     # Regras:
     #  - static pode reutilizar resultados de static/both
     #  - dynamic pode reutilizar resultados de dynamic/both (quando existirem)

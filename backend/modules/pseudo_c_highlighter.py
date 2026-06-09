@@ -1,7 +1,7 @@
 """
 Extrai indicadores que deram flag no RAT Analyzer para destacar no pseudo-C.
 Usado para realçar no código decompilado (Ghidra) as partes que acionaram
-detecções (YARA, análise estática, deobfuscação).
+deteções (YARA, análise estática, deobfuscação).
 """
 
 from typing import Dict, List, Set, Any, Tuple
@@ -35,7 +35,7 @@ def extract_flagged_indicators(analysis_results: Dict) -> List[str]:
             seen.add(s)
             indicators.append(s)
 
-    # 1. YARA matches — strings encontradas
+    # 1) YARA matches — strings encontradas
     for match in analysis_results.get("yara_matches", []):
         for s in match.get("strings", []):
             data = s.get("data", "")
@@ -47,7 +47,7 @@ def extract_flagged_indicators(analysis_results: Dict) -> List[str]:
                 except Exception:
                     pass
 
-    # 2. Análise estática — funções suspeitas, C2, evasão, stealer, persistência
+    # 2) Análise estática — funções suspeitas, C2, evasão, stealer, persistência
     static = analysis_results.get("static_analysis", {})
     for name in static.get("suspicious_functions", []):
         add(str(name))
@@ -62,7 +62,7 @@ def extract_flagged_indicators(analysis_results: Dict) -> List[str]:
     for s in static.get("persistence_indicators", []):
         add(str(s) if isinstance(s, str) else str(s.get("value", s)))
 
-    # 3. Deobfuscação — indicadores de ofuscação (Base64, XOR, etc.)
+    # 3) Deobfuscação — indicadores de ofuscação (Base64, XOR, etc.)
     deob = analysis_results.get("deobfuscation", {})
     for item in deob.get("obfuscation_indicators", []):
         if isinstance(item, dict):

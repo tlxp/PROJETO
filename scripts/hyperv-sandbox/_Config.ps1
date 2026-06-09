@@ -1,11 +1,11 @@
 <#
 .SYNOPSIS
-    Configuracao central do sandbox Hyper-V. Todas as pastas usam D:\PROJETOVM.
+    Configuração central do sandbox Hyper-V. Todas as pastas usam D:\PROJETOVM.
 .DESCRIPTION
     - VMMemoryStartupMB: 0 = auto (25% RAM host, entre 2-4 GB)
-    - VMProcessorCount : 0 = auto (metade dos nucleos logicos, min 1)
+    - VMProcessorCount : 0 = auto (metade dos núcleos lógicos, min 1)
     - VMGeneration     : 1 = BIOS/Legacy (recomendado se Gen2 falhar boot ISO)
-                         2 = UEFI (requer ISO com El Torito UEFI valido)
+                         2 = UEFI (requer ISO com El Torito UEFI válido)
 #>
 
 # Pasta raiz
@@ -23,15 +23,15 @@ $script:PROJETOVM_VMProcessorCount    = 0       # 0 = auto
 $script:PROJETOVM_VHDSizeGB           = 80
 $script:PROJETOVM_DynamicMemoryEnabled = $true
 
-# ISO Windows (sem verificacao SHA-1): **en-US** (English United States) — mais nada e suportado para unattended.
+# ISO Windows (sem verificação SHA-1): **en-US** (English United States) — mais nada é suportado para unattended.
 $script:PROJETOVM_WindowsIsoPath      = "D:\ISOs\Windows.iso"
 $script:PROJETOVM_AutoInstallWindows  = $true
 
-# Utilizador criado pela instalacao unattended
+# Utilizador criado pela instalação unattended
 $script:PROJETOVM_GuestUser     = "analyst"
 $script:PROJETOVM_GuestPassword = "Analyst123!"
 
-# Pastas derivadas (nao editar)
+# Pastas derivadas (não editar)
 $script:PROJETOVM_VMPath      = Join-Path $script:PROJETOVM_BasePath "VM"
 $script:PROJETOVM_ReportsPath = Join-Path $script:PROJETOVM_BasePath "Reports"
 $script:PROJETOVM_SamplesPath = Join-Path $script:PROJETOVM_BasePath "Samples"

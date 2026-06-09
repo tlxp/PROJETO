@@ -1,1 +1,1 @@
-# Test package for RAT Analyzer backend.
+# Pacote de testes do backend do RAT Analyzer.

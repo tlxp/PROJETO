@@ -33,19 +33,13 @@ internal static class ShutdownManager
         {
             LoadingPage.StopManagedBackend();
         }
-        catch
-        {
-            // Ignorar erros ao terminar o backend.
-        }
+        catch { /* ignorar */ }
 
         try
         {
             LoadingPage.StopManagedFrontend();
         }
-        catch
-        {
-            // Ignorar erros ao terminar o frontend.
-        }
+        catch { /* ignorar */ }
 
         // Garantir que as portas 8080 (frontend) e 8000 (backend) são libertadas,
         // mesmo que processos filhos (ex.: node do npm) tenham ficado ativos.
@@ -78,10 +72,7 @@ internal static class ShutdownManager
         {
             LocalArtifactCleanup.CleanupOnApplicationExit();
         }
-        catch
-        {
-            // Se a limpeza local falhar não impedimos o fecho da aplicação.
-        }
+        catch { /* ignorar */ }
     }
 
     /// <summary>
@@ -149,10 +140,7 @@ internal static class ShutdownManager
                 process.WaitForExit(5000);
             }
         }
-        catch
-        {
-            // Processo já terminou ou sem permissão; tentar taskkill como fallback.
-        }
+        catch { /* ignorar */ }
 
         try
         {
@@ -165,10 +153,7 @@ internal static class ShutdownManager
             });
             killer?.WaitForExit(3000);
         }
-        catch
-        {
-            // Ignorar falhas no fallback.
-        }
+        catch { /* ignorar */ }
     }
 
     private static void KillOrphanedBackendUvicornProcesses()
@@ -184,10 +169,7 @@ internal static class ShutdownManager
             });
             process?.WaitForExit(5000);
         }
-        catch
-        {
-            // Ignorar falhas ao varrer processos Python/uvicorn.
-        }
+        catch { /* ignorar */ }
     }
 }
 

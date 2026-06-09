@@ -47,7 +47,7 @@ def main() -> int:
 
     removed = 0
 
-    # 1. Python: __pycache__ (evitar .git)
+    # 1) Python: __pycache__ (evitar .git)
     pycache_dirs = [
         d for d in ROOT.rglob("__pycache__")
         if d.is_dir() and ".git" not in d.parts
@@ -59,7 +59,7 @@ def main() -> int:
         if not dry_run:
             shutil.rmtree(d)
 
-    # 2. pytest cache
+    # 2) pytest cache
     pytest_cache = ROOT / ".pytest_cache"
     if pytest_cache.exists():
         c = count_items(pytest_cache)
@@ -68,7 +68,7 @@ def main() -> int:
         if not dry_run:
             shutil.rmtree(pytest_cache)
 
-    # 3. .pyc, .pyo (evitar .git)
+    # 3) .pyc, .pyo (evitar .git)
     py_files = [
         f for ext in ("*.pyc", "*.pyo")
         for f in ROOT.rglob(ext)
@@ -80,7 +80,7 @@ def main() -> int:
         if not dry_run:
             f.unlink()
 
-    # 4. programa/bin e programa/obj (build e exe/dll gerados)
+    # 4) programa/bin e programa/obj (build e exe/dll gerados)
     for name in ("bin", "obj"):
         d = config.SAMPLE_PROJECT_DIR / name
         if d.exists():
@@ -90,7 +90,7 @@ def main() -> int:
             if not dry_run:
                 shutil.rmtree(d)
 
-    # 5. decompiled/ (código descompilado e projetos Ghidra temporários)
+    # 5) decompiled/ (código descompilado e projetos Ghidra temporários)
     if config.DECOMPILED_DIR.exists():
         c = count_items(config.DECOMPILED_DIR)
         print(f"  Remover: decompiled/ ({c} itens)")

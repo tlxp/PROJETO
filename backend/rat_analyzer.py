@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 RAT Analyzer - Ferramenta de Análise Automática de DLLs e Executáveis
-Projeto de Licenciatura - Detecção de Remote Access Trojans
+Projeto de Licenciatura - Deteção de Remote Access Trojans
 """
 
 import argparse
@@ -50,7 +50,6 @@ class RATAnalyzer:
         if not self.target_file.exists():
             raise FileNotFoundError(f"Ficheiro não encontrado: {target_file}")
         
-        # Inicializar módulos
         self.static_analyzer = StaticAnalyzer()
         self.yara_scanner = YaraScanner(rules_dir=str(config.YARA_RULES_DIR))
         self.deobfuscator = Deobfuscator()
@@ -112,35 +111,35 @@ class RATAnalyzer:
         self.analysis_results["file_info"] = self._get_file_info()
         self._log("      OK.")
 
-        # 2. Se pedido, descompilar .NET com ILSpy
+        # 2) Se pedido, descompilar .NET com ILSpy
         if self.use_dotnet_decompiler:
             self._log("[2/7] Descompilação .NET (ILSpy) — pode demorar 1-2 min...")
             decomp_result = self.dotnet_decompiler.decompile(str(self.target_file))
             self.analysis_results["dotnet_decompilation"] = decomp_result
             self._log_dotnet_decompilation(decomp_result)
 
-        # 3. Análise estática
+        # 3) Análise estática
         self._log("[3/7] Análise estática (strings, imports, indicadores)...")
         self.analysis_results["static_analysis"] = self.static_analyzer.analyze(
             str(self.target_file)
         )
         self._log("      OK.")
 
-        # 4. Deobfuscação (se necessário)
+        # 4) Deobfuscação (se necessário)
         self._log("[4/7] Deobfuscação (Base64, XOR, ofuscação)...")
         self.analysis_results["deobfuscation"] = self.deobfuscator.deobfuscate(
             str(self.target_file)
         )
         self._log("      OK.")
 
-        # 5. Scan YARA
+        # 5) Scan YARA
         self._log("[5/7] Scan YARA (regras RAT/C2/evasão)...")
         self.analysis_results["yara_matches"] = self.yara_scanner.scan(
             str(self.target_file)
         )
         self._log("      OK.")
 
-        # 6. Cálculo do score de risco
+        # 6) Cálculo do score de risco
         self._log("[6/7] Cálculo do score de risco...")
         risk_assessment = self.risk_scorer.calculate_risk(
             self.analysis_results["static_analysis"],
@@ -151,7 +150,7 @@ class RATAnalyzer:
         self.analysis_results["risk_level"] = risk_assessment["level"]
         self.analysis_results["risk_details"] = risk_assessment["details"]
         
-        # 6. Se houve descompilação .NET, aplicar deobfuscação ao código fonte; senão, tentar desmontagem (assembly) para binários nativos
+        # 6) Se houve descompilação .NET, aplicar deobfuscação ao código fonte; senão, tentar desmontagem (assembly) para binários nativos
         decomp = self.analysis_results.get("dotnet_decompilation", {})
         consolidated_file = decomp.get("consolidated_file") or ""
         decompiled_dir = decomp.get("output_dir") or ""
@@ -273,7 +272,7 @@ class RATAnalyzer:
             else:
                 self._log("[!] PyGhidra não disponível; instale pyghidra e Ghidra 12+ para pseudo-C.")
 
-        # 7. Gerar relatório (após descompilação/desmontagem para incluir assembly no relatório)
+        # 7) Gerar relatório (após descompilação/desmontagem para incluir assembly no relatório)
         self._log("[7/7] A gerar relatório...")
         report_path = self.report_generator.generate(
             self.analysis_results,

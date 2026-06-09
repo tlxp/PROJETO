@@ -20,14 +20,14 @@ class DotNetDecompiler:
 
     - Recebe o caminho para um .exe/.dll .NET
     - Chama o ILSpyCmd/ilspycmd
-    - Devolve o directório com o código C# descompilado
+    - Devolve o diretório com o código C# descompilado
     """
 
     def __init__(self, ilspy_path: Optional[str] = None, output_root: str = "decompiled"):
         """
         :param ilspy_path: Caminho para ILSpyCmd.exe ou comando 'ilspycmd' no PATH.
                            Se None, tenta usar a env var ILSPY_CMD_PATH ou 'ilspycmd'.
-        :param output_root: Directório base onde os códigos descompilados serão guardados.
+        :param output_root: Diretório base onde os códigos descompilados serão guardados.
         """
         env_path = os.environ.get("ILSPY_CMD_PATH")
         
@@ -78,7 +78,6 @@ class DotNetDecompiler:
         if Path(self.ilspy_path).exists():
             return True
         
-        # Verificar se está no PATH
         if shutil.which(self.ilspy_path):
             return True
         
@@ -153,7 +152,7 @@ class DotNetDecompiler:
         Descompila um assembly .NET usando ILSpy CLI.
 
         :param assembly_path: Caminho para o .exe/.dll .NET
-        :return: dict com informação sobre o processo e o directório de saída
+        :return: dict com informação sobre o processo e o diretório de saída
         """
         assembly = Path(assembly_path)
         result: Dict = {
@@ -172,7 +171,7 @@ class DotNetDecompiler:
 
         result["is_dotnet"] = self._is_dotnet_assembly(assembly)
 
-        # Cada ficheiro analisado terá o seu próprio subdirectório (caminhos absolutos)
+        # Cada ficheiro analisado terá o seu próprio subdiretório (caminhos absolutos)
         output_dir = (self.output_root / short_stem(assembly.stem)).resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
         result["output_dir"] = str(output_dir)

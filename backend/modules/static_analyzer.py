@@ -13,13 +13,13 @@ class StaticAnalyzer:
     
     # Imports suspeitos comuns em RATs
     SUSPICIOUS_IMPORTS = [
-        'ws2_32.dll', 'wininet.dll', 'winhttp.dll',  # Networking
-        'advapi32.dll', 'kernel32.dll',  # System functions
-        'user32.dll', 'gdi32.dll',  # UI manipulation
-        'crypt32.dll', 'wincrypt.dll',  # Encryption
-        'ntdll.dll',  # Low-level system calls
-        'shell32.dll', 'shlwapi.dll',  # Shell operations
-        'urlmon.dll', 'ole32.dll', 'oleaut32.dll',  # COM/URL operations
+        'ws2_32.dll', 'wininet.dll', 'winhttp.dll',  # Rede
+        'advapi32.dll', 'kernel32.dll',  # Funções de sistema
+        'user32.dll', 'gdi32.dll',  # Manipulação de UI
+        'crypt32.dll', 'wincrypt.dll',  # Criptografia
+        'ntdll.dll',  # Chamadas de sistema de baixo nível
+        'shell32.dll', 'shlwapi.dll',  # Operações de shell
+        'urlmon.dll', 'ole32.dll', 'oleaut32.dll',  # COM/URL
     ]
     
     # Funções suspeitas específicas
@@ -228,7 +228,7 @@ class StaticAnalyzer:
         return list(set(found))
 
     def _extract_evasion_from_strings(self, file_path: str) -> List[str]:
-        """Detecta técnicas de evasão através de strings no binário (útil para .NET)."""
+        """Deteta técnicas de evasão através de strings no binário (útil para .NET)."""
         found = []
         try:
             with open(file_path, 'rb') as f:
@@ -242,7 +242,7 @@ class StaticAnalyzer:
         return list(set(found))
 
     def _detect_evasion(self, pe) -> List[str]:
-        """Detecta técnicas de evasão via imports PE"""
+        """Deteta técnicas de evasão via imports PE"""
         evasion = []
         if not hasattr(pe, 'DIRECTORY_ENTRY_IMPORT'):
             return evasion
@@ -295,7 +295,7 @@ class StaticAnalyzer:
         return entropy_data
     
     def _detect_packers(self, pe) -> List[str]:
-        """Detecta indicadores de packers conhecidos"""
+        """Deteta indicadores de packers conhecidos"""
         packers = []
         
         # Verificar entropia alta (geralmente > 7.0 indica packing)

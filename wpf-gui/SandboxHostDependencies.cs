@@ -44,10 +44,7 @@ internal static class SandboxHostDependencies
                 if (File.Exists(candidate))
                     return candidate;
             }
-            catch
-            {
-                // ignorar caminhos inválidos
-            }
+            catch { /* ignorar */ }
         }
 
         return null;

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Driver Proxmox (skeleton).
 
@@ -10,6 +8,8 @@ Este driver fala com:
 Ele é "fail-safe": se faltar configuração ou o agent não responder, devolve erro
 explícito e não tenta "inventar" resultados.
 """
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 import os

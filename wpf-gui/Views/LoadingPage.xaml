@@ -16,7 +16,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Header -->
+        <!-- Cabeçalho -->
         <StackPanel Grid.ColumnSpan="2" Orientation="Vertical" Margin="0,0,0,24">
             <TextBlock Text="A preparar o ambiente de sandbox"
                        Style="{StaticResource TitleTextBlock}" />
@@ -25,10 +25,10 @@
                        Style="{StaticResource SubtitleTextBlock}" />
         </StackPanel>
 
-        <!-- Loader + status -->
+        <!-- Indicador + estado -->
         <StackPanel Grid.Row="1" Orientation="Vertical" VerticalAlignment="Center" Margin="0,40,0,0">
             <Grid Width="180" Height="180">
-                <!-- Circular loader -->
+                <!-- Indicador circular -->
                 <Ellipse Stroke="{StaticResource BorderBrushBase}"
                          StrokeThickness="10" />
                 <Ellipse Stroke="{StaticResource SuccessBrush}"
@@ -52,7 +52,7 @@
                        FontWeight="SemiBold" />
         </StackPanel>
 
-        <!-- Logs -->
+        <!-- Registos -->
         <Border Grid.Column="1"
                 Grid.Row="1"
                 Background="{StaticResource PrimaryBackgroundBrush}"
@@ -82,7 +82,7 @@
             </DockPanel>
         </Border>
 
-        <!-- Animations -->
+        <!-- Animações -->
         <Grid.Resources>
             <Storyboard x:Key="SpinnerStoryboard" RepeatBehavior="Forever">
                 <DoubleAnimation Storyboard.TargetName="SpinnerRotate"

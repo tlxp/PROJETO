@@ -1,11 +1,11 @@
-from __future__ import annotations
-
 """
 Orquestrador de VMs para análise dinâmica.
 
 O orquestrador escolhe um "driver" (stub/proxmox/...) via variável de ambiente,
 permitindo evoluir para uma sandbox real sem alterar o resto do sistema.
 """
+
+from __future__ import annotations
 
 import os
 from typing import Any, Dict, TYPE_CHECKING

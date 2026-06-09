@@ -13,7 +13,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Header -->
+        <!-- Cabeçalho -->
         <StackPanel Grid.Row="0" Margin="8,0,8,16">
             <TextBlock Text="Analisar executáveis suspeitos"
                        Style="{StaticResource TitleTextBlock}" />
@@ -22,7 +22,7 @@
                        Margin="0,4,0,0" />
         </StackPanel>
 
-        <!-- Drag & Drop Zone -->
+        <!-- Zona de drag & drop -->
         <Border Grid.Row="1"
                 x:Name="FileDropBorder"
                 BorderThickness="1"
@@ -46,7 +46,7 @@
             </Border.Style>
 
             <Grid>
-                <!-- Initial State: Drag Instructions -->
+                <!-- Estado inicial: instruções de arrasto -->
                 <StackPanel VerticalAlignment="Center"
                             Visibility="{Binding ShowOptions, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVis}}">
                     <Border Width="70"
@@ -82,7 +82,7 @@
                             ToolTip="Use este botão se arrastar e largar não funcionar (ex.: ao executar como Administrador)." />
                 </StackPanel>
 
-                <!-- Post-Drop State: Analysis Options -->
+                <!-- Estado pós-drop: opções de análise -->
                 <StackPanel VerticalAlignment="Center"
                             Visibility="{Binding ShowOptions, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}">
                     <TextBlock Text="Escolha o tipo de análise"

@@ -537,10 +537,7 @@ public partial class VmAnalysisWindow : Window
             if (doc.RootElement.TryGetProperty("status", out var status))
                 return status.GetString();
         }
-        catch
-        {
-            // Ignorar JSON inválido ou incompleto.
-        }
+        catch { /* ignorar */ }
 
         return null;
     }
@@ -700,7 +697,6 @@ public partial class VmAnalysisWindow : Window
             }
             else
             {
-                // fallback: abrir pasta Reports
                 var reports = "D:\\PROJETOVM\\Reports";
                 if (Directory.Exists(reports))
                     Process.Start(new ProcessStartInfo { FileName = reports, UseShellExecute = true });

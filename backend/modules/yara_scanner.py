@@ -1,6 +1,6 @@
 """
 Módulo de Scanner YARA
-Detecta padrões de malware conhecido usando regras YARA
+Deteta padrões de malware conhecido usando regras YARA
 """
 
 import yara
@@ -10,7 +10,7 @@ from typing import List, Dict
 
 
 class YaraScanner:
-    """Scanner YARA para detecção de padrões de RATs"""
+    """Scanner YARA para deteção de padrões de RATs"""
     
     def __init__(self, rules_dir: str = "yara_rules"):
         self.rules_dir = Path(rules_dir)
@@ -93,7 +93,7 @@ class YaraScanner:
     def _create_default_rules(self):
         """Cria regras YARA padrão para RATs"""
         
-        # Regra para detectar características comuns de RATs
+        # Regra para detetar características comuns de RATs
         rat_rule = """
 rule RAT_Generic_Indicators
 {
@@ -119,7 +119,7 @@ rule RAT_Generic_Indicators
 }
 """
         
-        # Regra para detectar strings de C&C
+        # Regra para detetar strings de C&C
         c2_rule = r"""
 rule C2_Communication_Patterns
 {
@@ -140,7 +140,7 @@ rule C2_Communication_Patterns
 }
 """
         
-        # Regra para detectar técnicas de evasão
+        # Regra para detetar técnicas de evasão
         evasion_rule = """
 rule Evasion_Techniques
 {

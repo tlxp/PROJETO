@@ -10,6 +10,6 @@ uvicorn[standard]>=0.32.0
 python-multipart>=0.0.12
 requests>=2.32.0
 redis>=5.0.0
-# Nota: RQ pode quebrar em Windows por depender de 'fork' em algumas versões.
+# NOTA: RQ pode quebrar em Windows por depender de 'fork' em algumas versões.
 # O backend faz fallback automático para threads locais em Windows.
 rq>=1.16.0

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Worker RQ para processar jobs de análise (estática/dinâmica).
 
@@ -7,6 +5,8 @@ Uso:
   set REDIS_URL=redis://localhost:6379/0
   python worker.py
 """
+
+from __future__ import annotations
 
 import os
 

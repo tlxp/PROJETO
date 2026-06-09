@@ -252,10 +252,7 @@ internal static class LocalArtifactCleanup
                     return legacy;
             }
         }
-        catch
-        {
-            // ignorar
-        }
+        catch { /* ignorar */ }
 
         return null;
     }
@@ -324,10 +321,7 @@ internal static class LocalArtifactCleanup
                 File.Delete(path);
             }
         }
-        catch
-        {
-            // ignorar
-        }
+        catch { /* ignorar */ }
 
         return size;
     }

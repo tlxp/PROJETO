@@ -413,7 +413,7 @@ def decompile_binary_to_c(
     out_file = Path(output_path) if output_path else (Path(output_root).resolve() / sstem / f"{sstem}_decompiled.c")
     out_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Limpar projetos antigos no mesmo directório (nome fixo de versões anteriores).
+    # Limpar projetos antigos no mesmo diretório (nome fixo de versões anteriores).
     legacy_project = f"{sstem}_ghidra"
     _cleanup_ghidra_project_artifacts(out_file.parent, legacy_project)
 

@@ -19,7 +19,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Top bar -->
+        <!-- Barra superior -->
         <Border Grid.Row="0"
                 BorderBrush="{StaticResource BorderBrushBase}"
                 BorderThickness="0,0,0,1"
@@ -65,7 +65,7 @@
             </DockPanel>
         </Border>
 
-        <!-- Main content with subtle card -->
+        <!-- Conteúdo principal com cartão subtil -->
         <Border Grid.Row="1"
                 Margin="16"
                 CornerRadius="{StaticResource Radius.XLarge}"

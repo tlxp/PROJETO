@@ -1,21 +1,22 @@
-#
-# .SYNOPSIS
-#     Primeira entrada na VM: valida PowerShell Direct/Guest Services,
-#     garante isolamento de rede (sem adaptadores externos) e guarda snapshot CleanState.
-# .DESCRIPTION
-#     A correr NO HOST. Fluxo:
-#
-#       [1/5] Parar VM (estado limpo)
-#       [2/5] Arrancar VM + aguardar PowerShell Direct
-#       [3/5] Ativar Guest Service Interface
-#       [4/5] Garantir isolamento: remover adaptadores em switches não-Internal e validar que não há internet
-#       [5/5] Parar VM, criar/atualizar snapshot CleanState
-#
-#     O snapshot final contem:
-#       - SEM qualquer adaptador externo -- so SandboxSwitch (Internal)
-#       - Garantia de isolamento total da internet
-# .EXAMPLE
-#     .\05-FirstTimeVmSetup.ps1
+<#
+.SYNOPSIS
+    Primeira entrada na VM: valida PowerShell Direct/Guest Services,
+    garante isolamento de rede (sem adaptadores externos) e guarda snapshot CleanState.
+.DESCRIPTION
+    A correr NO HOST. Fluxo:
+
+      [1/5] Parar VM (estado limpo)
+      [2/5] Arrancar VM + aguardar PowerShell Direct
+      [3/5] Ativar Guest Service Interface
+      [4/5] Garantir isolamento: remover adaptadores em switches não-Internal e validar que não há internet
+      [5/5] Parar VM, criar/atualizar snapshot CleanState
+
+    O snapshot final contém:
+      - SEM qualquer adaptador externo -- só SandboxSwitch (Internal)
+      - Garantia de isolamento total da internet
+.EXAMPLE
+    .\05-FirstTimeVmSetup.ps1
+#>
 #Requires -RunAsAdministrator
 
 param(
@@ -43,360 +44,25 @@ $PsDirectTimeoutSeconds = if ($script:PROJETOVM_PowerShellDirectTimeoutSeconds -
     $script:PROJETOVM_PowerShellDirectTimeoutSeconds
 } else { 240 }
 
-# Recarregar sempre o módulo (evita cache com versões antigas durante troubleshooting)
 try { Remove-Module SandboxCommon -ErrorAction SilentlyContinue } catch {}
 Import-Module (Join-Path $scriptRoot "SandboxCommon.psm1") -Force -DisableNameChecking -ErrorAction Stop
 
-# Helper: limpar e abortar em caso de erro
-function Abort-WithCleanup {
-    param([string] $Reason)
-    Write-LogHost ""
-    Write-LogHost "=========================================================="
-    Write-LogHost "[ERRO FATAL] $Reason"
-    Write-LogHost "=========================================================="
-    Write-LogHost "A parar VM por seguranca..."
-    try { Stop-VM -Name $VMName -Force -ErrorAction SilentlyContinue } catch {}
-    Start-Sleep -Seconds 4
-    Write-LogHost "Cleanup concluido. Verifique os erros acima antes de reexecutar."
-    exit 1
+# Funções auxiliares (host)
+# Extraídas para .\FirstTimeVmSetup\ e carregadas via dot-sourcing (mesmo scope).
+$FirstTimeLibDir = Join-Path $scriptRoot 'FirstTimeVmSetup'
+. (Join-Path $FirstTimeLibDir 'Helpers.ps1')
+
+# Fluxo por fases
+# Cada fase é um fragmento procedural dot-sourced no MESMO scope deste script.
+# A ordem replica exatamente a execução original [1/5]..[5/5].
+foreach ($phase in @(
+    'PhaseA-PreCheck.ps1',
+    'PhaseB-Boot.ps1',
+    'PhaseC-GuestService.ps1',
+    'PhaseD-Isolation.ps1',
+    'PhaseE-Runtimes.ps1',
+    'PhaseF-Snapshot.ps1',
+    'PhaseG-Summary.ps1'
+)) {
+    . (Join-Path $FirstTimeLibDir $phase)
 }
-Write-LogHost "=== Primeira entrada: validar guest -> garantir isolamento -> snapshot ==="
-Write-LogHost ""
-
-# ---------------------------------------------------------------------------
-# Pre-verificacoes
-# ---------------------------------------------------------------------------
-$vm = Get-VM -Name $VMName -ErrorAction SilentlyContinue
-if (-not $vm) {
-    Write-LogHost ('[ERRO] VM ''{0}'' nao encontrada. Execute primeiro 01-Setup-MalwareSandbox.ps1.' -f $VMName)
-    exit 1
-}
-
-$secure = ConvertTo-SecureString $GuestPassword -AsPlainText -Force
-$credCandidates = New-SandboxCredentialCandidates -UserName $GuestUser -Password $GuestPassword -ComputerName $VMName
-$cred = $credCandidates | Select-Object -First 1
-
-# ---------------------------------------------------------------------------
-# [1/5] Parar VM para estado limpo
-# ---------------------------------------------------------------------------
-Write-LogHost '[1/5] A parar a VM (estado limpo)...'
-if ($vm.State -ne "Off") {
-    Stop-VM -Name $VMName -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Milliseconds 800
-}
-Write-LogHost "       VM desligada."
-
-# ---------------------------------------------------------------------------
-# [2/5] Arrancar VM + aguardar PowerShell Direct
-# ---------------------------------------------------------------------------
-Write-LogHost "[2/5] A arrancar VM e aguardar PowerShell Direct..."
-try {
-    $psDirectOk = Start-SandboxVM -VMName $VMName -CredentialCandidates $credCandidates -PowerShellDirectTimeoutSeconds $PowerShellDirectTimeoutSeconds
-} catch {
-    $psDirectOk = $false
-    Write-LogWarning ('       Erro ao aguardar PowerShell Direct: {0}' -f $_.Exception.Message)
-}
-
-if (-not $psDirectOk) {
-    Write-LogHost ""
-    Write-LogHost "=========================================================="
-    Write-LogHost "[ERRO] PowerShell Direct não ficou disponível."
-    Write-LogHost "Isto normalmente acontece quando:"
-    Write-LogHost '  - O utilizador/senha do guest estão errados (ver _Config.ps1: GuestUser/GuestPassword)'
-    Write-LogHost "  - A VM ainda está em OOBE / não terminou a instalação"
-    Write-LogHost ('  - O autounattend.xml não foi aplicado, logo o utilizador ''{0}'' não existe' -f $GuestUser)
-    Write-LogHost ""
-    Write-LogHost "Checklist rápida:"
-    Write-LogHost "  1) Abra a consola da VM no Hyper-V e confirme que entra no Windows."
-    Write-LogHost ('  2) Confirme que o utilizador ''{0}'' existe e consegue fazer logon.' -f $GuestUser)
-    Write-LogHost '  3) (Opcional) Dentro da VM confirme se existe C:\unattend_applied.txt.'
-    Write-LogHost '  4) Se necessário, reexecute 01-Setup-MalwareSandbox.ps1 -ForceReinstall.'
-    Write-LogHost "=========================================================="
-    Write-LogHost ""
-    Abort-WithCleanup "Sem PowerShell Direct (timeout=${PowerShellDirectTimeoutSeconds}s)."
-}
-
-# Se Start-SandboxVM devolveu PSCredential (credencial efetivamente aceite), use-a no resto do script.
-if ($psDirectOk -is [pscredential]) {
-    $cred = $psDirectOk
-}
-
-Write-LogHost "       A configurar rede e aceitar popups automaticamente..."
-
-$autoAcceptScript = @'
-try {
-    # Garantir servicos essenciais (NLA/DHCP/BITS) -- em instalacoes novas podem estar atrasados
-    foreach ($svcName in @("NlaSvc","Dhcp","Dnscache","BITS","AppXSvc","StateRepository")) {
-        try {
-            $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
-            if ($svc -and $svc.Status -ne "Running") {
-                Start-Service -Name $svcName -ErrorAction SilentlyContinue
-                Write-Host "Servico iniciado: $svcName"
-            }
-        } catch { Write-Host "AVISO servico ${svcName}: $_" }
-    }
-
-    # Forcar DHCP/renovacao
-    try { ipconfig /renew 2>&1 | Out-Null } catch { }
-
-    # Definir redes como Privada (evita popup de descoberta)
-    $netProfiles = Get-NetConnectionProfile -ErrorAction SilentlyContinue
-    foreach ($profile in $netProfiles) {
-        if ($profile -and $profile.NetworkCategory -ne "Private") {
-            Set-NetConnectionProfile -InterfaceIndex $profile.InterfaceIndex -NetworkCategory Private -ErrorAction SilentlyContinue
-            Write-Host "Rede '$($profile.Name)' definida como Privada"
-        }
-    }
-
-    # Desativar popup NLA permanentemente
-    reg add "HKLM\SYSTEM\CurrentControlSet\Control\Network\NewNetworkWindowOff" /v NewNetworkWindowOff /t REG_DWORD /d 1 /f 2>&1 | Out-Null
-
-    # Desativar Windows Welcome / consumer features
-    reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\CloudContent" /v DisableWindowsConsumerFeatures /t REG_DWORD /d 1 /f 2>&1 | Out-Null
-
-    # Marcar OOBE como concluido
-    reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" /v PrivacyConsentStatus /t REG_DWORD /d 1 /f 2>&1 | Out-Null
-
-    # Garantir que o servico AppX esta configurado para inicio automatico
-    Set-Service -Name AppXSvc -StartupType Automatic -ErrorAction SilentlyContinue
-    Start-Service -Name AppXSvc -ErrorAction SilentlyContinue
-
-    Write-Host "Configuracao automatica de rede/servicos concluida."
-} catch {
-    Write-Host "Erro na configuracao automatica: $_"
-}
-'@
-
-try {
-    $autoResult = Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock ([scriptblock]::Create($autoAcceptScript))
-    $autoResult | ForEach-Object { Write-LogHost "         $_" }
-    Write-LogHost "       Configuracao automatica aplicada."
-} catch {
-    Write-LogWarning "       Nao foi possivel configurar rede automaticamente: $_"
-}
-
-Start-Sleep -Seconds 1
-
-# ---------------------------------------------------------------------------
-# [3/5] Ativar Guest Service Interface
-# ---------------------------------------------------------------------------
-Write-LogHost "[3/5] A ativar Guest Service Interface..."
-Enable-SandboxGuestService -VMName $VMName
-Start-Sleep -Seconds 1
-
-# ---------------------------------------------------------------------------
-# [4/5] Garantir isolamento (sem adaptadores externos) + validar que não há internet
-# ---------------------------------------------------------------------------
-Write-LogHost '[4/5] A garantir isolamento de rede (sem adaptadores externos)...'
-
-# Importante: o Hyper-V não permite remover adaptadores sintéticos com a VM em execução.
-Write-LogHost "       A parar a VM para remover adaptadores nao-Internal..."
-Stop-VM -Name $VMName -Force -ErrorAction SilentlyContinue
-Start-Sleep -Milliseconds 500
-
-# Remover qualquer adaptador ligado a switch não-Internal (ex.: External/Default Switch)
-$allAdapters = @(Get-VMNetworkAdapter -VMName $VMName -ErrorAction SilentlyContinue)
-foreach ($adapter in $allAdapters) {
-    if ([string]::IsNullOrWhiteSpace($adapter.SwitchName)) { continue }
-    $sw = Get-VMSwitch -Name $adapter.SwitchName -ErrorAction SilentlyContinue
-    if ($sw -and $sw.SwitchType -ne "Internal") {
-        Write-LogHost ('       Adaptador ''{0}'' em switch nao-Internal ''{1}'' (tipo: {2}). A remover...' -f $adapter.Name, $adapter.SwitchName, $sw.SwitchType)
-        try {
-            Remove-VMNetworkAdapter -VMName $VMName -Name $adapter.Name -ErrorAction Stop | Out-Null
-            Write-LogHost "       Removido."
-        } catch {
-            Write-LogHost ('[ERRO] Nao foi possivel remover ''{0}'': {1}' -f $adapter.Name, $_.Exception.Message)
-            exit 1
-        }
-    }
-}
-
-Write-LogHost '       Adaptadores restantes (devem ser apenas SandboxSwitch/Internal):'
-Get-VMNetworkAdapter -VMName $VMName | ForEach-Object {
-    $swName = $_.SwitchName
-    if ([string]::IsNullOrWhiteSpace($swName)) {
-        Write-LogHost ('         - {0} -> (sem switch)' -f $_.Name)
-        return
-    }
-    $swType = ((Get-VMSwitch -Name $swName -ErrorAction SilentlyContinue).SwitchType)
-    if ([string]::IsNullOrWhiteSpace($swType)) { $swType = "Unknown" }
-    Write-LogHost ('         - {0} -> ''{1}'' [{2}]' -f $_.Name, $swName, $swType)
-}
-
-# ---------------------------------------------------------------------------
-# Garantir VM em execucao para passos seguintes
-# Nota: verificação de "internet" omitida por performance.
-# Com switch `Internal` e remoção de adaptadores externos, o risco de fuga é residual.
-# ---------------------------------------------------------------------------
-Write-LogHost '       A arrancar VM (isolamento assumido: Switch Internal + adaptadores externos removidos)...'
-$ps2 = Start-SandboxVM -VMName $VMName -Credential $cred -PowerShellDirectTimeoutSeconds $PsDirectTimeoutSeconds
-if ($ps2 -is [pscredential]) { $cred = $ps2 }
-
-# ---------------------------------------------------------------------------
-# Instalar runtimes essenciais (offline) antes do snapshot
-# ---------------------------------------------------------------------------
-Write-LogHost ""
-Write-LogHost '       A instalar runtimes essenciais (offline) na VM (se disponíveis)...'
-
-$offlineDir = Join-Path $scriptRoot "offline\runtimes"
-$toolsDir = Join-Path $scriptRoot "tools"
-$vmInstallDir = "C:\analysis_work\installers"
-
-function Resolve-SandboxInstallerSource {
-    param(
-        [Parameter(Mandatory = $true)][string] $FileName,
-        [Parameter(Mandatory = $true)][string[]] $SearchRoots,
-        [switch] $AllowPattern
-    )
-
-    foreach ($root in @($SearchRoots)) {
-        if ([string]::IsNullOrWhiteSpace($root) -or -not (Test-Path -LiteralPath $root)) { continue }
-        if ($AllowPattern -and ($FileName -match "[\*\?]")) {
-            try {
-                $hit = Get-ChildItem -LiteralPath $root -File -Filter $FileName -ErrorAction SilentlyContinue |
-                    Sort-Object Name -Descending |
-                    Select-Object -First 1
-                if ($hit) { return $hit.FullName }
-            } catch { }
-            continue
-        }
-
-        $candidate = Join-Path $root $FileName
-        if (Test-Path -LiteralPath $candidate) { return $candidate }
-    }
-
-    return $null
-}
-if ($StageWinutil) {
-    try {
-        $toolsDir = Join-Path $scriptRoot "tools"
-        $winutil = Join-Path $toolsDir "winutil.ps1"
-        if (Test-Path -LiteralPath $winutil) {
-            Write-LogHost ""
-            Write-LogHost "       A copiar WinUtil (staging seguro, sem executar) para a VM..."
-            Copy-SandboxVMFile -VMName $VMName -SourcePath $winutil -DestinationPath "C:\analysis_work\deps\winutil.ps1"
-            Write-LogHost "       WinUtil staged em: C:\analysis_work\deps\winutil.ps1"
-            Write-LogHost "       Nota: execute manualmente apenas ações de INSTALL no WinUtil."
-        } else {
-            Write-LogWarning "       StageWinutil pedido, mas não encontrei scripts/hyperv-sandbox/tools/winutil.ps1. Use 06-Prepare-GuestDependencies.ps1 -StageWinutil."
-        }
-    } catch {
-        Write-LogWarning "       Falha ao fazer staging do WinUtil na VM (ignorado): $($_.Exception.Message)"
-    }
-}
-
-if (-not (Test-Path -LiteralPath $offlineDir) -and -not (Test-Path -LiteralPath $toolsDir)) {
-    Write-LogWarning ('       Nenhuma pasta de runtimes offline encontrada ({0} ou {1}).' -f $offlineDir, $toolsDir)
-    Write-LogWarning '       Vou prosseguir sem instalar runtimes. (Recomendado: scripts/hyperv-sandbox/tools/ ou offline/runtimes/)'
-}
-else {
-    # Garantir diretório destino na VM
-    try {
-        Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
-            param($Dir)
-            if (-not (Test-Path -LiteralPath $Dir)) { New-Item -ItemType Directory -Path $Dir -Force | Out-Null }
-        } -ArgumentList $vmInstallDir -ErrorAction Stop | Out-Null
-    } catch {
-        Write-LogWarning ('       Não foi possível criar ''{0}'' na VM: {1}' -f $vmInstallDir, $_.Exception.Message)
-    }
-
-    # Instalers suportados (colocar os ficheiros nesta pasta, com estes nomes).
-    $installers = @(
-        @{ Name = "VC++ Redistributable (x86)"; File = "VC_redist.x86.exe"; Args = "/install /quiet /norestart" },
-        @{ Name = "VC++ Redistributable (x64)"; File = "VC_redist.x64.exe"; Args = "/install /quiet /norestart" },
-        @{ Name = ".NET Framework 4.8 (offline)"; File = "ndp48-x86-x64-allos-enu.exe"; Args = "/q /norestart" },
-        @{ Name = ".NET Desktop Runtime 8 (x86)"; File = "windowsdesktop-runtime-8.0.*-win-x86.exe"; Args = "/install /quiet /norestart"; AllowPattern = $true },
-        @{ Name = ".NET Desktop Runtime 8 (x64)"; File = "windowsdesktop-runtime-8.0.*-win-x64.exe"; Args = "/install /quiet /norestart"; AllowPattern = $true }
-    )
-
-    foreach ($it in $installers) {
-        $src = Resolve-SandboxInstallerSource -FileName $it.File -SearchRoots @($offlineDir, $toolsDir) -AllowPattern:([bool]$it.AllowPattern)
-
-        if (-not $src) {
-            Write-LogHost ('         [SKIP] {0} — instalador não encontrado: {1}' -f $it.Name, $it.File)
-            continue
-        }
-
-        $realName = Split-Path -Leaf $src
-
-        $dst = Join-Path $vmInstallDir $realName
-        try {
-            Write-LogHost ('         [COPY] {0} -> {1}' -f $it.Name, $dst)
-            Copy-SandboxVMFile -VMName $VMName -SourcePath $src -DestinationPath $dst
-        } catch {
-            Write-LogWarning ('         Falha a copiar ''{0}'' para VM: {1}' -f $realName, $_.Exception.Message)
-            continue
-        }
-
-        try {
-            Write-LogHost ('         [RUN]  {0}' -f $it.Name)
-            $res = Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
-                param($PathExe, $Args)
-                if (-not (Test-Path -LiteralPath $PathExe)) { return @{ ok = $false; code = -1; msg = "Instalador não encontrado no guest." } }
-                $p = Start-Process -FilePath $PathExe -ArgumentList $Args -Wait -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
-                if (-not $p) { return @{ ok = $false; code = -2; msg = "Falha ao iniciar instalador." } }
-                return @{ ok = $true; code = [int]$p.ExitCode; msg = "ok" }
-            } -ArgumentList $dst, $it.Args -ErrorAction Stop
-
-            $code = if ($res -and $res.code -ne $null) { [int]$res.code } else { 0 }
-            # Muitos instaladores devolvem 0 (OK) ou 3010 (reboot required)
-            if ($code -eq 0 -or $code -eq 3010) {
-                Write-LogHost ('               OK (ExitCode={0})' -f $code)
-            } else {
-                Write-LogWarning ('               Instalador terminou com ExitCode={0} (pode requerer atenção).' -f $code)
-            }
-        } catch {
-            Write-LogWarning ('         Erro ao executar ''{0}'' na VM: {1}' -f $it.Name, $_.Exception.Message)
-        }
-    }
-
-    # Sanity check: dotnet --info (se existir)
-    try {
-        $dotnetInfo = Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
-            $p = Get-Command dotnet -ErrorAction SilentlyContinue
-            if (-not $p) { return "dotnet: não encontrado" }
-            try {
-                $out = & dotnet --info 2>&1 | Select-Object -First 12
-                return ($out -join [Environment]::NewLine)
-            } catch { return "dotnet: erro ao executar --info" }
-        } -ErrorAction SilentlyContinue
-        if ($dotnetInfo) {
-            Write-LogHost '       dotnet (resumo):'
-            ($dotnetInfo -split '\r?\n') | ForEach-Object { Write-LogHost ('         ' + $_) }
-        }
-    } catch { }
-}
-
-# ---------------------------------------------------------------------------
-# [5/5] Parar VM e criar snapshot CleanState
-# ---------------------------------------------------------------------------
-Write-LogHost ('[5/5] A parar VM e criar snapshot ''{0}''...' -f $SnapshotName)
-Stop-VM -Name $VMName -Force -ErrorAction SilentlyContinue
-Start-Sleep -Milliseconds 500
-
-$existing = Get-VMSnapshot -VMName $VMName -Name $SnapshotName -ErrorAction SilentlyContinue
-if ($existing) {
-    Write-LogHost ('        A remover snapshot anterior ''{0}''...' -f $SnapshotName)
-    Remove-VMSnapshot -VMName $VMName -Name $SnapshotName -Confirm:$false -ErrorAction SilentlyContinue
-    Start-Sleep -Milliseconds 500
-}
-
-Checkpoint-VM -VMName $VMName -SnapshotName $SnapshotName
-Write-LogHost ('        Snapshot ''{0}'' criado com sucesso.' -f $SnapshotName)
-
-Disable-SandboxGuestService -VMName $VMName
-
-# ---------------------------------------------------------------------------
-# Resumo final
-# ---------------------------------------------------------------------------
-Write-LogHost ""
-Write-LogHost "=========================================================="
-Write-LogHost "=== Primeira entrada concluida com sucesso. ==="
-Write-LogHost "=========================================================="
-Write-LogHost ""
-Write-LogHost '    Internet:             REMOVIDA (sem adaptadores externos na VM)'
-Write-LogHost ('    Snapshot {0}: CRIADO (VM desligada, isolamento confirmado)' -f $SnapshotName)
-Write-LogHost ""
-# Exemplo abaixo entre aspas simples (evita quebra do parser com maior ou menor nas mensagens).
-Write-LogHost '    Proximo passo: .\04-Run-Sample.ps1 -SamplePath C:\caminho\para\amostra.exe'
-Write-LogHost ""

@@ -20,8 +20,8 @@ internal static class IlSpyDependencyHelper
     private const string DotNet6RuntimeDownloadUrl = "https://dotnet.microsoft.com/download/dotnet/6.0";
 
     /// <summary>
-    /// Versões do pacote NuGet <c>ilspycmd</c> por ordem. **10.x** costuma alinhar com .NET 8 — evita exigir o runtime .NET 6
-    /// em separado (comum quando só existe SDK 8). **8.2.x** é .NET 6; só usar se versões mais novas falharem no NuGet/SDK.
+    /// Versões do pacote NuGet <c>ilspycmd</c> por ordem. 10.x costuma alinhar com .NET 8 — evita exigir o runtime .NET 6
+    /// em separado (comum quando só existe SDK 8). 8.2.x é .NET 6; só usar se versões mais novas falharem no NuGet/SDK.
     /// </summary>
     private static readonly string[] IlSpyCmdPreferredVersions =
     [
@@ -223,10 +223,7 @@ internal static class IlSpyDependencyHelper
             foreach (var path in Directory.EnumerateFiles(toolsDir, "ilspycmd.exe", SearchOption.TopDirectoryOnly))
                 return Path.GetFullPath(path);
         }
-        catch
-        {
-            // ignorar
-        }
+        catch { /* ignorar */ }
 
         return null;
     }

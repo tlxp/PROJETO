@@ -1,0 +1,104 @@
+﻿# 6) Copiar amostra e scripts para a VM
+Write-LogHost "[6/7] A copiar amostra para a VM..."
+# Garantir que o diretório existe na VM
+try {
+    Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
+        param($Path)
+        if (-not (Test-Path $Path)) { New-Item -ItemType Directory -Path $Path -Force | Out-Null }
+    } -ArgumentList $VMScriptsPath -ErrorAction SilentlyContinue
+} catch { }
+
+Copy-SandboxVMFile -VMName $VMName -SourcePath $SamplePath -DestinationPath $VMSamplePath
+
+# Preflight: garantir que o ficheiro na VM existe e é o mesmo (SHA256) e que parece executável PE.
+Write-LogHost "      A validar amostra dentro da VM (existência + SHA256 + header PE)..."
+try {
+    $vmCheck = Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
+        param($PathLocal)
+        $out = @{
+            exists = $false
+            sha256 = ""
+            length = 0
+            pe_ok = $false
+            pe_reason = ""
+            pe_machine = ""
+        }
+        if (-not (Test-Path -LiteralPath $PathLocal)) { return $out }
+        $out.exists = $true
+        try {
+            $fi = Get-Item -LiteralPath $PathLocal -ErrorAction Stop
+            $out.length = [int64]$fi.Length
+        } catch { }
+        try {
+            $h = Get-FileHash -LiteralPath $PathLocal -Algorithm SHA256 -ErrorAction Stop
+            $out.sha256 = $h.Hash
+        } catch { }
+        try {
+            $fs = [System.IO.File]::Open($PathLocal, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+            try {
+                $br = New-Object System.IO.BinaryReader($fs)
+                $mz = $br.ReadUInt16()
+                if ($mz -ne 0x5A4D) { $out.pe_ok = $false; $out.pe_reason = "Sem header MZ."; return $out }
+                $fs.Seek(0x3C, [System.IO.SeekOrigin]::Begin) | Out-Null
+                $peOff = $br.ReadUInt32()
+                $fs.Seek([int64]$peOff, [System.IO.SeekOrigin]::Begin) | Out-Null
+                $sig = $br.ReadUInt32()
+                if ($sig -ne 0x00004550) { $out.pe_ok = $false; $out.pe_reason = "Sem assinatura PE\\0\\0."; return $out }
+                $machine = $br.ReadUInt16()
+                $out.pe_ok = $true
+                $out.pe_machine = switch ($machine) {
+                    0x014c { "x86" }
+                    0x8664 { "x64" }
+                    0x01c4 { "ARM" }
+                    0xAA64 { "ARM64" }
+                    default { ("0x{0:X4}" -f $machine) }
+                }
+            } finally {
+                try { $fs.Dispose() } catch { }
+            }
+        } catch {
+            $out.pe_ok = $false
+            $out.pe_reason = $_.Exception.Message
+        }
+        return $out
+    } -ArgumentList $VMSamplePath -ErrorAction Stop
+
+    if (-not $vmCheck.exists) { throw "Amostra não existe na VM em: $VMSamplePath" }
+    if (-not $vmCheck.sha256 -or ($vmCheck.sha256.ToUpperInvariant() -ne $sampleSha256.ToUpperInvariant())) {
+        throw "SHA256 não coincide dentro da VM. Esperado=$sampleSha256 Atual=$($vmCheck.sha256)"
+    }
+    if (-not $vmCheck.pe_ok) {
+        throw "Amostra copiada mas não parece PE executável: $($vmCheck.pe_reason)"
+    }
+    Add-LogLine -Path $HostLogPath -Value "VM sample OK: len=$($vmCheck.length) sha256=$($vmCheck.sha256) machine=$($vmCheck.pe_machine)"
+    Write-LogHost "      OK (machine: $($vmCheck.pe_machine))."
+} catch {
+    Add-LogLine -Path $HostLogPath -Value "VM sample preflight failed: $($_.Exception.Message)"
+    throw
+}
+
+# Copiar scripts de análise para a VM
+$scriptDir = Join-Path $PSScriptRoot "vm"
+$runScript = Join-Path $scriptDir "Run-MalwareAnalysis.ps1"
+$sendScript = Join-Path $scriptDir "Send-ReportViaCom.ps1"
+if (Test-Path $runScript) {
+    try { Copy-SandboxVMFile -VMName $VMName -SourcePath $runScript -DestinationPath "$VMScriptsPath\Run-MalwareAnalysis.ps1" } catch { 
+        Write-Warning "      Falha ao copiar Run-MalwareAnalysis.ps1"
+    }
+}
+# Run-MalwareAnalysis.ps1 faz dot-source das suas funções da subpasta RunMalwareAnalysis\.
+# Essas bibliotecas têm de existir na VM no mesmo diretório do script (mesmo $PSScriptRoot).
+$analysisLibDir = Join-Path $scriptDir "RunMalwareAnalysis"
+if (Test-Path $analysisLibDir) {
+    foreach ($lib in (Get-ChildItem -LiteralPath $analysisLibDir -Filter "*.ps1" -File)) {
+        try { Copy-SandboxVMFile -VMName $VMName -SourcePath $lib.FullName -DestinationPath "$VMScriptsPath\RunMalwareAnalysis\$($lib.Name)" } catch {
+            Write-Warning "      Falha ao copiar biblioteca de analise: $($lib.Name)"
+        }
+    }
+}
+if (Test-Path $sendScript) {
+    try { Copy-SandboxVMFile -VMName $VMName -SourcePath $sendScript -DestinationPath "$VMScriptsPath\Send-ReportViaCom.ps1" } catch {
+        Write-Warning "      Falha ao copiar Send-ReportViaCom.ps1"
+    }
+}
+Write-LogHost "      Amostra e scripts copiados."

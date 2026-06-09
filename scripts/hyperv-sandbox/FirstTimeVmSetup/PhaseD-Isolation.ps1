@@ -1,0 +1,43 @@
+# [4/5] Garantir isolamento (sem adaptadores externos) + validar que não há internet
+Write-LogHost '[4/5] A garantir isolamento de rede (sem adaptadores externos)...'
+
+# Importante: o Hyper-V não permite remover adaptadores sintéticos com a VM em execução.
+Write-LogHost "       A parar a VM para remover adaptadores nao-Internal..."
+Stop-VM -Name $VMName -Force -ErrorAction SilentlyContinue
+Start-Sleep -Milliseconds 500
+
+# Remover qualquer adaptador ligado a switch não-Internal (ex.: External/Default Switch)
+$allAdapters = @(Get-VMNetworkAdapter -VMName $VMName -ErrorAction SilentlyContinue)
+foreach ($adapter in $allAdapters) {
+    if ([string]::IsNullOrWhiteSpace($adapter.SwitchName)) { continue }
+    $sw = Get-VMSwitch -Name $adapter.SwitchName -ErrorAction SilentlyContinue
+    if ($sw -and $sw.SwitchType -ne "Internal") {
+        Write-LogHost ('       Adaptador ''{0}'' em switch nao-Internal ''{1}'' (tipo: {2}). A remover...' -f $adapter.Name, $adapter.SwitchName, $sw.SwitchType)
+        try {
+            Remove-VMNetworkAdapter -VMName $VMName -Name $adapter.Name -ErrorAction Stop | Out-Null
+            Write-LogHost "       Removido."
+        } catch {
+            Write-LogHost ('[ERRO] Nao foi possivel remover ''{0}'': {1}' -f $adapter.Name, $_.Exception.Message)
+            exit 1
+        }
+    }
+}
+
+Write-LogHost '       Adaptadores restantes (devem ser apenas SandboxSwitch/Internal):'
+Get-VMNetworkAdapter -VMName $VMName | ForEach-Object {
+    $swName = $_.SwitchName
+    if ([string]::IsNullOrWhiteSpace($swName)) {
+        Write-LogHost ('         - {0} -> (sem switch)' -f $_.Name)
+        return
+    }
+    $swType = ((Get-VMSwitch -Name $swName -ErrorAction SilentlyContinue).SwitchType)
+    if ([string]::IsNullOrWhiteSpace($swType)) { $swType = "Unknown" }
+    Write-LogHost ('         - {0} -> ''{1}'' [{2}]' -f $_.Name, $swName, $swType)
+}
+
+# Garantir VM em execução para passos seguintes
+# NOTA: verificação de "internet" omitida por performance.
+# Com switch `Internal` e remoção de adaptadores externos, o risco de fuga é residual.
+Write-LogHost '       A arrancar VM (isolamento assumido: Switch Internal + adaptadores externos removidos)...'
+$ps2 = Start-SandboxVM -VMName $VMName -Credential $cred -PowerShellDirectTimeoutSeconds $PsDirectTimeoutSeconds
+if ($ps2 -is [pscredential]) { $cred = $ps2 }

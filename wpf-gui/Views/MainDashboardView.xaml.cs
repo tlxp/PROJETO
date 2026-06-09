@@ -93,7 +93,6 @@ public partial class MainDashboardView : UserControl
             StaticAnalysisProgressBar.IsIndeterminate = false;
             StaticAnalysisProgressBar.Value = 100;
 
-            // Atualiza cache e elementos de UI com o último jobId/URL.
             _lastStaticJobId = jobId;
             _lastStaticJobUrl = $"{FrontendUrl}/resultados?jobId={Uri.EscapeDataString(jobId)}";
             StaticAnalysisJobIdText.Text = $"Job ID: {jobId}";
