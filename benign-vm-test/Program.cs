@@ -41,7 +41,12 @@ try
         CreateNoWindow = true,
     };
     using var child = Process.Start(psi);
-    child?.WaitForExit(10_000);
+    if (child is null)
+    {
+        Console.Error.WriteLine("[benign-vm-test] falha ao iniciar processo filho (cmd.exe).");
+        return 1;
+    }
+    child.WaitForExit(10_000);
     Console.WriteLine($"[benign-vm-test] processo filho concluído: {childOutputPath}");
 }
 catch (Exception ex)

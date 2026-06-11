@@ -1,7 +1,7 @@
 # Corpo do try (parte 2): cache no host + manifest, cópia p/ VM, cleanup, snapshot.
 # Carregado via dot-sourcing dentro do try/finally do script principal (mesmo scope).
 
-    Write-LogHost "[6/7] A preparar ferramentas offline no projeto..."
+    Write-LogHost "[6/6] A preparar ferramentas offline no projeto..."
     $manifest = [ordered]@{
         generated_at = (Get-Date).ToString("o")
         tools_dir = $HostToolsDir
@@ -11,8 +11,7 @@
         $vmPath = Join-Path $VmDepsDir $u.name
         $hostPath = Join-Path $HostToolsDir $u.name
 
-        # Copy-VMFile só copia Host->Guest, então fazemos download também no HOST como fallback/espelho.
-        # Ainda assim, mantemos o download no guest para provar que a VM com internet funciona.
+        # Copy-VMFile só copia Host->Guest; o cache canónico fica no host (tools/).
         if (-not (Test-Path -LiteralPath $hostPath) -or $ForceRedownload) {
             Write-LogHost "      A descarregar no host: $($u.name)"
             Download-FileRobust -Url $u.url -DestinationPath $hostPath -Retries 3
@@ -74,12 +73,16 @@
         Write-LogHost "      Manifest de integridade guardado: $DepsManifestPath"
     } catch { }
 
-    Write-LogHost "[7/7] A remover adaptador temporário e voltar ao isolamento..."
+    Write-LogHost "A parar VM e revalidar isolamento..."
     if ($DoVmOps) {
         Stop-SandboxVM -VMName $VMName
         Remove-InternetAdapterIfAny -VMName $VMName
+        $expectedSwitch = $script:PROJETOVM_SwitchName
+        if (-not [string]::IsNullOrWhiteSpace($expectedSwitch)) {
+            Assert-SandboxVmNetworkIsolation -VMName $VMName -ExpectedSwitchName $expectedSwitch
+        }
     } else {
-        Write-LogHost "      VM: modo host-only (sem cleanup de adaptador)."
+        Write-LogHost "      Modo host-only (sem cleanup de VM)."
     }
 
     if ($UpdateCleanSnapshot) {

@@ -176,6 +176,16 @@ internal static class SandboxHostDependencies
             }
         }
 
+        var sha256 = DownloadIntegrity.ComputeSha256Hex(destinationPath);
+        log($"[INFO] ADK setup SHA-256: {sha256}");
+
+        var expected = Environment.GetEnvironmentVariable("RATANALYZER_ADK_SETUP_SHA256");
+        if (!string.IsNullOrWhiteSpace(expected))
+        {
+            DownloadIntegrity.VerifySha256OrThrow(destinationPath, expected);
+            log("[OK] ADK setup SHA-256 verificado (RATANALYZER_ADK_SETUP_SHA256).");
+        }
+
         log($"[OK] Instalador ADK guardado ({len / 1024} KB).");
     }
 

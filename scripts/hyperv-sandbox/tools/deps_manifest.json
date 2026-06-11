@@ -69,23 +69,6 @@
                                                          "status_message":  "Signature verified."
                                                      }
                                    }
-                 },
-                 {
-                     "family":  "winutil",
-                     "name":  "winutil.ps1",
-                     "url":  "https://christitus.com/win",
-                     "integrity":  {
-                                       "path":  "D:\\Codigo\\PROJETO\\PROJETO\\scripts\\hyperv-sandbox\\tools\\winutil.ps1",
-                                       "sha256":  "4C2595118EDD3355065C1F449CD7E0092614DFC2552E8AC8E4EC4231A6D9A719",
-                                       "length":  699222,
-                                       "last_write_utc":  "2026-05-07T18:25:45.6610858Z",
-                                       "signature":  {
-                                                         "status":  "NotSigned",
-                                                         "thumbprint":  "",
-                                                         "signer":  "",
-                                                         "status_message":  "The file D:\\Codigo\\PROJETO\\PROJETO\\scripts\\hyperv-sandbox\\tools\\winutil.ps1 is not digitally signed. You cannot run this script on the current system. For more information about running scripts and setting execution policy, see about_Execution_Policies at https:/go.microsoft.com/fwlink/?LinkID=135170"
-                                                     }
-                                   }
                  }
              ]
 }

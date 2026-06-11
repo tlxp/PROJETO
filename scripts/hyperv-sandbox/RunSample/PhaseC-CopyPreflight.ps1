@@ -102,6 +102,15 @@ if (-not (Test-Path -LiteralPath $sendScript)) {
 }
 Copy-SandboxVMFile -VMName $VMName -SourcePath $sendScript -DestinationPath "$VMScriptsPath\Send-ReportViaCom.ps1"
 
+# Launcher destacado: corre Run-MalwareAnalysis.ps1 num processo separado dentro da VM
+# para que a análise sobreviva ao fecho da sessão PowerShell Direct (VMBus) e o relatório
+# chegue ao host por COM1 mesmo que o PS Direct caia ("Hyper-V socket target process has ended").
+$launchScript = Join-Path $scriptDir "Launch-AnalysisDetached.ps1"
+if (-not (Test-Path -LiteralPath $launchScript)) {
+    throw "Launch-AnalysisDetached.ps1 não encontrado no host em: $launchScript"
+}
+Copy-SandboxVMFile -VMName $VMName -SourcePath $launchScript -DestinationPath "$VMScriptsPath\Launch-AnalysisDetached.ps1"
+
 # Validar que o script principal chegou mesmo à VM antes de tentar executá-lo
 # (evita o erro tardio "'.\Run-MalwareAnalysis.ps1' is not recognized" dentro da VM).
 $runScriptInVm = "$VMScriptsPath\Run-MalwareAnalysis.ps1"

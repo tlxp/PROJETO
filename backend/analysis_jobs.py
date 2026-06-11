@@ -3,18 +3,22 @@ from __future__ import annotations
 import enum
 import json
 import logging
+import os
 import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
 import config
+from modules.pseudo_c_highlighter import realign_flagged_functions_for_payload
 from rat_analyzer import RATAnalyzer
 from vm_orchestrator import run_dynamic_analysis
 import job_store
 from pipeline_version import compute_pipeline_version
 from task_queue import is_queue_enabled, get_queue
+from upload_security import resolve_safe_path, sanitize_upload_filename
 
 
 class AnalysisType(str, enum.Enum):
@@ -88,6 +92,24 @@ _LOGGER = logging.getLogger("rat_analyzer_jobs")
 MAX_CCODE_CHARS: int = 200_000  # ~200 KB de pseudo-C no payload
 CCODE_WINDOW_RADIUS: int = 40   # ±40 linhas em volta de cada indicador
 
+# Pool partilhado para jobs em modo local (threads). max_workers configurável
+# via RATANALYZER_MAX_WORKERS (default 2) para limitar análises concorrentes.
+_EXECUTOR: Optional[ThreadPoolExecutor] = None
+_EXECUTOR_LOCK = threading.Lock()
+
+
+def _get_executor() -> ThreadPoolExecutor:
+    global _EXECUTOR
+    with _EXECUTOR_LOCK:
+        if _EXECUTOR is None:
+            try:
+                max_workers = int(os.environ.get("RATANALYZER_MAX_WORKERS", "2"))
+            except ValueError:
+                max_workers = 2
+            max_workers = max(1, max_workers)
+            _EXECUTOR = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="analysis-job")
+        return _EXECUTOR
+
 
 def _ensure_jobs_dir() -> Path:
     base = config.SANDBOX_JOBS_DIR
@@ -96,6 +118,9 @@ def _ensure_jobs_dir() -> Path:
 
 
 def create_job(file_name: str, contents: bytes, analysis_type: AnalysisType) -> AnalysisJob:
+    # Defesa em profundidade: mesmo que a camada API já sanitize, nunca
+    # aceitar aqui nomes com separadores/`..`/paths absolutos.
+    file_name = sanitize_upload_filename(file_name)
     jobs_root = _ensure_jobs_dir()
     pipeline_version = compute_pipeline_version()
     sha = job_store.sha256_bytes(contents)
@@ -119,7 +144,8 @@ def create_job(file_name: str, contents: bytes, analysis_type: AnalysisType) -> 
     base_dir = jobs_root / job_id
     base_dir.mkdir(parents=True, exist_ok=True)
 
-    sample_path = base_dir / file_name
+    # Garantir que o sample fica mesmo dentro do diretório do job.
+    sample_path = resolve_safe_path(base_dir, file_name)
     output_dir = base_dir / "out"
     output_dir.mkdir(exist_ok=True)
 
@@ -205,13 +231,12 @@ def create_job(file_name: str, contents: bytes, analysis_type: AnalysisType) -> 
     )
 
     # Se houver Redis configurado, enfileirar para worker RQ;
-    # caso contrário, correr em thread local (modo dev).
+    # caso contrário, correr no pool de threads local (modo dev/Windows).
     if is_queue_enabled():
         q = get_queue("analysis")
         q.enqueue(_run_job, job_id)
     else:
-        t = threading.Thread(target=_run_job, args=(job_id,), daemon=True)
-        t.start()
+        _get_executor().submit(_run_job, job_id)
 
     return job
 
@@ -221,8 +246,61 @@ def get_job(job_id: str) -> Optional[AnalysisJob]:
         return _JOBS.get(job_id)
 
 
+def _rebuild_job_from_store(job_id: str) -> Optional[AnalysisJob]:
+    """
+    Reconstrói um AnalysisJob a partir da DB + disco.
+
+    Necessário quando _run_job corre num processo diferente do que criou o
+    job (ex.: worker RQ): o dict _JOBS em memória não é partilhado, mas a
+    criação do job persiste analysis_type/file_name na DB e o sample em
+    sandbox_jobs/<job_id>/.
+    """
+    try:
+        row = job_store.get_job_row(job_id)
+    except Exception:
+        _LOGGER.exception("Falha ao ler job %s da DB para reconstrução.", job_id)
+        return None
+    if not row:
+        return None
+
+    try:
+        analysis_type = AnalysisType(str(row.get("analysisType")))
+    except ValueError:
+        _LOGGER.warning("analysis_type inválido na DB para job %s: %r", job_id, row.get("analysisType"))
+        return None
+    try:
+        status = JobStatus(str(row.get("status")))
+    except ValueError:
+        status = JobStatus.QUEUED
+
+    base_dir = _ensure_jobs_dir() / job_id
+    file_name = str(row.get("fileName") or "")
+    try:
+        sample_path = resolve_safe_path(base_dir, sanitize_upload_filename(file_name))
+    except ValueError:
+        _LOGGER.warning("file_name inválido na DB para job %s: %r", job_id, file_name)
+        return None
+
+    job = AnalysisJob(
+        id=job_id,
+        analysis_type=analysis_type,
+        status=status,
+        base_dir=base_dir,
+        sample_path=sample_path,
+        output_dir=base_dir / "out",
+    )
+    with _JOBS_LOCK:
+        _JOBS.setdefault(job_id, job)
+        job = _JOBS[job_id]
+    _LOGGER.info("Job %s reconstruído a partir da DB/disco (worker externo).", job_id)
+    return job
+
+
 def _run_job(job_id: str) -> None:
     job = get_job(job_id)
+    if not job:
+        # Worker RQ (processo separado): reconstruir o job a partir da DB/disco.
+        job = _rebuild_job_from_store(job_id)
     if not job:
         _LOGGER.warning("Tentativa de executar job inexistente: id=%s", job_id)
         return
@@ -293,13 +371,21 @@ def get_job_payload(job_id: str) -> Optional[dict]:
                 job_id,
                 row.get("status"),
             )
+            static_result = row.get("staticResult")
+            if isinstance(static_result, dict) and static_result.get("cCode"):
+                static_result = dict(static_result)
+                static_result["flaggedFunctions"] = realign_flagged_functions_for_payload(
+                    static_result.get("cCode") or "",
+                    static_result.get("flaggedFunctions") or [],
+                )
+
             # Compatibilizar com o formato do frontend (staticResult/dynamicResult já vêm)
             return {
                 "id": row["id"],
                 "analysisType": row["analysisType"],
                 "status": row["status"],
                 "error": row.get("error"),
-                "staticResult": row.get("staticResult"),
+                "staticResult": static_result,
                 "dynamicResult": row.get("dynamicResult"),
                 "fileName": row.get("fileName"),
                 "sha256": row.get("sha256"),
@@ -360,7 +446,9 @@ def get_job_payload(job_id: str) -> Optional[dict]:
         if not c_code:
             c_code = "# Código não disponível."
 
-        summarized_c = summarize_c_code(c_code, flagged_indicators)
+        summarized_c, flagged_functions = summarize_c_code_payload(
+            c_code, flagged_indicators, flagged_functions
+        )
 
         disasm = last.get("disassembly_file")
         il_code = _read_file_safe(disasm, errors="replace") if disasm else ""
@@ -472,7 +560,9 @@ def _run_static(job: AnalysisJob) -> AnalysisResult:
         c_code = "# Código não disponível."
         il_code = "# Bytecode não disponível."
 
-    summarized_c = summarize_c_code(c_code, flagged_indicators)
+    summarized_c, flagged_functions = summarize_c_code_payload(
+        c_code, flagged_indicators, flagged_functions
+    )
 
     return AnalysisResult(
         report=report_content,
@@ -536,6 +626,23 @@ def _normalize_indicators(flagged_indicators: Iterable[str]) -> List[str]:
     return out
 
 
+def _merge_line_windows(ranges: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
+    """Funde intervalos de linhas 0-based sobrepostos ou adjacentes."""
+    if not ranges:
+        return []
+    ranges.sort()
+    merged: List[Tuple[int, int]] = []
+    cur_start, cur_end = ranges[0]
+    for s, e in ranges[1:]:
+        if s <= cur_end + 1:
+            cur_end = max(cur_end, e)
+        else:
+            merged.append((cur_start, cur_end))
+            cur_start, cur_end = s, e
+    merged.append((cur_start, cur_end))
+    return merged
+
+
 def _build_windows_around_indicators(lines: List[str], indicators: List[str], radius: int) -> List[Tuple[int, int]]:
     """
     Devolve intervalos de linhas [start, end] que cobrem janelas em volta de cada ocorrência
@@ -553,21 +660,70 @@ def _build_windows_around_indicators(lines: List[str], indicators: List[str], ra
                 end = min(n - 1, i + radius)
                 ranges.append((start, end))
 
-    if not ranges:
-        return []
+    return _merge_line_windows(ranges)
 
-    # Fundir intervalos sobrepostos/adjacentes
-    ranges.sort()
-    merged: List[Tuple[int, int]] = []
-    cur_start, cur_end = ranges[0]
-    for s, e in ranges[1:]:
-        if s <= cur_end + 1:
-            cur_end = max(cur_end, e)
-        else:
-            merged.append((cur_start, cur_end))
-            cur_start, cur_end = s, e
-    merged.append((cur_start, cur_end))
-    return merged
+
+def _build_windows_for_payload(
+    lines: List[str],
+    indicators: List[str],
+    flagged_functions: Iterable[dict] | None,
+    radius: int,
+    max_func_windows: int = 20,
+) -> List[Tuple[int, int]]:
+    """Janelas em volta de indicadores e das funções suspeitas mais graves."""
+    ranges = _build_windows_around_indicators(lines, indicators, radius)
+    n = len(lines)
+    if n == 0:
+        return ranges
+
+    sev_rank = {"CRÍTICO": 0, "ALTO": 1, "MÉDIO": 2, "BAIXO": 3}
+    funcs = sorted(
+        list(flagged_functions or []),
+        key=lambda f: (
+            sev_rank.get(str(f.get("severity") or "BAIXO").upper(), 9),
+            -int(f.get("score") or 0),
+            int(f.get("startLine") or 0),
+        ),
+    )[:max_func_windows]
+
+    for f in funcs:
+        try:
+            start = max(0, int(f.get("startLine", 1)) - 1 - radius)
+            end = min(n - 1, int(f.get("endLine", 1)) - 1 + radius)
+        except (TypeError, ValueError):
+            continue
+        if start <= end:
+            ranges.append((start, end))
+
+    return _merge_line_windows(ranges)
+
+
+def _remap_flagged_functions_to_summary(
+    flagged_functions: Iterable[dict] | None,
+    orig_to_new: Dict[int, int],
+    total_new_lines: int,
+) -> List[dict]:
+    """Re-mapeia startLine/endLine para o pseudo-C resumido enviado ao frontend."""
+    out: List[dict] = []
+    for raw in flagged_functions or []:
+        if not isinstance(raw, dict):
+            continue
+        try:
+            o_start = int(raw.get("startLine", 0))
+            o_end = int(raw.get("endLine", 0))
+        except (TypeError, ValueError):
+            continue
+        if o_start <= 0 or o_end <= 0 or o_end < o_start:
+            continue
+        mapped = [orig_to_new[i] for i in range(o_start, o_end + 1) if i in orig_to_new]
+        if not mapped:
+            continue
+        new_ff = dict(raw)
+        new_ff["startLine"] = min(mapped)
+        new_ff["endLine"] = max(mapped)
+        if new_ff["startLine"] <= total_new_lines:
+            out.append(new_ff)
+    return out
 
 
 def should_compose_decompilation_fallback(last: dict) -> bool:
@@ -632,15 +788,79 @@ def compose_fallback_descompilation_ccode(last: dict) -> str:
     return "\n".join(lines)
 
 
-def summarize_c_code(c_code: str, flagged_indicators: Iterable[str], max_chars: int = MAX_CCODE_CHARS) -> str:
+def summarize_c_code_payload(
+    c_code: str,
+    flagged_indicators: Iterable[str],
+    flagged_functions: Iterable[dict] | None = None,
+    max_chars: int = MAX_CCODE_CHARS,
+) -> Tuple[str, List[dict]]:
     """
-    Devolve o pseudo-C completo, sem qualquer truncagem.
+    Trunca o pseudo-C/C# para o payload do job e re-alinha as funções suspeitas
+    às linhas do texto resumido (evita ranges do ficheiro completo no frontend).
+    """
+    raw_flagged = [f for f in (flagged_functions or []) if isinstance(f, dict)]
+    if not c_code or max_chars <= 0 or len(c_code) <= max_chars:
+        return c_code, raw_flagged
 
-    O frontend é responsável por limitar a renderização (por exemplo via
-    `maxInitialLines` ou janelas dinâmicas). Manter o código integral aqui
-    garante que nenhuma função com flag é perdida antes de chegar ao site.
-    """
-    if not c_code:
-        return c_code
-    return c_code
+    lines = c_code.splitlines()
+    indicators = _normalize_indicators(flagged_indicators)
+    windows = _build_windows_for_payload(
+        lines, indicators, raw_flagged, CCODE_WINDOW_RADIUS
+    )
+
+    header = (
+        f"// [RESUMO] Código truncado para o payload ({len(c_code)} > {max_chars} chars). "
+        "O artefacto completo está em disco no diretório do job.\n"
+    )
+
+    if windows:
+        output_lines: List[str] = []
+        orig_to_new: Dict[int, int] = {}
+
+        for hl in header.splitlines():
+            output_lines.append(hl)
+
+        def _current_text() -> str:
+            return "\n".join(output_lines) + ("\n" if output_lines else "")
+
+        for start, end in windows:
+            seg_line = f"// ... linhas {start + 1}-{end + 1} ..."
+            segment_lines = lines[start : end + 1]
+            candidate = _current_text() + seg_line + "\n" + "\n".join(segment_lines) + "\n"
+            if len(candidate) > max_chars:
+                output_lines.append("// ... (truncado: limite de tamanho atingido) ...")
+                summary = _current_text()
+                return summary, _remap_flagged_functions_to_summary(
+                    raw_flagged, orig_to_new, len(output_lines)
+                )
+
+            output_lines.append(seg_line)
+            for orig_i in range(start, end + 1):
+                output_lines.append(lines[orig_i])
+                orig_to_new[orig_i + 1] = len(output_lines)
+
+        summary = _current_text()
+        return summary, _remap_flagged_functions_to_summary(
+            raw_flagged, orig_to_new, len(output_lines)
+        )
+
+    # Sem janelas: truncagem simples ao início do ficheiro.
+    cut = c_code[: max(0, max_chars - len(header) - 64)]
+    summary = header + cut + "\n// ... (truncado) ...\n"
+    output_lines = summary.splitlines()
+    orig_to_new = {i + 1: i + 1 for i in range(min(len(output_lines), len(lines)))}
+    return summary, _remap_flagged_functions_to_summary(raw_flagged, orig_to_new, len(output_lines))
+
+
+def summarize_c_code(
+    c_code: str,
+    flagged_indicators: Iterable[str],
+    flagged_functions: Iterable[dict] | None = None,
+    max_chars: int = MAX_CCODE_CHARS,
+) -> str:
+    """Atalho que devolve apenas o pseudo-C resumido."""
+    summarized, _ = summarize_c_code_payload(
+        c_code, flagged_indicators, flagged_functions, max_chars=max_chars
+    )
+    return summarized
 

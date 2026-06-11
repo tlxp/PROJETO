@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using System.Security.Principal;
 using System.Windows;
 
 namespace RatAnalyzer.Desktop;
@@ -14,33 +13,9 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
-        // Hyper-V cmdlets e scripts requerem privilégios de Administrador.
-        // Se a app não estiver elevada, relança com UAC (runas) para permitir logs/streaming normal.
-        try
-        {
-            var identity = WindowsIdentity.GetCurrent();
-            var principal = new WindowsPrincipal(identity);
-            var isAdmin = principal.IsInRole(WindowsBuiltInRole.Administrator);
-            if (!isAdmin)
-            {
-                var exe = Process.GetCurrentProcess().MainModule?.FileName;
-                if (!string.IsNullOrWhiteSpace(exe))
-                {
-                    var psi = new ProcessStartInfo
-                    {
-                        FileName = exe,
-                        UseShellExecute = true,
-                        Verb = "runas",
-                        Arguments = string.Join(" ", e.Args ?? Array.Empty<string>())
-                    };
-                    Process.Start(psi);
-                    Shutdown();
-                    return;
-                }
-            }
-        }
-        catch { /* ignorar */ }
-
+        // A análise dinâmica (Hyper-V) requer privilégios de administrador.
+        // A elevação UAC é pedida apenas ao iniciar essa análise (VmAnalysisWindow / MainDashboardView),
+        // não no arranque global — evita correr sempre como admin.
         base.OnStartup(e);
     }
 

@@ -47,6 +47,7 @@ internal static class IlSpyDependencyHelper
         var existing = await GetEffectiveIlSpyExecutableAsync(ct).ConfigureAwait(false);
         if (!string.IsNullOrEmpty(existing))
         {
+            VerifyIlSpyIntegrityIfConfigured(existing, log);
             log($"[OK] ILSpy: {existing}");
             return;
         }
@@ -114,6 +115,19 @@ internal static class IlSpyDependencyHelper
 
     private sealed record ProbeResult(bool Working, string? ExecutablePath);
 
+    private static void VerifyIlSpyIntegrityIfConfigured(string exePath, Action<string> log)
+    {
+        var resolved = ResolveAbsoluteIlSpyPath(exePath);
+        if (string.IsNullOrEmpty(resolved) || !File.Exists(resolved))
+            return;
+
+        DownloadIntegrity.LogAndVerifyOptionalEnvSha256(
+            resolved,
+            DownloadIntegrity.IlSpySha256Env,
+            log,
+            "ILSpy (ilspycmd)");
+    }
+
     private static async Task InstallIlSpyAsync(Action<string> log, CancellationToken ct)
     {
         if (!await IsDotNetSdkAvailableAsync(ct).ConfigureAwait(false))
@@ -141,6 +155,9 @@ internal static class IlSpyDependencyHelper
             log("[AVISO] ILSpy: ilspycmd não respondeu com streams redireccionados (limitação comum do apphost). " +
                 "A usar na mesma o shim criado pelo dotnet em:\n  " + exe);
         }
+
+        VerifyIlSpyIntegrityIfConfigured(exe, log);
+
         Environment.SetEnvironmentVariable("ILSPY_CMD_PATH", exe, EnvironmentVariableTarget.User);
         Environment.SetEnvironmentVariable("ILSPY_CMD_PATH", exe, EnvironmentVariableTarget.Process);
 

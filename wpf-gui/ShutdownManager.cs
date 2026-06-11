@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using RatAnalyzer.Desktop.Views;
+using System.Text.RegularExpressions;
 
 namespace RatAnalyzer.Desktop;
 
@@ -57,19 +57,6 @@ internal static class ShutdownManager
 
         try
         {
-            KillOrphanedBackendUvicornProcesses();
-        }
-        catch { /* ignorar */ }
-
-        try
-        {
-            KillProcessesListeningOnPort(FrontendPort);
-            KillProcessesListeningOnPort(BackendPort);
-        }
-        catch { /* ignorar */ }
-
-        try
-        {
             LocalArtifactCleanup.CleanupOnApplicationExit();
         }
         catch { /* ignorar */ }
@@ -106,12 +93,12 @@ internal static class ShutdownManager
             var output = process.StandardOutput.ReadToEnd();
             process.WaitForExit(2000);
 
-            // Linhas LISTENING com :PORT (ex.: "TCP    0.0.0.0:8080    0.0.0.0:0    LISTENING    12345")
-            var portStr = $":{port}";
+            // Linhas LISTENING com :PORT exacto (evita :80801, :18080, etc.)
+            var portPattern = new Regex($@"(?<!\d):{port}(\s|$)", RegexOptions.CultureInvariant);
             var currentPid = Environment.ProcessId;
             return output
                 .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                .Where(line => line.IndexOf(portStr, StringComparison.Ordinal) >= 0 &&
+                .Where(line => portPattern.IsMatch(line) &&
                                line.IndexOf("LISTENING", StringComparison.OrdinalIgnoreCase) >= 0)
                 .Select(line =>
                 {
@@ -152,22 +139,6 @@ internal static class ShutdownManager
                 CreateNoWindow = true
             });
             killer?.WaitForExit(3000);
-        }
-        catch { /* ignorar */ }
-    }
-
-    private static void KillOrphanedBackendUvicornProcesses()
-    {
-        try
-        {
-            using var process = Process.Start(new ProcessStartInfo
-            {
-                FileName = "powershell",
-                Arguments = "-NoProfile -NonInteractive -Command \"Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'uvicorn' -and $_.CommandLine -match 'api:app' } | ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop } catch {} }\"",
-                UseShellExecute = false,
-                CreateNoWindow = true
-            });
-            process?.WaitForExit(5000);
         }
         catch { /* ignorar */ }
     }

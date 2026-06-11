@@ -6,6 +6,8 @@ o ficheiro de saída pode ser usado pelo Ghidra.
 """
 
 import base64
+import binascii
+import logging
 import re
 import shutil
 import subprocess
@@ -13,6 +15,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from artifact_naming import short_stem
+
+logger = logging.getLogger("rat_analyzer_deobfuscator")
 
 
 class Deobfuscator:
@@ -44,7 +48,7 @@ class Deobfuscator:
 
             try:
                 text = content.decode('utf-8', errors='ignore')
-            except:
+            except (UnicodeDecodeError, ValueError):
                 text = content.decode('latin-1', errors='ignore')
 
             results['xor_strings'] = self._detect_xor_strings(text)
@@ -58,7 +62,8 @@ class Deobfuscator:
             
         except Exception as e:
             results['error'] = str(e)
-        
+            logger.exception("Erro na deobfuscação de texto de %s", file_path)
+
         return results
     
     def _detect_xor_strings(self, text: str) -> List[str]:
@@ -119,7 +124,7 @@ class Deobfuscator:
         try:
             padded = s + ("=" * ((4 - (len(s) % 4)) % 4))
             raw = base64.b64decode(padded, validate=True)
-        except Exception:
+        except (binascii.Error, ValueError):
             return None
         if len(raw) < 4:
             return None
@@ -199,8 +204,8 @@ class Deobfuscator:
                 head = f.read(8192)
             if b"UPX!" in head or b"UPX0" in head or b"UPX1" in head:
                 return True
-        except Exception:
-            pass
+        except OSError:
+            logger.debug("Falha ao ler cabeçalho UPX de %s", file_path, exc_info=True)
         try:
             import pefile
             pe = pefile.PE(file_path)
@@ -210,7 +215,7 @@ class Deobfuscator:
                     return True
             pe.close()
         except Exception:
-            pass
+            logger.debug("Falha ao inspecionar secções UPX de %s", file_path, exc_info=True)
         return False
 
     def _unpack_upx(self, input_path: str, output_path: str) -> Tuple[bool, str]:
@@ -254,6 +259,7 @@ class Deobfuscator:
         try:
             pe = pefile.PE(file_path)
         except Exception:
+            logger.debug("PE inválido para patch XOR: %s", file_path, exc_info=True)
             return False, 0
         data_section_names = (b".rdata", b".data", b".idata", b"UPX1")
         patches: List[Tuple[int, bytes, bytes]] = []  # (file_offset, original_data, new_data)
@@ -269,7 +275,8 @@ class Deobfuscator:
                 with open(file_path, "rb") as f:
                     f.seek(raw_offset)
                     blob = f.read(min(raw_size, 512 * 1024))
-            except Exception:
+            except OSError:
+                logger.debug("Falha ao ler secção em %s (offset=%s)", file_path, raw_offset, exc_info=True)
                 continue
             # Janelas de 32 a 256 bytes; tentar chaves 1..255
             min_len, max_len = 32, 256
@@ -297,7 +304,7 @@ class Deobfuscator:
         try:
             pe.close()
         except Exception:
-            pass
+            logger.debug("Falha ao fechar pefile após patch XOR: %s", file_path, exc_info=True)
         if not patches:
             return False, 0
         try:
@@ -321,6 +328,7 @@ class Deobfuscator:
                     rf.write(f"deobfuscated_hex: {new_data.hex()}\n\n")
             return True, len(patches)
         except Exception:
+            logger.exception("Falha ao gravar PE com patch XOR: %s -> %s", file_path, output_path)
             return False, 0
 
     def deobfuscate_binary(

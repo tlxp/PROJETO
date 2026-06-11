@@ -18,7 +18,7 @@
 
             if (-not $hb) {
                 $elapsed = [int]((Get-Date) - $start).TotalSeconds
-                Write-SandboxLog -Message "Heartbeat: servico de integracao nao encontrado (ainda). elapsed=${elapsed}s" -LogPath $LogPath -Level "INFO"
+                Write-SandboxLog -Message "Heartbeat: serviço de integração não encontrado (ainda). elapsed=${elapsed}s" -LogPath $LogPath -Level "INFO"
             } else {
                 $primary = $hb.PrimaryStatusDescription
                 $secondary = $null
@@ -42,7 +42,7 @@
             }
         } catch { }
         $remaining = [int]($deadline - (Get-Date)).TotalSeconds
-        Write-SandboxLog -Message "Heartbeat ainda nao OK. Tempo restante aproximado: ${remaining}s." -LogPath $LogPath -Level "INFO"
+        Write-SandboxLog -Message "Heartbeat ainda não OK. Tempo restante aproximado: ${remaining}s." -LogPath $LogPath -Level "INFO"
 
         Start-Sleep -Seconds $LogIntervalSeconds
     }
@@ -141,11 +141,10 @@ function Wait-VMPowerShellDirectReady {
             }
         }
 
+        $elapsed = [int]((Get-Date) - $start).TotalSeconds
         if ($deadline) {
-            $remaining = [int]($deadline - (Get-Date)).TotalSeconds
-            Write-SandboxLog -Message "PowerShell Direct ainda não OK. Tempo restante aproximado: ${remaining}s." -LogPath $LogPath -Level "INFO"
+            Write-SandboxLog -Message "PowerShell Direct ainda não OK. Tempo decorrido: ${elapsed}s (timeout ${TimeoutSeconds}s)." -LogPath $LogPath -Level "INFO"
         } else {
-            $elapsed = [int]((Get-Date) - $start).TotalSeconds
             $uList = ($candidates | ForEach-Object { $_.UserName }) -join ", "
             Write-SandboxLog -Message "PowerShell Direct ainda não OK (elapsed=${elapsed}s). Tentando users: $uList" -LogPath $LogPath -Level "INFO"
         }
@@ -191,9 +190,9 @@ function Get-SandboxGuestServiceName {
         $targets = @(
             "guest service interface",
             "guest services",
-            "interface de servico convidado",
-            "servico convidado",
-            "servicos de convidado"
+            "interface de serviço convidado",
+            "serviço convidado",
+            "serviços de convidado"
         )
 
         $svc = $services | ForEach-Object {

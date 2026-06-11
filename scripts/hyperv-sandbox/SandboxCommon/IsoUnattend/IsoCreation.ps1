@@ -14,7 +14,7 @@
         Write-LogHost "[DRY-RUN] Criaria ISO: $IsoPath a partir de $SourceFolder"
         return
     }
-    if (-not (Test-Path $SourceFolder)) { throw "Pasta nao existe: $SourceFolder" }
+    if (-not (Test-Path $SourceFolder)) { throw "Pasta não existe: $SourceFolder" }
     $parent = Split-Path -Parent $IsoPath
     if ($parent) { Ensure-DirectoryExists -Path $parent }
     throw "New-IsoFromFolder: use New-WindowsIsoWithUnattend para criar ISOs bootaveis."
@@ -37,8 +37,8 @@ function New-WindowsIsoWithUnattend {
         [string] $OscdimgPath = ""
     )
 
-    if (-not (Test-Path -LiteralPath $SourceIsoPath)) { throw "ISO nao encontrado: $SourceIsoPath" }
-    if (-not (Test-Path -LiteralPath $UnattendXmlPath)) { throw "autounattend.xml nao encontrado: $UnattendXmlPath" }
+    if (-not (Test-Path -LiteralPath $SourceIsoPath)) { throw "ISO não encontrado: $SourceIsoPath" }
+    if (-not (Test-Path -LiteralPath $UnattendXmlPath)) { throw "autounattend.xml não encontrado: $UnattendXmlPath" }
 
     # Encontrar oscdimg.exe
     if ([string]::IsNullOrWhiteSpace($OscdimgPath) -or -not (Test-Path $OscdimgPath)) {
@@ -50,7 +50,7 @@ function New-WindowsIsoWithUnattend {
         foreach ($c in $candidates) { if (Test-Path $c) { $OscdimgPath = $c; break } }
     }
     if ([string]::IsNullOrWhiteSpace($OscdimgPath) -or -not (Test-Path $OscdimgPath)) {
-        throw "oscdimg.exe nao encontrado. Instale o Windows ADK (Deployment Tools): https://go.microsoft.com/fwlink/?linkid=2196127"
+        throw "oscdimg.exe não encontrado. Instale o Windows ADK (Deployment Tools): https://go.microsoft.com/fwlink/?linkid=2196127"
     }
     Write-LogHost "oscdimg.exe: $OscdimgPath"
 
@@ -110,7 +110,7 @@ function New-WindowsIsoWithUnattend {
                     & dism /Unmount-Wim /MountDir:"$wimDir" /Commit 2>&1 | Out-Null
                     Write-LogHost "boot.wim atualizado com sucesso."
                 } else {
-                    Write-LogHost "AVISO: Nao foi possivel montar boot.wim via DISM. A continuar sem injecao no WIM."
+                    Write-LogHost "AVISO: Não foi possível montar boot.wim via DISM. A continuar sem injeção no WIM."
                     try { & dism /Unmount-Wim /MountDir:"$wimDir" /Discard 2>&1 | Out-Null } catch { }
                 }
             } catch {

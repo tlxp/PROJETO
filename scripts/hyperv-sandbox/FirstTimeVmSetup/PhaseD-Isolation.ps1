@@ -1,8 +1,8 @@
-# [4/5] Garantir isolamento (sem adaptadores externos) + validar que não há internet
+﻿# [4/5] Garantir isolamento (sem adaptadores externos) + validar que não há internet
 Write-LogHost '[4/5] A garantir isolamento de rede (sem adaptadores externos)...'
 
 # Importante: o Hyper-V não permite remover adaptadores sintéticos com a VM em execução.
-Write-LogHost "       A parar a VM para remover adaptadores nao-Internal..."
+Write-LogHost "       A parar a VM para remover adaptadores não-Internal..."
 Stop-VM -Name $VMName -Force -ErrorAction SilentlyContinue
 Start-Sleep -Milliseconds 500
 
@@ -12,12 +12,12 @@ foreach ($adapter in $allAdapters) {
     if ([string]::IsNullOrWhiteSpace($adapter.SwitchName)) { continue }
     $sw = Get-VMSwitch -Name $adapter.SwitchName -ErrorAction SilentlyContinue
     if ($sw -and $sw.SwitchType -ne "Internal") {
-        Write-LogHost ('       Adaptador ''{0}'' em switch nao-Internal ''{1}'' (tipo: {2}). A remover...' -f $adapter.Name, $adapter.SwitchName, $sw.SwitchType)
+        Write-LogHost ('       Adaptador ''{0}'' em switch não-Internal ''{1}'' (tipo: {2}). A remover...' -f $adapter.Name, $adapter.SwitchName, $sw.SwitchType)
         try {
             Remove-VMNetworkAdapter -VMName $VMName -Name $adapter.Name -ErrorAction Stop | Out-Null
             Write-LogHost "       Removido."
         } catch {
-            Write-LogHost ('[ERRO] Nao foi possivel remover ''{0}'': {1}' -f $adapter.Name, $_.Exception.Message)
+            Write-LogHost ('[ERRO] Não foi possível remover ''{0}'': {1}' -f $adapter.Name, $_.Exception.Message)
             exit 1
         }
     }

@@ -4,6 +4,7 @@ e produz uma versão deobfuscada. Pensado para código fonte (C# consolidado; de
 pseudo-C se aplicável). Reutiliza padrões do Deobfuscator para deteção com posição.
 """
 
+import binascii
 import logging
 import re
 import base64
@@ -97,7 +98,7 @@ def _decode_base64_text_if_readable(s: str) -> str | None:
     try:
         padded = s + ("=" * ((4 - (len(s) % 4)) % 4))
         raw = base64.b64decode(padded, validate=True)
-    except Exception:
+    except (binascii.Error, ValueError):
         return None
     if len(raw) < 4:
         return None

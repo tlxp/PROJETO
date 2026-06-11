@@ -38,3 +38,4 @@ Write-LogHost ""
 try { Set-Clipboard -Value $ReportOutputPath } catch { }
 Write-LogHost "Concluído."
 Write-LogHost "Relatório (copiado para clipboard): $ReportOutputPath"
+$script:SandboxRunCleanupDone = $true

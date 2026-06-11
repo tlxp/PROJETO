@@ -1,15 +1,18 @@
-pefile>=2023.2.7
-yara-python>=4.3.1
-windnd>=0.1.0
-capstone>=5.0.0
-# Opcional: para decompilar binários nativos para pseudo-C (requer Ghidra 12+ e GHIDRA_INSTALL_DIR)
-pyghidra>=3.0.0
+# Fonte editável — regenerar locks: scripts/ci/compile_python_locks.ps1
+# Instalação reproduzível (CI/produção): pip install -r requirements.lock
+pefile>=2023.2.7,<2026
+yara-python>=4.3.1,<5.0
+capstone>=5.0.0,<6.0
 # API para o frontend (drop-n-analyze)
-fastapi>=0.115.0
-uvicorn[standard]>=0.32.0
-python-multipart>=0.0.12
-requests>=2.32.0
-redis>=5.0.0
+fastapi>=0.110,<1.0
+uvicorn[standard]>=0.32.0,<1.0
+python-multipart>=0.0.12,<1.0
+requests>=2.32.0,<3.0
+redis>=5.0.0,<7.0
 # NOTA: RQ pode quebrar em Windows por depender de 'fork' em algumas versões.
 # O backend faz fallback automático para threads locais em Windows.
-rq>=1.16.0
+rq>=1.16.0,<3.0
+# Extras opcionais (não incluídos no lock principal):
+#   requirements-ghidra.txt — pseudo-C (Ghidra 12+ + GHIDRA_INSTALL_DIR)
+#   requirements-gui.txt    — GUI Tkinter (windnd)
+#   requirements-dev.txt    — pytest, httpx

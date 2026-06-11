@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.lock
+            backend/requirements-dev.lock
+      - name: Instalar dependências (lock reproduzível)
+        working-directory: backend
+        run: |
+          pip install --require-hashes -r requirements.lock
+          pip install --require-hashes -r requirements-dev.lock
+      - name: Validar locks Python actualizados
+        working-directory: backend
+        run: |
+          pip install pip-tools
+          python -m piptools compile requirements.txt -o /tmp/requirements.lock --strip-extras --generate-hashes --quiet
+          python -m piptools compile requirements-dev.txt -o /tmp/requirements-dev.lock --strip-extras --generate-hashes --quiet
+          diff -u requirements.lock /tmp/requirements.lock
+          diff -u requirements-dev.lock /tmp/requirements-dev.lock
+      - name: Compilar módulos
+        run: python -m compileall backend
+      - name: Testes
+        working-directory: backend
+        run: python -m pytest tests -q
+
+  frontend:
+    name: Frontend (React/Vite)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Instalar dependências
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Type check
+        run: npx tsc -p tsconfig.app.json --noEmit
+      - name: Testes
+        run: npm run test
+      - name: Build
+        run: npm run build
+
+  dotnet:
+    name: .NET (WPF + vm-agent)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Build solução
+        run: dotnet build RatAnalyzer.sln -c Release
+
+  ps1-encoding:
+    name: Scripts PowerShell (UTF-8)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validar encoding UTF-8
+        run: python scripts/ci/check_ps1_utf8.py
+
+  powershell:
+    name: Scripts PowerShell (sintaxe)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validar encoding UTF-8
+        run: python scripts/ci/check_ps1_utf8.py
+      - name: Validar sintaxe dos .ps1
+        shell: pwsh
+        run: |
+          $failed = $false
+          Get-ChildItem -Recurse scripts -Filter *.ps1 | ForEach-Object {
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              $failed = $true
+              Write-Host "ERROS em $($_.FullName):"
+              $errors | ForEach-Object { Write-Host "  $($_.Message) (linha $($_.Extent.StartLineNumber))" }
+            }
+          }
+          if ($failed) { exit 1 }

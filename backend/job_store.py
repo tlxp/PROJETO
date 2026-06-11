@@ -14,6 +14,12 @@ import config
 
 _LOCK = threading.Lock()
 
+# init_db() corre apenas uma vez por processo (item de robustez SQLite).
+_INIT_LOCK = threading.Lock()
+_INITIALIZED = False
+
+_SQLITE_TIMEOUT_SECONDS = 30
+
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -22,6 +28,18 @@ def _utc_now_iso() -> str:
 def _db_path() -> Path:
     config.SANDBOX_JOBS_DIR.mkdir(parents=True, exist_ok=True)
     return Path(config.ANALYSIS_DB_PATH)
+
+
+def _connect() -> sqlite3.Connection:
+    return sqlite3.connect(str(_db_path()), timeout=_SQLITE_TIMEOUT_SECONDS)
+
+
+def _ensure_init() -> None:
+    """Garante que init_db() correu uma vez neste processo."""
+    global _INITIALIZED
+    if _INITIALIZED:
+        return
+    init_db()
 
 
 def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
@@ -33,10 +51,11 @@ def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
 
 
 def init_db() -> None:
-    with _LOCK:
-        p = _db_path()
-        conn = sqlite3.connect(str(p))
+    global _INITIALIZED
+    with _INIT_LOCK, _LOCK:
+        conn = _connect()
         try:
+            conn.execute("PRAGMA journal_mode=WAL")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS analyses (
@@ -68,6 +87,7 @@ def init_db() -> None:
                 if name not in cols:
                     conn.execute(f"ALTER TABLE analyses ADD COLUMN {name} {ddl}")
             conn.commit()
+            _INITIALIZED = True
         finally:
             conn.close()
 
@@ -79,10 +99,10 @@ def sha256_bytes(data: bytes) -> str:
 
 
 def insert_job(job_id: str, analysis_type: str, file_name: str, sha256: str, status: str) -> None:
-    init_db()
+    _ensure_init()
     with _LOCK:
         now = _utc_now_iso()
-        conn = sqlite3.connect(str(_db_path()))
+        conn = _connect()
         try:
             conn.execute(
                 """
@@ -97,9 +117,9 @@ def insert_job(job_id: str, analysis_type: str, file_name: str, sha256: str, sta
 
 
 def update_pipeline_version(job_id: str, pipeline_version: str) -> None:
-    init_db()
+    _ensure_init()
     with _LOCK:
-        conn = sqlite3.connect(str(_db_path()))
+        conn = _connect()
         try:
             conn.execute(
                 """
@@ -116,9 +136,9 @@ def update_pipeline_version(job_id: str, pipeline_version: str) -> None:
 
 
 def mark_reused(job_id: str, reused_from_job_id: str) -> None:
-    init_db()
+    _ensure_init()
     with _LOCK:
-        conn = sqlite3.connect(str(_db_path()))
+        conn = _connect()
         try:
             conn.execute(
                 """
@@ -135,9 +155,9 @@ def mark_reused(job_id: str, reused_from_job_id: str) -> None:
 
 
 def set_archive_paths(job_id: str, out_zip_path: str | None, decompiled_zip_path: str | None) -> None:
-    init_db()
+    _ensure_init()
     with _LOCK:
-        conn = sqlite3.connect(str(_db_path()))
+        conn = _connect()
         try:
             conn.execute(
                 """
@@ -156,9 +176,9 @@ def set_archive_paths(job_id: str, out_zip_path: str | None, decompiled_zip_path
 
 
 def mark_artifacts_deleted(job_id: str) -> None:
-    init_db()
+    _ensure_init()
     with _LOCK:
-        conn = sqlite3.connect(str(_db_path()))
+        conn = _connect()
         try:
             conn.execute(
                 """
@@ -179,9 +199,9 @@ def find_completed_by_sha256(sha256: str, analysis_type: str | None = None, pipe
     Procura um job COMPLETED por sha256, opcionalmente filtrando por analysis_type e pipeline_version.
     Devolve o row "normalizado" (mesmo formato de get_job_row).
     """
-    init_db()
+    _ensure_init()
     with _LOCK:
-        conn = sqlite3.connect(str(_db_path()))
+        conn = _connect()
         conn.row_factory = sqlite3.Row
         try:
             where = ["status = 'completed'", "sha256 = ?"]
@@ -228,9 +248,9 @@ def find_completed_by_sha256(sha256: str, analysis_type: str | None = None, pipe
     }
 
 def update_status(job_id: str, status: str, error: Optional[str] = None) -> None:
-    init_db()
+    _ensure_init()
     with _LOCK:
-        conn = sqlite3.connect(str(_db_path()))
+        conn = _connect()
         try:
             conn.execute(
                 """
@@ -248,9 +268,9 @@ def update_status(job_id: str, status: str, error: Optional[str] = None) -> None
 
 
 def update_results(job_id: str, static_obj: Any | None, dynamic_obj: Any | None) -> None:
-    init_db()
+    _ensure_init()
     with _LOCK:
-        conn = sqlite3.connect(str(_db_path()))
+        conn = _connect()
         try:
             static_json = json.dumps(static_obj, ensure_ascii=False) if static_obj is not None else None
             dynamic_json = json.dumps(dynamic_obj, ensure_ascii=False) if dynamic_obj is not None else None
@@ -270,9 +290,9 @@ def update_results(job_id: str, static_obj: Any | None, dynamic_obj: Any | None)
 
 
 def get_job_row(job_id: str) -> Optional[dict]:
-    init_db()
+    _ensure_init()
     with _LOCK:
-        conn = sqlite3.connect(str(_db_path()))
+        conn = _connect()
         conn.row_factory = sqlite3.Row
         try:
             row = conn.execute("SELECT * FROM analyses WHERE job_id = ?", (job_id,)).fetchone()
@@ -304,10 +324,24 @@ def get_job_row(job_id: str) -> Optional[dict]:
     }
 
 
-def list_jobs(limit: int = 50, offset: int = 0) -> list[dict]:
-    init_db()
+def count_jobs_by_status(status: str) -> int:
+    """Conta jobs num determinado estado (ex.: 'running')."""
+    _ensure_init()
     with _LOCK:
-        conn = sqlite3.connect(str(_db_path()))
+        conn = _connect()
+        try:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM analyses WHERE status = ?", (status,)
+            ).fetchone()
+            return int(row[0]) if row else 0
+        finally:
+            conn.close()
+
+
+def list_jobs(limit: int = 50, offset: int = 0) -> list[dict]:
+    _ensure_init()
+    with _LOCK:
+        conn = _connect()
         conn.row_factory = sqlite3.Row
         try:
             rows = conn.execute(

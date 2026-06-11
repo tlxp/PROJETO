@@ -8,17 +8,19 @@ env/
 venv/
 .venv/
 ENV/
-build/
+/build/
 develop-eggs/
-dist/
+/dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# NOTA: regras de packaging Python ancoradas à raiz (/lib/, /build/, /dist/)
+# para não excluírem pastas de código como frontend/src/lib/.
+/lib/
+/lib64/
 parts/
 sdist/
-var/
+/var/
 wheels/
 *.egg-info/
 .installed.cfg
@@ -65,3 +67,14 @@ data/
 # Sistema
 .DS_Store
 Thumbs.db
+
+# Scripts de terceiros (não versionados — transferir localmente se necessário)
+scripts/hyperv-sandbox/tools/winutil.ps1
+
+# Segredos locais (gerar com scripts/generate-production-secrets.ps1)
+secrets/
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env

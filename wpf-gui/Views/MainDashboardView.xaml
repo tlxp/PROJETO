@@ -5,6 +5,7 @@
     <UserControl.Resources>
         <local:BoolToVisibilityConverter x:Key="BoolToVis" />
         <local:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis" />
+        <local:InverseBoolConverter x:Key="InverseBool" />
     </UserControl.Resources>
 
     <Grid Background="Transparent">
@@ -13,7 +14,6 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Cabeçalho -->
         <StackPanel Grid.Row="0" Margin="8,0,8,16">
             <TextBlock Text="Analisar executáveis suspeitos"
                        Style="{StaticResource TitleTextBlock}" />
@@ -22,7 +22,6 @@
                        Margin="0,4,0,0" />
         </StackPanel>
 
-        <!-- Zona de drag & drop -->
         <Border Grid.Row="1"
                 x:Name="FileDropBorder"
                 BorderThickness="1"
@@ -46,9 +45,8 @@
             </Border.Style>
 
             <Grid>
-                <!-- Estado inicial: instruções de arrasto -->
                 <StackPanel VerticalAlignment="Center"
-                            Visibility="{Binding ShowOptions, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVis}}">
+                            Visibility="{Binding ShowOptions, Converter={StaticResource InverseBoolToVis}}">
                     <Border Width="70"
                             Height="70"
                             CornerRadius="16"
@@ -73,18 +71,16 @@
                                FontSize="12"
                                HorizontalAlignment="Center"
                                Margin="0,4,0,0" />
-                    <Button x:Name="SelectFileButton"
-                            Content="Selecionar ficheiro..."
+                    <Button Content="Selecionar ficheiro..."
                             Margin="0,16,0,0"
                             Padding="14,8"
                             Style="{StaticResource ModernButtonStyle}"
-                            Click="SelectFileButton_Click"
+                            Command="{Binding SelectFileCommand}"
                             ToolTip="Use este botão se arrastar e largar não funcionar (ex.: ao executar como Administrador)." />
                 </StackPanel>
 
-                <!-- Estado pós-drop: opções de análise -->
                 <StackPanel VerticalAlignment="Center"
-                            Visibility="{Binding ShowOptions, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}">
+                            Visibility="{Binding ShowOptions, Converter={StaticResource BoolToVis}}">
                     <TextBlock Text="Escolha o tipo de análise"
                                Foreground="{StaticResource TextPrimaryBrush}"
                                FontSize="19"
@@ -96,86 +92,80 @@
                                HorizontalAlignment="Center"
                                Margin="0,0,0,18" />
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                        <Button x:Name="StaticAnalysisButton"
-                                Content="Análise estática"
+                        <Button Content="Análise estática"
                                 Width="190"
                                 Height="46"
                                 Margin="8"
                                 Style="{StaticResource ModernButtonStyle}"
-                                Click="StaticAnalysis_Click"/>
-                        <Button x:Name="DynamicAnalysisButton"
-                                Content="Análise comportamental em VM"
+                                Command="{Binding RunStaticAnalysisCommand}"
+                                IsEnabled="{Binding IsAnalysisBusy, Converter={StaticResource InverseBool}}" />
+                        <Button Content="Análise comportamental em VM"
                                 Width="210"
                                 Height="46"
                                 Margin="8"
                                 Style="{StaticResource AccentButtonStyle}"
-                                Click="DynamicAnalysis_Click"/>
+                                Command="{Binding RunDynamicAnalysisCommand}"
+                                IsEnabled="{Binding IsAnalysisBusy, Converter={StaticResource InverseBool}}" />
                     </StackPanel>
-                    <Button x:Name="StorageMaintenanceButton"
-                            Content="Manutenção / Limpeza..."
+                    <Button Content="Manutenção / Limpeza..."
                             Margin="0,10,0,0"
                             Padding="12,6"
                             Width="200"
                             HorizontalAlignment="Center"
                             Style="{StaticResource BaseButtonStyle}"
-                            Click="StorageMaintenanceButton_Click"
+                            Command="{Binding OpenStorageMaintenanceCommand}"
+                            IsEnabled="{Binding IsAnalysisBusy, Converter={StaticResource InverseBool}}"
                             ToolTip="Limpeza segura de jobs antigos e estimativa de espaço." />
-                    <CheckBox x:Name="FirstTimeVmCheckBox"
-                              Content="Primeira entrada na VM (instalar software comum com winget e criar snapshot)"
+                    <CheckBox Content="Primeira entrada na VM (instalar software comum com winget e criar snapshot)"
                               Foreground="{StaticResource TextSecondaryBrush}"
                               FontSize="11"
                               Margin="0,8,0,0"
                               HorizontalAlignment="Center"
-                              IsChecked="False"
-                              ToolTip="Marque se for a primeira vez: instala Chrome, 7zip, VSCode, etc. na VM e cria o snapshot limpo antes de correr a amostra."/>
+                              IsChecked="{Binding RunFirstTimeVmSetup}"
+                              ToolTip="Marque se for a primeira vez: instala Chrome, 7zip, VSCode, etc. na VM e cria o snapshot limpo antes de correr a amostra." />
                     <StackPanel Orientation="Vertical"
                                 Margin="0,12,0,0"
                                 HorizontalAlignment="Center"
                                 Width="360">
-                        <TextBlock x:Name="StaticAnalysisStatusText"
-                                   Text="A preparar análise estática..."
-                                   Visibility="Collapsed"
+                        <TextBlock Text="{Binding StaticStatusText}"
+                                   Visibility="{Binding ShowStaticStatus, Converter={StaticResource BoolToVis}}"
                                    Foreground="{StaticResource TextSecondaryBrush}"
                                    FontSize="12"
                                    TextAlignment="Center"
                                    TextWrapping="Wrap"
                                    HorizontalAlignment="Center" />
-                        <ProgressBar x:Name="StaticAnalysisProgressBar"
-                                     Width="260"
+                        <ProgressBar Width="260"
                                      Height="6"
                                      Minimum="0"
                                      Maximum="100"
-                                     Value="0"
-                                     IsIndeterminate="False"
-                                     Visibility="Collapsed"
+                                     Value="{Binding StaticProgressValue, Mode=OneWay}"
+                                     IsIndeterminate="{Binding StaticProgressIndeterminate, Mode=OneWay}"
+                                     Visibility="{Binding ShowStaticProgress, Converter={StaticResource BoolToVis}}"
                                      Margin="0,4,0,0" />
-                        <!-- Informação detalhada sobre o job atual (ID e URL de resultados) -->
-                        <TextBlock x:Name="StaticAnalysisJobIdText"
+                        <TextBlock Text="{Binding StaticJobIdText}"
                                    Margin="0,8,0,0"
-                                   Visibility="Collapsed"
+                                   Visibility="{Binding ShowStaticJobDetails, Converter={StaticResource BoolToVis}}"
                                    Foreground="{StaticResource TextMutedBrush}"
                                    FontSize="11"
                                    TextAlignment="Center"
                                    TextWrapping="Wrap" />
-                        <TextBlock x:Name="StaticAnalysisJobUrlText"
+                        <TextBlock Text="{Binding StaticJobUrlText}"
                                    Margin="0,2,0,0"
-                                   Visibility="Collapsed"
+                                   Visibility="{Binding ShowStaticJobDetails, Converter={StaticResource BoolToVis}}"
                                    Foreground="{StaticResource AccentSoftBrush}"
                                    FontSize="11"
                                    TextAlignment="Center"
                                    TextWrapping="Wrap" />
-                        <Button x:Name="OpenResultsButton"
-                                Content="Abrir página de resultados"
+                        <Button Content="Abrir página de resultados"
                                 Width="220"
                                 Height="32"
                                 Margin="0,8,0,0"
-                                Visibility="Collapsed"
+                                Visibility="{Binding ShowOpenResults, Converter={StaticResource BoolToVis}}"
                                 Style="{StaticResource ModernButtonStyle}"
-                                Click="OpenResultsButton_Click" />
+                                Command="{Binding OpenResultsCommand}" />
                     </StackPanel>
                 </StackPanel>
             </Grid>
         </Border>
     </Grid>
 </UserControl>
-

@@ -1,10 +1,17 @@
 /**
- * Página dedicada a /resultados.
- * Reutiliza o Index para mostrar as 3 colunas (C, IL, Relatório) quando há jobId na query string.
- * O fallback SPA no Vite (spaHistoryFallback) garante que este path seja servido com index.html.
+ * Rota legada /resultados?jobId=... mantida por compatibilidade.
+ * Redireciona para a rota canónica /analysis/:jobId (ou para a landing page sem jobId).
  */
-import Index from "./Index";
+import { Navigate, useLocation } from "react-router-dom";
 
-const ResultadosPage = () => <Index />;
+const ResultadosRedirect = () => {
+  const location = useLocation();
+  const jobId = new URLSearchParams(location.search ?? "").get("jobId");
 
-export default ResultadosPage;
+  if (jobId) {
+    return <Navigate to={`/analysis/${encodeURIComponent(jobId)}`} replace />;
+  }
+  return <Navigate to="/" replace />;
+};
+
+export default ResultadosRedirect;

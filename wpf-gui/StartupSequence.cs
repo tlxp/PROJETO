@@ -15,8 +15,8 @@ namespace RatAnalyzer.Desktop;
 /// </summary>
 public static class StartupSequence
 {
-    private const string ApiBaseUrl = "http://localhost:8000";
-    private const string FrontendUrl = "http://localhost:8080";
+    private const string ApiBaseUrl = AppConstants.ApiBaseUrl;
+    private const string FrontendUrl = AppConstants.FrontendUrl;
 
     // Backend uvicorn gerido pelo WPF (quando arrancado automaticamente).
     private static Process? _managedBackendProcess;
@@ -112,14 +112,25 @@ public static class StartupSequence
     }
 
     /// <summary>
-    /// Garante dependências pip do backend (requirements.txt). Se já instaladas, o pip sai rapidamente.
+    /// Garante dependências pip do backend (requirements.lock preferido). Se já instaladas, o pip sai rapidamente.
     /// </summary>
     internal static async Task EnsureBackendPythonDependenciesAsync(string backendDir, Action<string>? addLog)
     {
+        var lockPath = Path.Combine(backendDir, "requirements.lock");
         var reqPath = Path.Combine(backendDir, "requirements.txt");
-        if (!File.Exists(reqPath))
+        string pipArgs;
+        if (File.Exists(lockPath))
         {
-            addLog?.Invoke("[AVISO] Ficheiro requirements.txt não encontrado na pasta backend; a saltar pip install.");
+            pipArgs = "-m pip install --require-hashes -r requirements.lock --disable-pip-version-check -q";
+        }
+        else if (File.Exists(reqPath))
+        {
+            addLog?.Invoke("[AVISO] requirements.lock em falta — a usar requirements.txt (menos reproduzível).");
+            pipArgs = "-m pip install -r requirements.txt --disable-pip-version-check -q";
+        }
+        else
+        {
+            addLog?.Invoke("[AVISO] Ficheiros requirements.lock / requirements.txt não encontrados; a saltar pip install.");
             return;
         }
 
@@ -130,7 +141,7 @@ public static class StartupSequence
             var psi = new ProcessStartInfo
             {
                 FileName = "python",
-                Arguments = "-m pip install -r requirements.txt --disable-pip-version-check -q",
+                Arguments = pipArgs,
                 WorkingDirectory = backendDir,
                 UseShellExecute = false,
                 CreateNoWindow = true,
@@ -243,7 +254,7 @@ public static class StartupSequence
             throw new InvalidOperationException(
                 "Não foi possível instalar/atualizar as dependências Python do backend.\n\n" +
                 "Na pasta 'backend', execute manualmente:\n" +
-                "python -m pip install -r requirements.txt\n\n" +
+                "python -m pip install --require-hashes -r requirements.lock\n\n" +
                 ex.Message);
         }
 
@@ -254,11 +265,14 @@ public static class StartupSequence
                 FileName = "python",
                 // Sem --reload para evitar processos filhos difíceis de matar;
                 // o WPF gere o ciclo de vida completo.
-                Arguments = "-m uvicorn api:app --host 0.0.0.0 --port 8000",
+                Arguments = "-m uvicorn api:app --host 127.0.0.1 --port 8000",
                 WorkingDirectory = backendDir,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+
+            InheritParentEnvironment(psi);
+            PropagateBackendSecrets(psi, addLog);
 
             var javaHome = JavaDependencyHelper.ResolveJavaHomeForBackend();
             if (!string.IsNullOrWhiteSpace(javaHome))
@@ -282,7 +296,7 @@ public static class StartupSequence
             throw new InvalidOperationException(
                 "Não foi possível iniciar automaticamente o servidor backend (uvicorn).\n\n" +
                 "Tente iniciar manualmente a partir da pasta 'backend' com:\n" +
-                "uvicorn api:app --reload --host 0.0.0.0 --port 8000\n\n" +
+                "uvicorn api:app --reload --host 127.0.0.1 --port 8000\n\n" +
                 ex.Message);
         }
 
@@ -303,7 +317,7 @@ public static class StartupSequence
         throw new TimeoutException(
             "Não foi possível confirmar o arranque do servidor backend em http://localhost:8000.\n\n" +
             "Verifique se o Python e o uvicorn estão instalados e, se necessário, inicie manualmente:\n" +
-            "uvicorn api:app --reload --host 0.0.0.0 --port 8000");
+            "uvicorn api:app --reload --host 127.0.0.1 --port 8000");
     }
 
     internal static string? FindFrontendWorkingDirectory()
@@ -374,6 +388,9 @@ public static class StartupSequence
                 CreateNoWindow = true
             };
 
+            InheritParentEnvironment(psi);
+            PropagateFrontendSecrets(psi);
+
             _managedFrontendProcess = Process.Start(psi);
         }
         catch (Exception ex)
@@ -422,6 +439,53 @@ public static class StartupSequence
         {
             return false;
         }
+    }
+
+    /// <summary>Copia variáveis de ambiente do processo WPF para processos filhos.</summary>
+    private static void InheritParentEnvironment(ProcessStartInfo psi)
+    {
+        foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
+        {
+            var key = entry.Key?.ToString();
+            if (string.IsNullOrEmpty(key))
+                continue;
+            psi.Environment[key] = entry.Value?.ToString() ?? "";
+        }
+    }
+
+    /// <summary>Propaga segredos de produção ao uvicorn (RATANALYZER_* já herdados do pai).</summary>
+    private static void PropagateBackendSecrets(ProcessStartInfo psi, Action<string>? addLog)
+    {
+        var requireToken = string.Equals(
+            Environment.GetEnvironmentVariable("RATANALYZER_REQUIRE_API_TOKEN"),
+            "1",
+            StringComparison.Ordinal);
+        var production = string.Equals(
+            Environment.GetEnvironmentVariable("RATANALYZER_ENV"),
+            "production",
+            StringComparison.OrdinalIgnoreCase)
+            || string.Equals(
+                Environment.GetEnvironmentVariable("RATANALYZER_REQUIRE_SECRETS"),
+                "1",
+                StringComparison.Ordinal);
+
+        if ((requireToken || production) && string.IsNullOrWhiteSpace(AppConstants.BackendApiToken))
+        {
+            addLog?.Invoke(
+                "[AVISO] Modo produção/estrito activo mas RATANALYZER_API_TOKEN não definido — " +
+                "o backend pode recusar arrancar. Veja docs/production-secrets.md.");
+        }
+    }
+
+    /// <summary>Alinha VITE_API_TOKEN com RATANALYZER_API_TOKEN quando o frontend não define o seu.</summary>
+    private static void PropagateFrontendSecrets(ProcessStartInfo psi)
+    {
+        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("VITE_API_TOKEN")))
+            return;
+
+        var apiToken = AppConstants.BackendApiToken;
+        if (!string.IsNullOrWhiteSpace(apiToken))
+            psi.Environment["VITE_API_TOKEN"] = apiToken;
     }
 
     internal static void StopManagedBackend()

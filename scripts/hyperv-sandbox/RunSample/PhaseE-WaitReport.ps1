@@ -10,6 +10,7 @@ if ($waitSec -gt 0) {
     $lastJobLog = Get-Date
     $guestDonePath = "$VMScriptsPath\guest_analysis_done.txt"
     $guestReportPath = "C:\analysis.txt"
+    $lastGuestDoneCheck = [DateTime]::MinValue
     while (-not $pipeReportAlreadyReceived -and (Get-Date) -lt $waitDeadline) {
         $st = $null
         try { $st = (Get-Job -Id $pipeJob.Id -ErrorAction SilentlyContinue).State } catch { }
@@ -27,12 +28,14 @@ if ($waitSec -gt 0) {
         } catch { }
 
         # Guest concluiu mas COM1/pipe não entregou -- saída antecipada com Copy-VMFile
-        if ($st -ne "Completed") {
+        # (verificação por PowerShell Direct é pesada: limitar a cada ~30s)
+        if ($st -ne "Completed" -and ((Get-Date) - $lastGuestDoneCheck).TotalSeconds -ge 30) {
+            $lastGuestDoneCheck = Get-Date
             try {
                 $guestDone = Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
                     param($Path)
                     Test-Path -LiteralPath $Path
-                } -ArgumentList $guestDonePath -ErrorAction SilentlyContinue
+                } -ArgumentList $guestDonePath -ErrorAction Stop
                 if ($guestDone -eq $true) {
                     Write-LogWarning "      Guest análise concluída ($guestDonePath) mas pipe ainda não recebeu relatório. A tentar Copy-VMFile..."
                     Add-LogLine -Path $HostLogPath -Value "Guest done detected; pipe not complete -- fallback Copy-VMFile"
@@ -50,7 +53,10 @@ if ($waitSec -gt 0) {
                         Add-LogLine -Path $HostLogPath -Value "Copy-VMFile fallback failed: $($_.Exception.Message)"
                     }
                 }
-            } catch { }
+            } catch {
+                # Antes era silencioso: sem isto não se percebe se o guest-done check funciona.
+                Add-LogLine -Path $HostLogPath -Value "Guest-done check failed (PSDirect): $($_.Exception.Message)"
+            }
         }
 
         # Heartbeat no host a cada ~10s

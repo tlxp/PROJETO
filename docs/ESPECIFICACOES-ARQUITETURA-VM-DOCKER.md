@@ -1,6 +1,8 @@
 # Especificações: Arquitetura VM + Docker para o RAT Analyzer
 
-Documento de resposta às perguntas de desenho para tornar o sistema **seguro**, **funcional** e **user-friendly**, alinhado com o projeto atual (webapp drop-n-analyze + backend FastAPI + análise ILSpy/Ghidra/YARA).
+> **⚠ Documento de desenho alternativo / futuro.** Descreve uma arquitetura **Linux + Docker** que **não está implementada** neste repositório. A implementação real da análise dinâmica é **Windows Hyper-V** com dois caminhos: **VM Agent HTTP** (`vm-agent/` + driver `hyperv`) e **scripts PowerShell serial** (`scripts/hyperv-sandbox/`). Consulte [`sandbox-hyperv-setup.md`](sandbox-hyperv-setup.md) e [`../scripts/hyperv-sandbox/README.md`](../scripts/hyperv-sandbox/README.md).
+
+Documento de resposta às perguntas de desenho para tornar o sistema **seguro**, **funcional** e **user-friendly**, alinhado com o projeto actual (webapp drop-n-analyze + backend FastAPI + análise ILSpy/Ghidra/YARA).
 
 ---
 

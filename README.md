@@ -7,6 +7,8 @@ comportamental/dinâmica** em sandbox de VM isolada.
 > Projeto desenvolvido no âmbito de uma licenciatura. Visa também ser uma ferramenta **educativa** de
 > análise de malware: além de detetar, explica o que cada função suspeita parece fazer.
 
+**Auditoria de segurança e qualidade (Jun 2026):** concluída a **100%** — ver [`docs/AUDITORIA.md`](docs/AUDITORIA.md) para o resumo das correções, checklist de deploy e testes.
+
 ---
 
 ## Índice
@@ -15,6 +17,9 @@ comportamental/dinâmica** em sandbox de VM isolada.
 - [Arquitetura e componentes](#arquitetura-e-componentes)
 - [Estrutura do repositório](#estrutura-do-repositório)
 - [Início rápido](#início-rápido)
+- [Segurança e configuração](#segurança-e-configuração)
+- [Auditoria e qualidade](#auditoria-e-qualidade)
+- [Testes e CI](#testes-e-ci)
 - [Módulos de análise](#módulos-de-análise)
 - [Scoring de risco](#scoring-de-risco)
 - [Análise dinâmica (sandbox)](#análise-dinâmica-sandbox)
@@ -96,18 +101,18 @@ PROJETO/
 ### Interface web (recomendado)
 
 ```bash
-# 1) Backend (API FastAPI)
+# 1) Backend (API FastAPI) — recomendado bind local
 cd backend
-pip install -r requirements.txt
-uvicorn api:app --reload --port 8000
+pip install --require-hashes -r requirements.lock
+uvicorn api:app --reload --host 127.0.0.1 --port 8000
 
-# 2) Frontend (noutro terminal)
+# 2) Frontend (noutro terminal) — Vite na porta 8080
 cd frontend
 npm i
 npm run dev
 ```
 
-Abra o URL indicado e arraste ficheiros para analisar. Detalhes em [`frontend/README.md`](frontend/README.md).
+Abra **http://localhost:8080** e arraste ficheiros para analisar. Detalhes em [`frontend/README.md`](frontend/README.md).
 
 ### CLI (análise estática rápida)
 
@@ -144,6 +149,76 @@ python backend/clean.py           # use --dry-run para simular
 
 Remove apenas caches/artefactos gerados (`__pycache__/`, `.pytest_cache`, `*.pyc`, `bin/`, `obj/`,
 `decompiled/`); **não** apaga código fonte nem relatórios.
+
+---
+
+## Segurança e configuração
+
+> **Uso local/educativo.** Não exponha o backend nem o vm-agent à Internet sem autenticação e isolamento.
+
+**Produção:** gere segredos com `.\scripts\generate-production-secrets.ps1` e siga [`docs/production-secrets.md`](docs/production-secrets.md). Com `RATANALYZER_ENV=production` ou `RATANALYZER_REQUIRE_API_TOKEN=1`, o backend exige `RATANALYZER_API_TOKEN` no arranque.
+
+| Variável | Componente | Descrição |
+|----------|------------|-----------|
+| `RATANALYZER_API_TOKEN` | Backend / WPF / frontend | Se definido, **todos** os endpoints de upload (`/api/analyze`, `/api/analysis`, storage) exigem header `X-API-Token`. No frontend use `VITE_API_TOKEN`. |
+| `RATANALYZER_MAX_UPLOAD_MB` | Backend | Limite de upload (default **100** MB). |
+| `RATANALYZER_MAX_WORKERS` | Backend | Workers de análise em paralelo (default **2**). |
+| `RATANALYZER_CORS_ORIGINS` | Backend | Origens CORS permitidas (default inclui `localhost:8080`). |
+| `VM_AGENT_TOKEN` | vm-agent + backend | **Obrigatório** no arranque do agent (exceto dev com `VM_AGENT_ALLOW_INSECURE=1`). Header `X-Agent-Token`. |
+| `PROJETOVM_GuestPassword` | Scripts Hyper-V | **Obrigatório** (exceto dev com `PROJETOVM_ALLOW_INSECURE_DEFAULTS=1`). |
+| `PROJETOVM_BasePath` | Scripts Hyper-V / WPF | Pasta raiz do sandbox (default `D:\PROJETOVM`). |
+
+**Pipelines dinâmicas (independentes):**
+
+1. **Backend Python** → driver `hyperv`/`proxmox` → **vm-agent HTTP** dentro da VM.
+2. **App WPF** → scripts **`04-Run-Sample.ps1`** → relatório por **COM1 / Named Pipe** (+ fallback `Copy-VMFile`).
+
+Documentação detalhada: [`backend/README.md`](backend/README.md), [`scripts/hyperv-sandbox/README.md`](scripts/hyperv-sandbox/README.md), [`docs/production-secrets.md`](docs/production-secrets.md).
+
+---
+
+## Auditoria e qualidade
+
+A auditoria completa do repositório (segurança, robustez, qualidade de código e documentação) foi **remediada na íntegra** em Jun 2026.
+
+| Área | Estado | Destaques |
+|------|--------|-----------|
+| Backend API | ✅ | Auth em produção, uploads seguros, worker RQ, locks `requirements*.lock` |
+| Frontend | ✅ | TS strict, hooks com `AbortController`, Error Boundaries, testes Vitest |
+| WPF / vm-agent | ✅ | MVVM, SHA-256 em downloads, bind local, token obrigatório no agent |
+| Sandbox Hyper-V | ✅ | Isolamento de rede por run, cleanup `try/finally`, UTF-8 CI |
+| YARA | ✅ | Regras v2 correlacionadas + testes de compilação |
+
+Relatório completo: **[`docs/AUDITORIA.md`](docs/AUDITORIA.md)**.
+
+---
+
+## Testes e CI
+
+```bash
+# Backend
+pip install --require-hashes -r backend/requirements.lock
+pip install --require-hashes -r backend/requirements-dev.lock
+python -m pytest backend/tests -q
+
+# Frontend
+cd frontend && npm run test && npm run build
+
+# .NET
+dotnet build RatAnalyzer.sln -c Release
+```
+
+CI automático (GitHub Actions): `.github/workflows/ci.yml`:
+
+| Job | O que valida |
+|-----|----------------|
+| **backend** | `pip install --require-hashes` a partir de `requirements.lock`; **61** testes pytest; diff de locks |
+| **frontend** | `npm ci`, lint, typecheck, **29** testes Vitest, build |
+| **dotnet** | Build `RatAnalyzer.sln` (WPF + vm-agent + benign-vm-test) |
+| **ps1-encoding** | UTF-8 BOM nos scripts PowerShell |
+| **powershell** | Sintaxe dos `.ps1` no Windows |
+
+Ver também [`docs/ps1-scripts.md`](docs/ps1-scripts.md) e [`docs/AUDITORIA.md`](docs/AUDITORIA.md).
 
 ---
 
@@ -203,12 +278,16 @@ está em **[`docs/sandbox-hyperv-setup.md`](docs/sandbox-hyperv-setup.md)**.
 
 | Documento | Conteúdo |
 |-----------|----------|
-| [`docs/README.md`](docs/README.md) | Índice da documentação |
-| [`docs/sandbox-hyperv-setup.md`](docs/sandbox-hyperv-setup.md) | Guia completo da análise dinâmica e sandbox Hyper-V |
-| [`docs/ESPECIFICACOES-ARQUITETURA-VM-DOCKER.md`](docs/ESPECIFICACOES-ARQUITETURA-VM-DOCKER.md) | Especificações de arquitetura VM + Docker |
-| [`docs/diagrams/`](docs/diagrams/) | Diagramas PUML (sequência e atividade, estática e dinâmica) |
-| [`scripts/hyperv-sandbox/README.md`](scripts/hyperv-sandbox/README.md) | Fluxo serial Hyper-V passo a passo |
-| [`scripts/hyperv-sandbox/SERIAL_REPORT_PROTOCOL.md`](scripts/hyperv-sandbox/SERIAL_REPORT_PROTOCOL.md) | Especificação SBXREP1 (COM1 / Named Pipe) |
+| [`docs/AUDITORIA.md`](docs/AUDITORIA.md) | **Auditoria concluída (100%)** — resumo, checklist de deploy, testes |
+| [`docs/production-secrets.md`](docs/production-secrets.md) | Segredos e modo produção (`RATANALYZER_API_TOKEN`, etc.) |
+| [`docs/README.md`](docs/README.md) | Índice (dois caminhos dinâmicos, arquivo histórico) |
+| [`docs/sandbox-hyperv-setup.md`](docs/sandbox-hyperv-setup.md) | **Caminho A:** VM Agent + driver `hyperv` |
+| [`docs/ESPECIFICACOES-ARQUITETURA-VM-DOCKER.md`](docs/ESPECIFICACOES-ARQUITETURA-VM-DOCKER.md) | Desenho alternativo Linux+Docker (não implementado) |
+| [`docs/archive/PROJECT_ANALYSIS_DOCUMENT.md`](docs/archive/PROJECT_ANALYSIS_DOCUMENT.md) | Documento histórico de desenho |
+| [`docs/diagrams/`](docs/diagrams/) | Diagramas PUML |
+| [`scripts/hyperv-sandbox/README.md`](scripts/hyperv-sandbox/README.md) | **Caminho B:** pipeline PowerShell serial |
+| [`scripts/hyperv-sandbox/SERIAL_REPORT_PROTOCOL.md`](scripts/hyperv-sandbox/SERIAL_REPORT_PROTOCOL.md) | Protocolo `START_OF_REPORT` (implementado) |
+| [`yara_rules/README.md`](yara_rules/README.md) | Regras YARA heurísticas (educativas) |
 
 ---
 
@@ -217,7 +296,8 @@ está em **[`docs/sandbox-hyperv-setup.md`](docs/sandbox-hyperv-setup.md)**.
 **Limitações**
 - A análise dinâmica depende de infraestrutura de sandbox (VM + vm-agent/serial + configuração).
 - O driver `stub` (default) não executa o ficheiro; valida apenas o fluxo end-to-end.
-- A deobfuscação é básica e o conjunto de regras YARA incluído é introdutório.
+- A deobfuscação é básica; as regras YARA v2 são heurísticas educativas (confirmar com análise estática/dinâmica).
+- Afinamento fino das regras YARA por família de malware requer amostras reais no laboratório.
 
 **Roadmap**
 - [ ] Integração com IDA (Ghidra já integrado)
@@ -231,4 +311,4 @@ está em **[`docs/sandbox-hyperv-setup.md`](docs/sandbox-hyperv-setup.md)**.
 
 ## Licença
 
-Projeto desenvolvido no âmbito académico (licenciatura). Sugestões e melhorias são bem-vindas.
+[MIT](LICENSE) — projeto desenvolvido no âmbito académico (licenciatura). Sugestões e melhorias são bem-vindas.

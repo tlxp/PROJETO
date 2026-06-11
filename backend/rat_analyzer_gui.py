@@ -272,8 +272,15 @@ class RATAnalyzerApp:
             import windnd
             windnd.hook_dropfiles(self.root, func=self._on_drop)
         except ImportError:
-            # Sem windnd: apenas botão "Procurar"
-            self.drop_label.config(text="Clique em 'Procurar ficheiro' para selecionar .cs, .exe ou .dll")
+            # Sem windnd (dependência opcional da GUI): apenas botão "Procurar".
+            # Para ativar drag-and-drop: pip install -r requirements-gui.txt
+            self.drop_label.config(
+                text=(
+                    "Drag-and-drop indisponível (módulo 'windnd' em falta — "
+                    "instale com: pip install -r requirements-gui.txt).\n"
+                    "Clique em 'Procurar ficheiro' para selecionar .cs, .exe ou .dll"
+                )
+            )
 
     def _on_drop(self, files: list[str]):
         if not files:

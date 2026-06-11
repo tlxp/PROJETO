@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Lança Run-MalwareAnalysis.ps1 num processo PowerShell separado (guest).
 .DESCRIPTION
@@ -151,7 +151,7 @@ try {
     $psi2.CreateNoWindow   = $true
 
     $p = [System.Diagnostics.Process]::Start($psi2)
-    if (-not $p) { throw "Process.Start nao devolveu processo." }
+    if (-not $p) { throw "Process.Start não devolveu processo." }
 
     # Breve pausa para o processo filho estabilizar antes de fechar o pipe VMBus.
     Start-Sleep -Seconds 1

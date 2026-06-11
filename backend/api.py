@@ -4,16 +4,17 @@ Expõe um endpoint de upload e análise para o frontend (drop-n-analyze) e para 
 """
 
 import os
+import secrets
 import sys
 import uuid
 import tempfile
 import shutil
 import time
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Iterable, List, Tuple
-
-from fastapi import FastAPI, File, UploadFile, HTTPException, Query, Request
+import anyio.to_thread
+from fastapi import Depends, FastAPI, File, Header, UploadFile, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
@@ -23,6 +24,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 import config
+from security_config import api_token_configured, require_api_token_enforced, validate_startup_secrets
 from artifact_naming import short_stem, short_filename
 from rat_analyzer import RATAnalyzer
 from analysis_jobs import (
@@ -33,10 +35,18 @@ from analysis_jobs import (
     get_job,
     get_job_payload,
     should_compose_decompilation_fallback,
-    summarize_c_code,
+    summarize_c_code_payload,
 )
+from modules.pseudo_c_highlighter import realign_flagged_functions_for_payload
 import job_store
 from storage_maintenance import estimate_storage, cleanup_job_artifacts, archive_cold_jobs, purge_all_storage, read_text_artifact_from_job
+from upload_security import (
+    UPLOAD_CHUNK_SIZE,
+    get_max_upload_bytes,
+    is_valid_job_id,
+    resolve_safe_path,
+    sanitize_upload_filename,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,21 +54,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger("rat_analyzer_api")
 
-
-app = FastAPI(title="RAT Analyzer API v2", version="1.0.0")
-
-# CORS para o frontend React (Vite normalmente em localhost:8080 ou 5173)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:8080", "http://localhost:5173", "http://127.0.0.1:8080", "http://127.0.0.1:5173"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+ALLOWED_UPLOAD_EXTENSIONS = (".exe", ".dll", ".cs")
 
 
-@app.on_event("startup")
-async def _startup():
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    validate_startup_secrets()
+
     # Garantir DB/migrações e diretórios de data.
     try:
         job_store.init_db()
@@ -72,11 +74,126 @@ async def _startup():
     try:
         cleanup_job_artifacts(config.JOBS_RETENTION_DAYS, config.JOBS_MAX_COUNT)
     except Exception:
-        pass
+        logger.exception("Falha na limpeza de artefactos no startup (continua o arranque).")
     try:
         archive_cold_jobs(config.COLD_ARCHIVE_DAYS)
     except Exception:
-        pass
+        logger.exception("Falha no arquivo frio de jobs no startup (continua o arranque).")
+
+    yield
+
+
+app = FastAPI(title="RAT Analyzer API v2", version="1.0.0", lifespan=_lifespan)
+
+
+def _cors_origins() -> list[str]:
+    """Origens CORS via env RATANALYZER_CORS_ORIGINS (lista separada por vírgulas)."""
+    raw = (os.environ.get("RATANALYZER_CORS_ORIGINS") or "").strip()
+    if raw:
+        return [o.strip() for o in raw.split(",") if o.strip()]
+    return [
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        "http://localhost:5173",
+    ]
+
+
+# CORS para o frontend React (Vite normalmente em localhost:8080 ou 5173)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins(),
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Accept", "X-API-Token"],
+)
+
+
+def require_api_token(
+    x_api_token: str | None = Header(default=None, alias="X-API-Token"),
+) -> None:
+    """
+    Proteção opcional de endpoints que aceitam uploads ou alteram estado.
+
+    Se RATANALYZER_API_TOKEN estiver definido, o header X-API-Token tem de
+    coincidir (comparação em tempo constante). Sem a env definida, o
+    comportamento actual mantém-se (sem autenticação — apenas dev local).
+    """
+    token = (os.environ.get("RATANALYZER_API_TOKEN") or "").strip()
+    if not token:
+        if require_api_token_enforced():
+            raise HTTPException(
+                503,
+                "Token de API obrigatório mas RATANALYZER_API_TOKEN não está configurado.",
+            )
+        return
+    provided = (x_api_token or "").strip()
+    if not provided or not secrets.compare_digest(provided.encode("utf-8"), token.encode("utf-8")):
+        raise HTTPException(401, "Token de API inválido ou em falta (header X-API-Token).")
+
+
+def _require_valid_job_id(job_id: str) -> str:
+    """Valida job_id como UUID v4; devolve 400 se inválido."""
+    if not is_valid_job_id(job_id):
+        raise HTTPException(400, "job_id inválido (esperado UUID v4).")
+    return job_id
+
+
+def _sanitize_upload_name(raw_name: str | None) -> str:
+    """Sanitiza o filename de um upload; devolve 400 se for inseguro/ inválido."""
+    try:
+        return sanitize_upload_filename(raw_name)
+    except ValueError as e:
+        logger.warning("Upload rejeitado: filename inseguro (%r): %s", raw_name, e)
+        raise HTTPException(400, "Nome de ficheiro inválido.")
+
+
+def _check_content_length(request: Request, max_bytes: int) -> None:
+    """Rejeita cedo pedidos cujo Content-Length excede o limite (quando presente)."""
+    raw = request.headers.get("content-length")
+    if not raw:
+        return
+    try:
+        declared = int(raw)
+    except ValueError:
+        return
+    # Margem para overhead do multipart (boundaries/headers)
+    if declared > max_bytes + UPLOAD_CHUNK_SIZE:
+        raise HTTPException(413, f"Ficheiro excede o limite de upload ({max_bytes // (1024 * 1024)} MB).")
+
+
+async def _stream_upload_to_path(file: UploadFile, target_path: Path, max_bytes: int) -> int:
+    """Escreve o upload em disco por chunks; devolve 413 se exceder o limite."""
+    total = 0
+    try:
+        with open(target_path, "wb") as out:
+            while True:
+                chunk = await file.read(UPLOAD_CHUNK_SIZE)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > max_bytes:
+                    raise HTTPException(413, f"Ficheiro excede o limite de upload ({max_bytes // (1024 * 1024)} MB).")
+                out.write(chunk)
+    except HTTPException:
+        try:
+            target_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+    return total
+
+
+async def _read_upload_bytes(file: UploadFile, max_bytes: int) -> bytes:
+    """Lê o upload por chunks com limite de tamanho; devolve 413 se exceder."""
+    buf = bytearray()
+    while True:
+        chunk = await file.read(UPLOAD_CHUNK_SIZE)
+        if not chunk:
+            break
+        buf.extend(chunk)
+        if len(buf) > max_bytes:
+            raise HTTPException(413, f"Ficheiro excede o limite de upload ({max_bytes // (1024 * 1024)} MB).")
+    return bytes(buf)
 
 class StaticAnalysisUpload(BaseModel):
     """Payload enviado pelo WPF com um resultado de análise estática já concluído.
@@ -127,79 +244,39 @@ def _read_file_safe(path: str | None, encoding: str = "utf-8", errors: str = "re
         return ""
 
 
-def _normalize_indicators(flagged_indicators: Iterable[str]) -> List[str]:
-    """Normaliza a lista de indicadores (trim, remove vazios/duplicados)."""
-    seen = set()
-    out: List[str] = []
-    for raw in flagged_indicators or []:
-        s = (raw or "").strip()
-        if not s or s in seen:
-            continue
-        seen.add(s)
-        out.append(s)
-    return out
-
-
-def _build_windows_around_indicators(lines: List[str], indicators: List[str], radius: int) -> List[Tuple[int, int]]:
-    """
-    Devolve intervalos de linhas [start, end] que cobrem janelas em volta de cada ocorrência
-    de qualquer indicador. Usa índices 0-based.
-    """
-    n = len(lines)
-    ranges: List[Tuple[int, int]] = []
-    if n == 0 or not indicators:
-        return ranges
-
-    for indicator in indicators:
-        for i, line in enumerate(lines):
-            if indicator in line:
-                start = max(0, i - radius)
-                end = min(n - 1, i + radius)
-                ranges.append((start, end))
-
-    if not ranges:
-        return []
-
-    # Fundir intervalos sobrepostos/adjacentes
-    ranges.sort()
-    merged: List[Tuple[int, int]] = []
-    cur_start, cur_end = ranges[0]
-    for s, e in ranges[1:]:
-        if s <= cur_end + 1:
-            cur_end = max(cur_end, e)
-        else:
-            merged.append((cur_start, cur_end))
-            cur_start, cur_end = s, e
-    merged.append((cur_start, cur_end))
-    return merged
-
-
-@app.post("/api/analyze")
+@app.post("/api/analyze", dependencies=[Depends(require_api_token)])
 async def analyze_file(request: Request, file: UploadFile = File(...)):
     """
     Recebe um ficheiro (.exe, .dll, .cs), executa a análise e devolve
     relatório, código C#/C e assembly/IL para exibir no frontend.
     """
     client_host = request.client.host if request.client else "unknown"
-    # Validar extensão
-    name = file.filename or "file"
+    # Sanitizar nome e validar extensão
+    name = _sanitize_upload_name(file.filename)
     ext = Path(name).suffix.lower()
-    if ext not in (".exe", ".dll", ".cs"):
+    if ext not in ALLOWED_UPLOAD_EXTENSIONS:
         logger.warning("Rejeitado ficheiro %s (%s) de %s: extensão não suportada", name, ext, client_host)
         raise HTTPException(400, "Apenas ficheiros .exe, .dll ou .cs são suportados.")
 
-    suffix = ext
-    prefix = "rat_"
-    tmp_dir = Path(tempfile.mkdtemp(prefix=prefix))
-    target_path = tmp_dir / name
+    max_bytes = get_max_upload_bytes()
+    _check_content_length(request, max_bytes)
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="rat_"))
+    try:
+        target_path = resolve_safe_path(tmp_dir, name)
+    except ValueError:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise HTTPException(400, "Nome de ficheiro inválido.")
 
     logger.info("Recebido pedido /api/analyze de %s para ficheiro %s (ext=%s)", client_host, name, ext)
     try:
         try:
-            contents = await file.read()
-            target_path.write_bytes(contents)
-        except Exception as e:
-            raise HTTPException(500, f"Erro ao guardar ficheiro: {e}")
+            await _stream_upload_to_path(file, target_path, max_bytes)
+        except HTTPException:
+            raise
+        except Exception:
+            logger.exception("Erro ao guardar upload de %s em %s", name, target_path)
+            raise HTTPException(500, "Erro ao guardar o ficheiro enviado.")
 
         start_time = time.perf_counter()
         try:
@@ -217,16 +294,17 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
                 log_callback=log_cb,
             )
             logger.info("Iniciar análise estática para %s", target_path)
-            results = analyzer.analyze()
+            # Correr a análise (pesada e síncrona) fora do event loop
+            results = await anyio.to_thread.run_sync(analyzer.analyze)
             elapsed = time.perf_counter() - start_time
             logger.info("Análise terminada para %s em %.1f segundos (risk_score=%s, risk_level=%s)",
                         name, elapsed, results.get("risk_score"), results.get("risk_level"))
-        except FileNotFoundError as e:
-            logger.error("Erro FileNotFound durante análise de %s: %s", name, e)
-            raise HTTPException(400, str(e))
-        except Exception as e:
+        except FileNotFoundError:
+            logger.exception("Erro FileNotFound durante análise de %s", name)
+            raise HTTPException(400, "Ficheiro não encontrado durante a análise.")
+        except Exception:
             logger.exception("Erro inesperado durante análise de %s", name)
-            raise HTTPException(500, f"Erro na análise: {str(e)}")
+            raise HTTPException(500, "Erro interno na análise.")
 
         # Ler last_analysis.json para obter caminhos do relatório e códigos
         last_path = output_dir / "last_analysis.json"
@@ -258,7 +336,9 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
             if not c_code and should_compose_decompilation_fallback(last):
                 c_code = compose_fallback_descompilation_ccode(last)
             # Aplicar resumo para evitar payloads gigantes no frontend
-            c_code = summarize_c_code(c_code, flagged_indicators)
+            c_code, flagged_functions = summarize_c_code_payload(
+                c_code, flagged_indicators, flagged_functions
+            )
 
             # IL / Bytecode: assembly (desmontagem) ou mensagem
             disasm = last.get("disassembly_file")
@@ -286,8 +366,8 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-@app.post("/api/analyze_stream")
-async def analyze_file_stream(file: UploadFile = File(...)):
+@app.post("/api/analyze_stream", dependencies=[Depends(require_api_token)])
+async def analyze_file_stream(request: Request, file: UploadFile = File(...)):
     """
     Versão com streaming: envia logs em tempo (quase) real + resultado final em NDJSON.
     Cada linha é um JSON com:
@@ -299,19 +379,30 @@ async def analyze_file_stream(file: UploadFile = File(...)):
     import queue
     import threading
 
-    name = file.filename or "file"
+    name = _sanitize_upload_name(file.filename)
     ext = Path(name).suffix.lower()
-    if ext not in (".exe", ".dll", ".cs"):
+    if ext not in ALLOWED_UPLOAD_EXTENSIONS:
         raise HTTPException(400, "Apenas ficheiros .exe, .dll ou .cs são suportados.")
 
+    max_bytes = get_max_upload_bytes()
+    _check_content_length(request, max_bytes)
+
     tmp_dir = Path(tempfile.mkdtemp(prefix="rat_stream_"))
-    target_path = tmp_dir / name
+    try:
+        target_path = resolve_safe_path(tmp_dir, name)
+    except ValueError:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise HTTPException(400, "Nome de ficheiro inválido.")
 
     try:
-        contents = await file.read()
-        target_path.write_bytes(contents)
-    except Exception as e:
-        raise HTTPException(500, f"Erro ao guardar ficheiro: {e}")
+        await _stream_upload_to_path(file, target_path, max_bytes)
+    except HTTPException:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise
+    except Exception:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        logger.exception("Erro ao guardar upload de %s em %s", name, target_path)
+        raise HTTPException(500, "Erro ao guardar o ficheiro enviado.")
 
     output_dir = tmp_dir / "out"
     output_dir.mkdir(exist_ok=True)
@@ -368,7 +459,9 @@ async def analyze_file_stream(file: UploadFile = File(...)):
                 if not c_code and should_compose_decompilation_fallback(last):
                     c_code = compose_fallback_descompilation_ccode(last)
                 # Aplicar resumo também no modo streaming
-                c_code = summarize_c_code(c_code, flagged_indicators)
+                c_code, flagged_functions = summarize_c_code_payload(
+                    c_code, flagged_indicators, flagged_functions
+                )
 
                 disasm = last.get("disassembly_file")
                 if disasm:
@@ -393,10 +486,12 @@ async def analyze_file_stream(file: UploadFile = File(...)):
                 "flaggedFunctions": flagged_functions,
             }
             q.put(payload)
-        except FileNotFoundError as e:
-            q.put({"type": "error", "message": str(e)})
-        except Exception as e:
-            q.put({"type": "error", "message": f"Erro na análise: {e}"})
+        except FileNotFoundError:
+            logger.exception("Ficheiro não encontrado durante análise (stream) de %s", name)
+            q.put({"type": "error", "message": "Ficheiro não encontrado durante a análise."})
+        except Exception:
+            logger.exception("Erro inesperado durante análise (stream) de %s", name)
+            q.put({"type": "error", "message": "Erro interno na análise."})
         finally:
             q.put(None)
             shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -419,8 +514,9 @@ async def analyze_file_stream(file: UploadFile = File(...)):
     return StreamingResponse(streamer(), media_type="application/x-ndjson")
 
 
-@app.post("/api/analysis")
+@app.post("/api/analysis", dependencies=[Depends(require_api_token)])
 async def submit_analysis(
+    request: Request,
     file: UploadFile = File(...),
     analysis_type: AnalysisType = Query(
         AnalysisType.STATIC,
@@ -436,15 +532,21 @@ async def submit_analysis(
       - A análise dinâmica está ligada, por agora, a um stub onde o
         orquestrador de VMs será implementado.
     """
-    name = file.filename or "file"
+    name = _sanitize_upload_name(file.filename)
     ext = Path(name).suffix.lower()
-    if ext not in (".exe", ".dll", ".cs"):
+    if ext not in ALLOWED_UPLOAD_EXTENSIONS:
         raise HTTPException(400, "Apenas ficheiros .exe, .dll ou .cs são suportados.")
 
+    max_bytes = get_max_upload_bytes()
+    _check_content_length(request, max_bytes)
+
     try:
-        contents = await file.read()
-    except Exception as e:  # noqa: BLE001
-        raise HTTPException(500, f"Erro ao ler ficheiro: {e}")
+        contents = await _read_upload_bytes(file, max_bytes)
+    except HTTPException:
+        raise
+    except Exception:  # noqa: BLE001
+        logger.exception("Erro ao ler upload de %s", name)
+        raise HTTPException(500, "Erro ao ler o ficheiro enviado.")
 
     logger.info(
         "Pedido /api/analysis recebido: file=%s analysis_type=%s",
@@ -468,7 +570,7 @@ async def submit_analysis(
     }
 
 
-@app.post("/api/analysis/upload_static")
+@app.post("/api/analysis/upload_static", dependencies=[Depends(require_api_token)])
 async def upload_static_analysis(payload: StaticAnalysisUpload) -> dict:
     """Permite que um cliente (por exemplo, o WPF) publique um resultado de
     análise estática já concluído e receba um jobId compatível com
@@ -531,15 +633,20 @@ async def upload_static_analysis(payload: StaticAnalysisUpload) -> dict:
 
     obfuscation_indicator_count = int(sum(obf_summary.values())) if obf_summary else 0
 
+    c_code = payload.cCode or ""
+    flagged_functions = realign_flagged_functions_for_payload(
+        c_code, payload.flaggedFunctions or []
+    )
+
     static_result = {
         "report": payload.report or "",
-        "cCode": payload.cCode or "",
+        "cCode": c_code,
         "ilCode": payload.ilCode or "",
         "fileName": payload.fileName,
         "riskScore": int(payload.riskScore or 0),
         "riskLevel": payload.riskLevel or "",
         "flaggedIndicators": payload.flaggedIndicators or [],
-        "flaggedFunctions": payload.flaggedFunctions or [],
+        "flaggedFunctions": flagged_functions,
         "obfuscatedSnippetsFile": obf_snippets,
         "obfuscatedSnippetsDeobfuscatedFile": obf_snippets_deob,
         "obfuscationIndicatorCount": obfuscation_indicator_count,
@@ -551,7 +658,7 @@ async def upload_static_analysis(payload: StaticAnalysisUpload) -> dict:
         "decompiled_c_file": str(c_code_path),
         "disassembly_file": str(il_code_path),
         "flagged_indicators": payload.flaggedIndicators or [],
-        "flagged_functions": payload.flaggedFunctions or [],
+        "flagged_functions": flagged_functions,
         "obfuscated_snippets_file": obf_snippets,
         "obfuscated_snippets_deobfuscated_file": obf_snippets_deob,
         "obfuscated_snippets_pseudoc_file": "",
@@ -606,7 +713,8 @@ async def upload_static_analysis(payload: StaticAnalysisUpload) -> dict:
 
 
 def _get_job_output_dir(job_id: str) -> Path:
-    """Diretório de saída do job (sandbox_jobs/{job_id}/out)."""
+    """Diretório de saída do job (sandbox_jobs/{job_id}/out). Valida o job_id."""
+    _require_valid_job_id(job_id)
     return Path(config.SANDBOX_JOBS_DIR) / job_id / "out"
 
 
@@ -620,6 +728,7 @@ async def get_obfuscated_snippets_artifact(
     Valida que o path está dentro do output_dir do job (segurança).
     """
     import json
+    _require_valid_job_id(job_id)
     out_dir = _get_job_output_dir(job_id)
     last_path = out_dir / "last_analysis.json"
     if not last_path.exists():
@@ -726,6 +835,7 @@ async def get_analysis_status(job_id: str) -> dict:
     """
     Devolve o estado e os resultados (quando disponíveis) de um job de análise.
     """
+    _require_valid_job_id(job_id)
     logger.info("Pedido /api/analysis/%s recebido.", job_id)
     payload = get_job_payload(job_id)
     if not payload:
@@ -746,11 +856,14 @@ async def list_analyses(limit: int = 50, offset: int = 0) -> dict:
     """
     Lista histórico de análises (persistente em SQLite).
     """
+    limit = min(max(1, limit), 200)
+    offset = max(0, offset)
     try:
         items = job_store.list_jobs(limit=limit, offset=offset)
         return {"items": items, "limit": limit, "offset": offset}
-    except Exception as e:  # noqa: BLE001
-        raise HTTPException(500, f"Erro ao listar análises: {e}")
+    except Exception:  # noqa: BLE001
+        logger.exception("Erro ao listar análises (limit=%s, offset=%s)", limit, offset)
+        raise HTTPException(500, "Erro ao listar análises.")
 
 
 @app.get("/api/health")
@@ -786,7 +899,7 @@ class StorageCleanupRequest(BaseModel):
     keepMostRecent: int = 200
 
 
-@app.post("/api/storage/cleanup")
+@app.post("/api/storage/cleanup", dependencies=[Depends(require_api_token)])
 async def storage_cleanup(req: StorageCleanupRequest) -> dict:
     """
     Limpeza segura (soft) de artefactos antigos: remove apenas conteúdo de disco
@@ -800,15 +913,26 @@ class StorageArchiveRequest(BaseModel):
     olderThanDays: int = 30
 
 
-@app.post("/api/storage/archive")
+@app.post("/api/storage/archive", dependencies=[Depends(require_api_token)])
 async def storage_archive(req: StorageArchiveRequest) -> dict:
     """Arquivo frio: zip de out/ e remoção do diretório original."""
     result = archive_cold_jobs(req.olderThanDays)
     return {"ok": True, "result": result}
 
 
-@app.post("/api/storage/purge")
+@app.post("/api/storage/purge", dependencies=[Depends(require_api_token)])
 async def storage_purge() -> dict:
-    """Limpeza completa: apaga todo o histórico e artefactos persistidos em DATA_DIR."""
+    """Limpeza completa: apaga todo o histórico e artefactos persistidos em DATA_DIR.
+
+    Bloqueado (409) enquanto existirem jobs em execução, para não apagar
+    diretórios/DB em uso pela pipeline.
+    """
+    try:
+        running = job_store.count_jobs_by_status("running")
+    except Exception:
+        logger.exception("Falha ao verificar jobs em execução antes do purge.")
+        running = 0
+    if running > 0:
+        raise HTTPException(409, f"Existem {running} job(s) em execução. Aguarde a conclusão antes de purgar.")
     result = purge_all_storage()
     return {"ok": True, "result": result}

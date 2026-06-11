@@ -478,3 +478,65 @@ def build_flagged_functions(
         )
     )
     return flagged_funcs
+
+
+def realign_flagged_functions_for_payload(
+    c_code: str,
+    flagged_functions: List[Dict[str, Any]] | None,
+) -> List[Dict[str, Any]]:
+    """
+    Re-alinha funções suspeitas ao texto de pseudo-C efectivamente enviado ao frontend.
+    Útil quando o payload já foi truncado mas os ranges ainda referem o ficheiro completo.
+    """
+    if not c_code or not flagged_functions:
+        return []
+
+    parsed = _parse_pseudo_c_functions(c_code)
+    if not parsed:
+        return []
+
+    by_name: Dict[str, List[Dict[str, Any]]] = {}
+    for fn in parsed:
+        by_name.setdefault(str(fn.get("name") or ""), []).append(fn)
+
+    total_lines = len(c_code.splitlines())
+    realigned: List[Dict[str, Any]] = []
+
+    for raw in flagged_functions:
+        if not isinstance(raw, dict):
+            continue
+        name = str(raw.get("name") or "")
+        try:
+            orig_start = int(raw.get("startLine", 0))
+            orig_end = int(raw.get("endLine", 0))
+        except (TypeError, ValueError):
+            orig_start = orig_end = 0
+
+        if orig_start > 0 and orig_end >= orig_start and orig_end <= total_lines:
+            realigned.append(dict(raw))
+            continue
+
+        candidates = by_name.get(name, [])
+        if not candidates and name:
+            indicators = [s for s in (raw.get("indicators") or []) if isinstance(s, str) and s.strip()]
+            body_lines = c_code.splitlines()
+            for fn in parsed:
+                start = int(fn.get("startLine", 0))
+                end = int(fn.get("endLine", 0))
+                if start <= 0 or end < start:
+                    continue
+                body = "\n".join(body_lines[start - 1 : end])
+                if any(ind in body for ind in indicators):
+                    candidates = [fn]
+                    break
+
+        if not candidates:
+            continue
+
+        best = min(candidates, key=lambda fn: abs(int(fn.get("startLine", 0)) - orig_start))
+        updated = dict(raw)
+        updated["startLine"] = int(best.get("startLine", 1))
+        updated["endLine"] = int(best.get("endLine", updated["startLine"]))
+        realigned.append(updated)
+
+    return realigned

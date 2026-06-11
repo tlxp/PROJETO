@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -19,7 +19,7 @@ class StubVMDriver:
     name = "stub"
 
     def run(self, job: "AnalysisJob") -> DynamicAnalysisOutput:
-        started_at = datetime.utcnow().isoformat() + "Z"
+        started_at = datetime.now(timezone.utc).isoformat()
         sample_name = job.sample_path.name
 
         behavior: Dict[str, Any] = {
@@ -44,7 +44,7 @@ class StubVMDriver:
             "privilegeEscalation": [],
             "sensitiveApiCalls": [],
             "startedAt": started_at,
-            "finishedAt": datetime.utcnow().isoformat() + "Z",
+            "finishedAt": datetime.now(timezone.utc).isoformat(),
         }
 
         return DynamicAnalysisOutput(

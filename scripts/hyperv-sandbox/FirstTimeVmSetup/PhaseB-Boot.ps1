@@ -1,4 +1,4 @@
-# [1/5] Parar VM para estado limpo
+﻿# [1/5] Parar VM para estado limpo
 Write-LogHost '[1/5] A parar a VM (estado limpo)...'
 if ($vm.State -ne "Off") {
     Stop-VM -Name $VMName -Force -ErrorAction SilentlyContinue
@@ -43,15 +43,15 @@ Write-LogHost "       A configurar rede e aceitar popups automaticamente..."
 
 $autoAcceptScript = @'
 try {
-    # Garantir servicos essenciais (NLA/DHCP/BITS) -- em instalacoes novas podem estar atrasados
+    # Garantir serviços essenciais (NLA/DHCP/BITS) -- em instalacoes novas podem estar atrasados
     foreach ($svcName in @("NlaSvc","Dhcp","Dnscache","BITS","AppXSvc","StateRepository")) {
         try {
             $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
             if ($svc -and $svc.Status -ne "Running") {
                 Start-Service -Name $svcName -ErrorAction SilentlyContinue
-                Write-Host "Servico iniciado: $svcName"
+                Write-Host "Serviço iniciado: $svcName"
             }
-        } catch { Write-Host "AVISO servico ${svcName}: $_" }
+        } catch { Write-Host "AVISO serviço ${svcName}: $_" }
     }
 
     # Forcar DHCP/renovacao
@@ -75,22 +75,22 @@ try {
     # Marcar OOBE como concluido
     reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" /v PrivacyConsentStatus /t REG_DWORD /d 1 /f 2>&1 | Out-Null
 
-    # Garantir que o servico AppX esta configurado para inicio automatico
+    # Garantir que o serviço AppX esta configurado para início automático
     Set-Service -Name AppXSvc -StartupType Automatic -ErrorAction SilentlyContinue
     Start-Service -Name AppXSvc -ErrorAction SilentlyContinue
 
-    Write-Host "Configuracao automatica de rede/servicos concluida."
+    Write-Host "Configuração automática de rede/serviços concluida."
 } catch {
-    Write-Host "Erro na configuracao automatica: $_"
+    Write-Host "Erro na configuração automática: $_"
 }
 '@
 
 try {
     $autoResult = Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock ([scriptblock]::Create($autoAcceptScript))
     $autoResult | ForEach-Object { Write-LogHost "         $_" }
-    Write-LogHost "       Configuracao automatica aplicada."
+    Write-LogHost "       Configuração automática aplicada."
 } catch {
-    Write-LogWarning "       Nao foi possivel configurar rede automaticamente: $_"
+    Write-LogWarning "       Não foi possível configurar rede automaticamente: $_"
 }
 
 Start-Sleep -Seconds 1

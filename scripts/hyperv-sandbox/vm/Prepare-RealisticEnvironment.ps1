@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Corre DENTRO da VM. Prepara um ambiente "realista" para análise (sem instalar aplicações).
 .DESCRIPTION
@@ -88,7 +88,7 @@ $analysisDir = $WorkDir
 
 # Criar documentos "isca" para o ambiente parecer usado
 $decoyDocs = @(
-    @{ Path = "$env:USERPROFILE\Documents\relatorio_q3_2024.txt"; Content = "Relatorio Q3 2024`nTotal vendas: 1.250.000 EUR`nMargem: 18,3%" },
+    @{ Path = "$env:USERPROFILE\Documents\relatorio_q3_2024.txt"; Content = "Relatório Q3 2024`nTotal vendas: 1.250.000 EUR`nMargem: 18,3%" },
     @{ Path = "$env:USERPROFILE\Documents\passwords_backup.txt";  Content = "# Notas pessoais - NÃO PARTILHAR`nEmail: analyst@empresa.pt`nVPN: changeme123" },
     @{ Path = "$env:USERPROFILE\Desktop\notas.txt";               Content = "Reunião amanhã às 10h. Ver email do João sobre contrato." }
 )

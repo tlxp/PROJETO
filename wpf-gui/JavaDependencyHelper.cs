@@ -69,6 +69,7 @@ internal static class JavaDependencyHelper
         var probe = await ProbeJdkAsync(ct).ConfigureAwait(false);
         if (probe.Ok && probe.MajorVersion >= MinimumJdkMajor)
         {
+            VerifyJavaIntegrityIfConfigured(log);
             log($"[OK] Java (JDK {probe.MajorVersion}+): {probe.VersionLine}");
             if (!string.IsNullOrEmpty(probe.JavaHomeFromEnv))
                 log($"[INFO] JAVA_HOME: {probe.JavaHomeFromEnv}");
@@ -136,6 +137,7 @@ internal static class JavaDependencyHelper
                     "JDK 21 ainda não ficou disponível após a instalação. " +
                     "Reinicie o terminal ou o PC e confirme: java -version");
 
+            VerifyJavaIntegrityIfConfigured(log);
             log($"[OK] Java após instalação: {probe.VersionLine}");
 
             Application.Current?.Dispatcher.Invoke(() =>
@@ -162,6 +164,30 @@ internal static class JavaDependencyHelper
     }
 
     private sealed record JdkProbe(bool Ok, int MajorVersion, string VersionLine, string? JavaHomeFromEnv);
+
+    private static void VerifyJavaIntegrityIfConfigured(Action<string> log)
+    {
+        var javaExe = GetResolvedJavaExePath();
+        if (string.IsNullOrEmpty(javaExe))
+            return;
+
+        DownloadIntegrity.LogAndVerifyOptionalEnvSha256(
+            javaExe,
+            DownloadIntegrity.JavaExeSha256Env,
+            log,
+            "Java (java.exe)");
+    }
+
+    private static string? GetResolvedJavaExePath()
+    {
+        foreach (var candidate in EnumerateJavaExeCandidates())
+        {
+            if (File.Exists(candidate))
+                return Path.GetFullPath(candidate);
+        }
+
+        return null;
+    }
 
     private static async Task<JdkProbe> ProbeJdkAsync(CancellationToken ct)
     {

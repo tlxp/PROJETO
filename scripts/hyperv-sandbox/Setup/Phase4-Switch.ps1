@@ -1,4 +1,4 @@
-# Switch de rede isolado
+﻿# Switch de rede isolado
 Write-Host "[4/8] Switch virtual ($SwitchName)..."
 Ensure-VMSwitch -Name $SwitchName
 
@@ -10,10 +10,12 @@ if ($hostAdapter) {
         try {
             New-NetIPAddress -InterfaceIndex $hostAdapter.ifIndex -IPAddress "192.168.100.1" -PrefixLength 24 -ErrorAction Stop | Out-Null
             Write-Host "      IP 192.168.100.1/24 atribuido."
-        } catch { Write-Warning "      Nao foi possivel atribuir IP: $_" }
+        } catch { Write-Warning "      Não foi possível atribuir IP: $_" }
     } else {
         Write-Host "      Adaptador ja tem 192.168.100.1/24."
     }
 } else {
-    Write-Host "      Adaptador do switch nao encontrado (ignorado)."
+    Write-Host "      Adaptador do switch não encontrado (ignorado)."
 }
+
+Ensure-SandboxHostFirewall -SwitchName $SwitchName

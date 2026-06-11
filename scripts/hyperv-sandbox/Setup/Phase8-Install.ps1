@@ -1,5 +1,5 @@
-# Instalação do Windows
-Write-Host "[8/8] Instalacao do Windows..."
+﻿# Instalação do Windows
+Write-Host "[8/8] Instalação do Windows..."
 
 $snap = Get-VMSnapshot -VMName $VMName -Name $SnapshotName -ErrorAction SilentlyContinue
 
@@ -12,7 +12,7 @@ if ($snap) {
     Write-Host "        Checkpoint-VM -Name $VMName -SnapshotName $SnapshotName"
 
 } else {
-    Log "Inicio da instalacao automatica do Windows na VM '$VMName' (Gen$VMGeneration)."
+    Log "Início da instalação automática do Windows na VM '$VMName' (Gen$VMGeneration)."
 
     $vmState = (Get-VM -Name $VMName).State
     if ($vmState -ne "Off") {
@@ -49,7 +49,7 @@ if ($snap) {
         if ($VMGeneration -ne 1) {
             Log "AVISO: VMGeneration=$VMGeneration. O ficheiro customizado é Gen1; usar autounattend 'oficial' gerado." "WARN"
         } elseif (-not (Test-Path -LiteralPath $customUnattendPath)) {
-            Log "AVISO: ficheiro customizado nao encontrado: $customUnattendPath. Usar autounattend 'oficial' gerado." "WARN"
+            Log "AVISO: ficheiro customizado não encontrado: $customUnattendPath. Usar autounattend 'oficial' gerado." "WARN"
         }
 
         $xml = New-Windows10UnattendXml -ComputerName $VMName -UserName $GuestUser -Password $GuestPassword -VMGeneration $VMGeneration
@@ -59,7 +59,7 @@ if ($snap) {
     }
 
     if (-not (Test-Path -LiteralPath $unattendXml)) {
-        throw "autounattend.xml nao foi criado em '$unattendXml'. Abortando."
+        throw "autounattend.xml não foi criado em '$unattendXml'. Abortando."
     }
 
     # Normalizar idioma/locale no autounattend para o idioma do ISO (evita falhas em ISOs não en-US).
@@ -69,18 +69,18 @@ if ($snap) {
             Log "Idioma aplicado ao autounattend.xml: $isoLang"
         }
     } catch {
-        Log "AVISO: Nao foi possivel ajustar idioma no autounattend.xml: $($_.Exception.Message)" "WARN"
+        Log "AVISO: Não foi possível ajustar idioma no autounattend.xml: $($_.Exception.Message)" "WARN"
     }
 
     # NUNCA remover International-Core-WinPE no autounattend custom Gen1: esse bloco inclui
     # SetupUILanguage/UILanguage em windowsPE; sem ele o Setup deixa de aplicar o unattended
-    # correctamente (parece "nao auto-instala") mesmo com ISO en-US.
+    # correctamente (parece "não auto-instala") mesmo com ISO en-US.
     if ($usedSource -eq "official-generated") {
         try {
             Remove-UnattendInternationalSettings -UnattendXmlPath $unattendXml
             Log "International settings removidas do autounattend gerado (compat. ISO / idioma)."
         } catch {
-            Log "AVISO: Nao foi possivel remover international settings do autounattend.xml: $($_.Exception.Message)" "WARN"
+            Log "AVISO: Não foi possível remover international settings do autounattend.xml: $($_.Exception.Message)" "WARN"
         }
     } else {
         Log "Mantendo Microsoft-Windows-International-Core-WinPE no autounattend custom (Gen1 / en-US)."
@@ -93,7 +93,7 @@ if ($snap) {
         $unattendHash = (Get-FileHash -Path $unattendXml -Algorithm SHA256).Hash
         Log "autounattend.xml SHA256: $unattendHash"
     } catch {
-        Log "AVISO: nao foi possivel calcular SHA256 do autounattend.xml: $($_.Exception.Message)" "WARN"
+        Log "AVISO: não foi possível calcular SHA256 do autounattend.xml: $($_.Exception.Message)" "WARN"
     }
 
     if ($VMGeneration -eq 1) {
@@ -115,9 +115,9 @@ if ($snap) {
             Write-Host "      ISO criado: $isoWithUnattend"
             $isoToUse = $isoWithUnattend
         } catch {
-            Log "AVISO: Nao foi possivel criar ISO com autounattend: $($_.Exception.Message). A usar ISO original (instalacao manual necessaria)." "WARN"
-            Write-Warning "      Nao foi possivel criar ISO com autounattend: $($_.Exception.Message)"
-            Write-Warning "      A usar ISO original -- instalacao precisara de intervencao manual."
+            Log "AVISO: Não foi possível criar ISO com autounattend: $($_.Exception.Message). A usar ISO original (instalação manual necessária)." "WARN"
+            Write-Warning "      Não foi possível criar ISO com autounattend: $($_.Exception.Message)"
+            Write-Warning "      A usar ISO original -- instalação precisara de intervencao manual."
             Write-Warning "      Instale o Windows ADK de: https://go.microsoft.com/fwlink/?linkid=2196127"
             $isoToUse = $WindowsIsoPath
         }
@@ -129,7 +129,7 @@ if ($snap) {
         }
         $dvd = Get-VMDvdDrive -VMName $VMName | Select-Object -First 1
         if (-not $dvd -or [string]::IsNullOrWhiteSpace($dvd.Path)) {
-            throw "DVD drive nao configurado em Gen1."
+            throw "DVD drive não configurado em Gen1."
         }
         Log "DVD -> $($dvd.Path)"
         Write-Host "      DVD: $($dvd.ControllerType)($($dvd.ControllerNumber),$($dvd.ControllerLocation)) -> $($dvd.Path)"
@@ -182,8 +182,8 @@ if ($snap) {
                 Dismount-VHD -Path $VHDPath -ErrorAction SilentlyContinue | Out-Null
             }
         } catch {
-            Log "AVISO: Nao foi possivel injetar autounattend.xml: $($_.Exception.Message)" "WARN"
-            Write-Warning "      autounattend.xml nao injetado."
+            Log "AVISO: Não foi possível injetar autounattend.xml: $($_.Exception.Message)" "WARN"
+            Write-Warning "      autounattend.xml não injetado."
         }
 
         # DVD em SCSI (0,1)
@@ -196,7 +196,7 @@ if ($snap) {
         Add-VMDvdDrive -VMName $VMName -ControllerNumber 0 -ControllerLocation 1 -Path $WindowsIsoPath -ErrorAction Stop | Out-Null
         $dvd = Get-VMDvdDrive -VMName $VMName | Where-Object { $_.ControllerNumber -eq 0 -and $_.ControllerLocation -eq 1 } | Select-Object -First 1
         if (-not $dvd -or [string]::IsNullOrWhiteSpace($dvd.Path)) {
-            throw "DVD drive nao criado em SCSI(0,1)."
+            throw "DVD drive não criado em SCSI(0,1)."
         }
         Log "DVD SCSI(0,1) -> $($dvd.Path)"
         Write-Host "      DVD: SCSI(0,1) -> $WindowsIsoPath"
@@ -217,7 +217,7 @@ if ($snap) {
     $dvdInfo  = Get-VMDvdDrive -VMName $VMName | Select-Object -First 1
     $hddInfo  = Get-VMHardDiskDrive -VMName $VMName | Select-Object -First 1
     Write-Host ""
-    Write-Host "      Configuracao final da VM:"
+    Write-Host "      Configuração final da VM:"
     Write-Host "        Generation : Gen$VMGeneration"
     if ($VMGeneration -eq 2) {
         $fw = Get-VMFirmware -VMName $VMName
@@ -228,7 +228,7 @@ if ($snap) {
     Write-Host ""
 
     # Arrancar
-    Write-Host "      A arrancar VM (instalacao pode demorar 15-40 min)..."
+    Write-Host "      A arrancar VM (instalação pode demorar 15-40 min)..."
     $dvdBootPath = $null
     try {
         $dvdBootPath = (Get-VMDvdDrive -VMName $VMName -ErrorAction SilentlyContinue | Select-Object -First 1).Path
@@ -250,10 +250,10 @@ if ($snap) {
         try { $hbOk = Wait-VMHeartbeatOk -VMName $VMName -TimeoutSeconds 120 -LogPath $LogFile -LogIntervalSeconds 5 } catch { }
 
         Write-Warning "      PowerShell Direct ainda não ficou OK."
-        if ($hbOk) { Write-Warning "      Nota: Heartbeat ficou OK, mas o guest ainda nao aceitou logon (PS Direct)." }
+        if ($hbOk) { Write-Warning "      Nota: Heartbeat ficou OK, mas o guest ainda não aceitou logon (PS Direct)." }
         Log "PowerShell Direct timeout. VM continua ligada." "WARN"
         Write-Host ""
-        Write-Host "      Quando a instalacao terminar, execute:"
+        Write-Host "      Quando a instalação terminar, execute:"
         Write-Host "        Stop-VM -Name $VMName -Force"
         Write-Host "        Checkpoint-VM -Name $VMName -SnapshotName $SnapshotName"
     } else {
@@ -261,7 +261,7 @@ if ($snap) {
         if ($unattendHash) {
             Log "Correlacao: autounattend.xml SHA256 usado nesta execucao (Gen$VMGeneration): $unattendHash"
         }
-        Write-Host "      Instalacao concluida. A parar a VM para criar snapshot..."
+        Write-Host "      Instalação concluida. A parar a VM para criar snapshot..."
         try {
             Stop-VM -Name $VMName -Force -ErrorAction Stop | Out-Null
         } catch {
@@ -296,7 +296,7 @@ if ($snap) {
             }
         }
         if ($snapErr) {
-            throw "Nao foi possivel criar o snapshot '$SnapshotName' apos varias tentativas: $($snapErr.Exception.Message)"
+            throw "Não foi possível criar o snapshot '$SnapshotName' apos varias tentativas: $($snapErr.Exception.Message)"
         }
         Write-Host "      Snapshot '$SnapshotName' criado."
         Log "Snapshot '$SnapshotName' criado com sucesso."

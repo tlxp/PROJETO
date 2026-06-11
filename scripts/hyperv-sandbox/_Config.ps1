@@ -8,8 +8,8 @@
                          2 = UEFI (requer ISO com El Torito UEFI válido)
 #>
 
-# Pasta raiz
-$script:PROJETOVM_BasePath = "D:\PROJETOVM"
+# Pasta raiz (sobreponível via PROJETOVM_BasePath)
+$script:PROJETOVM_BasePath = if ($env:PROJETOVM_BasePath) { $env:PROJETOVM_BasePath } else { "D:\PROJETOVM" }
 
 # VM
 $script:PROJETOVM_VMName        = "MalwareSandbox"
@@ -28,8 +28,15 @@ $script:PROJETOVM_WindowsIsoPath      = "D:\ISOs\Windows.iso"
 $script:PROJETOVM_AutoInstallWindows  = $true
 
 # Utilizador criado pela instalação unattended
-$script:PROJETOVM_GuestUser     = "analyst"
-$script:PROJETOVM_GuestPassword = "Analyst123!"
+$script:PROJETOVM_GuestUser = if ($env:PROJETOVM_GuestUser) { $env:PROJETOVM_GuestUser } else { "analyst" }
+if ($env:PROJETOVM_GuestPassword) {
+    $script:PROJETOVM_GuestPassword = $env:PROJETOVM_GuestPassword
+} elseif ($env:PROJETOVM_ALLOW_INSECURE_DEFAULTS -eq '1') {
+    $script:PROJETOVM_GuestPassword = "Analyst123!"
+    Write-Warning "[PROJETOVM] PROJETOVM_ALLOW_INSECURE_DEFAULTS=1 — password de exemplo em uso. Não use em produção."
+} else {
+    throw "[PROJETOVM] PROJETOVM_GuestPassword não definida. Defina a variável de ambiente ou, apenas em dev, PROJETOVM_ALLOW_INSECURE_DEFAULTS=1."
+}
 
 # Pastas derivadas (não editar)
 $script:PROJETOVM_VMPath      = Join-Path $script:PROJETOVM_BasePath "VM"

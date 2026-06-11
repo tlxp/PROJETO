@@ -1,0 +1,3 @@
+# Extra opcional: decompilação nativa para pseudo-C (requer Ghidra 12+ e GHIDRA_INSTALL_DIR)
+# Instalar com: pip install -r requirements-ghidra.lock
+pyghidra>=3.0.0,<4.0

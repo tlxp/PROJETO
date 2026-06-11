@@ -1,0 +1,4 @@
+# Dependências de desenvolvimento e testes
+# Instalar com: pip install -r requirements-dev.lock
+pytest>=8.0,<10.0
+httpx>=0.27,<1.0

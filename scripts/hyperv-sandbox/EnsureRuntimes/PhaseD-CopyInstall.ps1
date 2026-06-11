@@ -26,9 +26,9 @@ foreach ($it in $resolved) {
     Write-LogHost ("  [RUN]  {0}" -f $it.Name)
     try {
         $res = Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
-            param($PathExe, $Args)
+            param($PathExe, $InstallerArgs)
             if (-not (Test-Path -LiteralPath $PathExe)) { return @{ ok = $false; code = -1; msg = "instalador ausente" } }
-            $p = Start-Process -FilePath $PathExe -ArgumentList $Args -Wait -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+            $p = Start-Process -FilePath $PathExe -ArgumentList $InstallerArgs -Wait -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
             if (-not $p) { return @{ ok = $false; code = -2; msg = "falha ao iniciar" } }
             return @{ ok = $true; code = [int]$p.ExitCode; msg = "ok" }
         } -ArgumentList $dst, $it.Args -ErrorAction Stop

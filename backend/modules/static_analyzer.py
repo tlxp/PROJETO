@@ -3,9 +3,13 @@ Módulo de Análise Estática
 Identifica imports suspeitos, strings de C&C, técnicas de evasão
 """
 
-import pefile
+import logging
 import re
 from typing import Dict, List
+
+import pefile
+
+logger = logging.getLogger("rat_analyzer_static")
 
 
 class StaticAnalyzer:
@@ -117,6 +121,7 @@ class StaticAnalyzer:
             )
             results['evasion_techniques'] = self._extract_evasion_from_strings(file_path)
 
+            pe = None
             try:
                 pe = pefile.PE(file_path)
                 # Análise de imports (PE nativo)
@@ -132,14 +137,20 @@ class StaticAnalyzer:
                 results['packer_indicators'] = self._detect_packers(pe)
             except pefile.PEFormatError:
                 pass  # .NET assemblies podem ter formato diferente; strings já foram analisadas
-            
+            finally:
+                if pe is not None:
+                    try:
+                        pe.close()
+                    except Exception:
+                        logger.debug("Falha ao fechar handle pefile.", exc_info=True)
+
         except pefile.PEFormatError as e:
             results['errors'].append(f"Erro ao analisar PE: {e}")
-            print(f"[!] Aviso: Erro ao analisar formato PE: {e}")
+            logger.warning("Erro ao analisar formato PE de %s: %s", file_path, e)
         except Exception as e:
             results['errors'].append(f"Erro inesperado: {e}")
-            print(f"[!] Aviso: Erro na análise estática: {e}")
-        
+            logger.exception("Erro inesperado na análise estática de %s", file_path)
+
         return results
     
     def _analyze_imports(self, pe) -> List[str]:
@@ -182,15 +193,15 @@ class StaticAnalyzer:
                 # Tentar decodificar como ASCII/UTF-8
                 try:
                     text = content.decode('utf-8', errors='ignore')
-                except:
+                except (UnicodeDecodeError, ValueError):
                     text = content.decode('latin-1', errors='ignore')
-                
+
                 # Procurar padrões C&C
                 for pattern in self.C2_PATTERNS:
                     matches = re.findall(pattern, text)
                     c2_strings.extend(matches)
-        except Exception as e:
-            pass
+        except Exception:
+            logger.warning("Falha ao extrair strings C2 de %s", file_path, exc_info=True)
         
         # Indicadores literais C2 no ficheiro
         try:
@@ -200,7 +211,7 @@ class StaticAnalyzer:
                 if lit in text:
                     c2_strings.append(lit)
         except Exception:
-            pass
+            logger.debug("Falha ao procurar indicadores literais C2 em %s", file_path, exc_info=True)
 
         # Remover duplicados e filtrar strings muito curtas
         c2_strings = [s for s in set(c2_strings) if len(s) > 3]
@@ -224,7 +235,7 @@ class StaticAnalyzer:
                 if ind in text:
                     found.append(ind)
         except Exception:
-            pass
+            logger.debug("Falha ao procurar indicadores em %s", file_path, exc_info=True)
         return list(set(found))
 
     def _extract_evasion_from_strings(self, file_path: str) -> List[str]:
@@ -238,7 +249,7 @@ class StaticAnalyzer:
                 if ind in text:
                     found.append(ind)
         except Exception:
-            pass
+            logger.debug("Falha ao procurar técnicas de evasão em %s", file_path, exc_info=True)
         return list(set(found))
 
     def _detect_evasion(self, pe) -> List[str]:

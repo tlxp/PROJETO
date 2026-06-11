@@ -1,33 +1,41 @@
 import React, { useCallback, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Upload, FileCode, X } from "lucide-react";
+import { toast } from "@/components/ui/sonner";
 
 interface FileDropZoneProps {
-  onFileLoaded: (file: File, content: string) => void;
+  onFileLoaded: (file: File) => void;
   currentFile: File | null;
   onClear: () => void;
 }
 
 const ACCEPTED_EXTENSIONS = [".cs", ".dll", ".exe"];
+/** Alinhado com o limite do backend (RATANALYZER_MAX_UPLOAD_MB, default 100 MB). */
+export const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
 
 const FileDropZone: React.FC<FileDropZoneProps> = ({ onFileLoaded, currentFile, onClear }) => {
   const [isDragging, setIsDragging] = useState(false);
 
-  const handleFile = useCallback((file: File) => {
-    const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
-    if (!ACCEPTED_EXTENSIONS.includes(ext)) {
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      onFileLoaded(file, e.target?.result as string || "[Binary file]");
-    };
-    if (ext === ".cs") {
-      reader.readAsText(file);
-    } else {
-      onFileLoaded(file, "[Binary file — " + file.name + "]");
-    }
-  }, [onFileLoaded]);
+  const handleFile = useCallback(
+    (file: File) => {
+      const dotIdx = file.name.lastIndexOf(".");
+      const ext = dotIdx >= 0 ? file.name.substring(dotIdx).toLowerCase() : "";
+      if (!ACCEPTED_EXTENSIONS.includes(ext)) {
+        toast.error("Tipo de ficheiro não suportado", {
+          description: `"${file.name}" foi rejeitado. Apenas ficheiros ${ACCEPTED_EXTENSIONS.join(", ")} são aceites.`,
+        });
+        return;
+      }
+      if (file.size > MAX_FILE_SIZE_BYTES) {
+        toast.error("Ficheiro demasiado grande", {
+          description: `"${file.name}" tem ${(file.size / (1024 * 1024)).toFixed(1)} MB. O limite é 100 MB.`,
+        });
+        return;
+      }
+      onFileLoaded(file);
+    },
+    [onFileLoaded]
+  );
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -46,6 +54,8 @@ const FileDropZone: React.FC<FileDropZoneProps> = ({ onFileLoaded, currentFile, 
   const onInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) handleFile(file);
+    // Permite voltar a selecionar o mesmo ficheiro depois de limpar.
+    e.target.value = "";
   }, [handleFile]);
 
   if (currentFile) {
@@ -63,7 +73,9 @@ const FileDropZone: React.FC<FileDropZoneProps> = ({ onFileLoaded, currentFile, 
           </p>
         </div>
         <button
+          type="button"
           onClick={onClear}
+          aria-label="Remover ficheiro selecionado"
           className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
         >
           <X className="h-4 w-4" />
@@ -88,6 +100,7 @@ const FileDropZone: React.FC<FileDropZoneProps> = ({ onFileLoaded, currentFile, 
         type="file"
         accept=".cs,.dll,.exe"
         onChange={onInputChange}
+        aria-label="Selecionar ficheiro para análise"
         className="absolute inset-0 cursor-pointer opacity-0"
       />
       <motion.div
@@ -101,7 +114,7 @@ const FileDropZone: React.FC<FileDropZoneProps> = ({ onFileLoaded, currentFile, 
           Arraste o ficheiro para aqui
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          ou clique para selecionar — .cs, .dll, .exe
+          ou clique para selecionar — .cs, .dll, .exe (máx. 100 MB)
         </p>
       </div>
     </motion.div>

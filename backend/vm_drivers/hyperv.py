@@ -15,7 +15,9 @@ Boas práticas de segurança:
 
 from __future__ import annotations
 
+import logging
 import os
+import re
 import subprocess
 import sys
 import time
@@ -29,6 +31,19 @@ from .base import DynamicAnalysisOutput
 if TYPE_CHECKING:
     from analysis_jobs import AnalysisJob
 
+_LOGGER = logging.getLogger("rat_analyzer_vm_hyperv")
+
+# Allowlist estrita para nomes de VM/snapshot interpolados em comandos PowerShell.
+_SAFE_PS_NAME_RE = re.compile(r"^[A-Za-z0-9 ._\-]+$")
+
+
+def _agent_headers() -> Dict[str, str]:
+    """Header de autenticação do VM agent (env VM_AGENT_TOKEN, opcional)."""
+    token = (os.environ.get("VM_AGENT_TOKEN") or "").strip()
+    if token:
+        return {"X-Agent-Token": token}
+    return {}
+
 
 @dataclass(frozen=True)
 class HyperVConfig:
@@ -37,6 +52,8 @@ class HyperVConfig:
     agent_base_url: str
 
     http_timeout_seconds: int = 20
+    # Timeout dedicado (mais alto) para operações PowerShell de snapshot/start.
+    vm_op_timeout_seconds: int = 120
     boot_wait_seconds: int = 120
     agent_wait_seconds: int = 120
     dynamic_timeout_seconds: int = 300
@@ -54,17 +71,21 @@ class HyperVVMDriver:
         # 1) Restaurar snapshot limpo
         self._ps(
             f'Restore-VMSnapshot -VMName "{self.cfg.vm_name}" -Name "{self.cfg.snapshot_name}" -Confirm:$false',
-            timeout=self.cfg.http_timeout_seconds,
+            timeout=self.cfg.vm_op_timeout_seconds,
         )
 
         # 2) Arrancar VM
         self._ps(
             f'Start-VM -Name "{self.cfg.vm_name}" | Out-Null',
-            timeout=self.cfg.http_timeout_seconds,
+            timeout=self.cfg.vm_op_timeout_seconds,
         )
 
-        # 3) Esperar que o agent fique pronto
-        self._wait_for_agent_ready()
+        # 3) Esperar o boot da VM e que o agent fique pronto.
+        #    boot_wait_seconds dá tempo ao SO convidado; o polling do agent
+        #    decorre durante esse período (sai mais cedo se ficar pronto).
+        self._wait_for_agent_ready(
+            total_wait_seconds=self.cfg.boot_wait_seconds + self.cfg.agent_wait_seconds
+        )
 
         # 4) Upload da amostra
         self._agent_upload(job)
@@ -99,14 +120,16 @@ class HyperVVMDriver:
                 f"Config Hyper-V incompleta. Variáveis em falta: {', '.join(missing)}"
             )
 
-        # Pequena validação para reduzir risco de comandos malformados
+        # Allowlist estrita: evita injeção PowerShell (backtick, $, &, ;, |,
+        # parênteses, newlines, aspas, etc. ficam todos de fora).
         for label, value in (
             ("HYPERV_VM_NAME", self.cfg.vm_name),
             ("HYPERV_SNAPSHOT_NAME", self.cfg.snapshot_name),
         ):
-            if any(c in value for c in ['"', ";", "|"]):
+            if not _SAFE_PS_NAME_RE.match(value):
                 raise ValueError(
-                    f"{label} contém caracteres inválidos para uso em PowerShell."
+                    f"{label} contém caracteres inválidos. "
+                    "Permitidos: letras, dígitos, espaço, ponto, hífen e underscore."
                 )
 
     def _ps(self, command: str, timeout: int) -> None:
@@ -134,12 +157,13 @@ class HyperVVMDriver:
     def _agent_url(self, path: str) -> str:
         return self.cfg.agent_base_url.rstrip("/") + path
 
-    def _wait_for_agent_ready(self) -> None:
-        deadline = time.time() + max(1, int(self.cfg.agent_wait_seconds))
+    def _wait_for_agent_ready(self, total_wait_seconds: Optional[int] = None) -> None:
+        wait = int(total_wait_seconds if total_wait_seconds is not None else self.cfg.agent_wait_seconds)
+        deadline = time.time() + max(1, wait)
         last_err: Optional[str] = None
         while time.time() < deadline:
             try:
-                r = requests.get(self._agent_url("/api/health"), timeout=5)
+                r = requests.get(self._agent_url("/api/health"), headers=_agent_headers(), timeout=5)
                 if r.ok:
                     return
                 last_err = f"{r.status_code} {r.text[:200]}"
@@ -154,6 +178,7 @@ class HyperVVMDriver:
             r = requests.post(
                 self._agent_url("/api/upload"),
                 files=files,
+                headers=_agent_headers(),
                 timeout=self.cfg.http_timeout_seconds,
             )
         if not r.ok:
@@ -166,6 +191,7 @@ class HyperVVMDriver:
         r = requests.post(
             self._agent_url("/api/run"),
             json=payload,
+            headers=_agent_headers(),
             timeout=self.cfg.http_timeout_seconds,
         )
         if not r.ok:
@@ -176,6 +202,7 @@ class HyperVVMDriver:
     def _agent_get_report(self) -> Any:
         r = requests.get(
             self._agent_url("/api/report"),
+            headers=_agent_headers(),
             timeout=self.cfg.http_timeout_seconds,
         )
         if not r.ok:

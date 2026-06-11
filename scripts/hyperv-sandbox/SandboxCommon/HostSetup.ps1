@@ -48,6 +48,49 @@ function Ensure-VMSwitch {
     Ensure-VMSwitchExists -SwitchName $Name
 }
 
+function Assert-SandboxVmNetworkIsolation {
+    <#
+    .SYNOPSIS
+        Valida que a VM só tem adaptadores em switches Internal e no switch esperado.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $VMName,
+        [Parameter(Mandatory = $true)][string] $ExpectedSwitchName
+    )
+
+    $expectedSw = Get-VMSwitch -Name $ExpectedSwitchName -ErrorAction SilentlyContinue
+    if (-not $expectedSw) {
+        throw "Switch esperado '$ExpectedSwitchName' não encontrado no host."
+    }
+    if ($expectedSw.SwitchType -ne 'Internal') {
+        throw "Switch '$ExpectedSwitchName' não é Internal (tipo: $($expectedSw.SwitchType))."
+    }
+
+    $adapters = @(Get-VMNetworkAdapter -VMName $VMName -ErrorAction SilentlyContinue)
+    if ($adapters.Count -eq 0) {
+        throw "VM '$VMName' não tem adaptadores de rede — isolamento não verificável."
+    }
+
+    foreach ($adapter in $adapters) {
+        $swName = $adapter.SwitchName
+        if ([string]::IsNullOrWhiteSpace($swName)) {
+            throw "Adaptador '$($adapter.Name)' da VM '$VMName' sem switch associado."
+        }
+        $sw = Get-VMSwitch -Name $swName -ErrorAction SilentlyContinue
+        if (-not $sw) {
+            throw "Adaptador '$($adapter.Name)' ligado a switch inexistente '$swName'."
+        }
+        if ($sw.SwitchType -ne 'Internal') {
+            throw "Isolamento violado: adaptador '$($adapter.Name)' em switch '$swName' (tipo $($sw.SwitchType), esperado Internal)."
+        }
+        if ($swName -ne $ExpectedSwitchName) {
+            throw "Adaptador '$($adapter.Name)' em switch '$swName' — esperado apenas '$ExpectedSwitchName'."
+        }
+    }
+
+    Write-LogHost "Preflight rede OK: VM '$VMName' isolada no switch Internal '$ExpectedSwitchName' ($($adapters.Count) adaptador(es))."
+}
+
 function Get-SandboxNetAdapter {
     param(
         [string] $SwitchName
@@ -90,5 +133,45 @@ function Set-SandboxHostIpIfNeeded {
         }
     } else {
         Write-LogHost "Adaptador j- tem o IP ${IpAddress}/${PrefixLength} configurado."
+    }
+
+    Ensure-SandboxHostFirewall -SwitchName $SwitchName -RemoteSubnet "${IpAddress}/$PrefixLength"
+}
+
+function Ensure-SandboxHostFirewall {
+    <#
+    .SYNOPSIS
+        Bloqueia tráfego inbound do host vindos da sub-rede da VM sandbox.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $SwitchName,
+        [string] $RemoteSubnet = "192.168.100.0/24"
+    )
+
+    $ruleName = "PROJETOVM Block inbound from sandbox ($SwitchName)"
+    $existing = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+    if ($existing) {
+        Write-LogHost "Firewall: regra '$ruleName' já existe."
+        return
+    }
+
+    if ($script:DryRun) {
+        Write-LogHost "[DRY-RUN] Criaria regra firewall inbound Block de $RemoteSubnet."
+        return
+    }
+
+    try {
+        New-NetFirewallRule `
+            -DisplayName $ruleName `
+            -Group "PROJETOVM Sandbox" `
+            -Direction Inbound `
+            -Action Block `
+            -RemoteAddress $RemoteSubnet `
+            -Profile Any `
+            -Enabled True `
+            -ErrorAction Stop | Out-Null
+        Write-LogHost "Firewall: inbound de $RemoteSubnet bloqueado no host."
+    } catch {
+        Write-LogWarning "Não foi possível criar regra firewall: $($_.Exception.Message)"
     }
 }

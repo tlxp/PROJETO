@@ -1,4 +1,4 @@
-# Auxiliares do host: download robusto, integridade, adaptador temporário de internet.
+# Auxiliares do host: download robusto, integridade e cleanup de adaptadores órfãos.
 # Carregado via dot-sourcing (mesmo scope).
 
 function Download-FileRobust {
@@ -66,27 +66,24 @@ function Get-FileIntegrityInfo {
     }
 }
 
-function Ensure-InternetAdapter {
-    param([string] $VMName, [string] $SwitchName)
-
-    $sw = Get-VMSwitch -Name $SwitchName -ErrorAction SilentlyContinue
-    if (-not $sw) { throw "VMSwitch '$SwitchName' não encontrado. Ajuste -InternetSwitchName." }
-
-    # Criar adaptador "TemporaryInternet" se não existir.
-    $existing = @(Get-VMNetworkAdapter -VMName $VMName -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq "TemporaryInternet" })
-    if ($existing.Count -eq 0) {
-        Add-VMNetworkAdapter -VMName $VMName -Name "TemporaryInternet" -SwitchName $SwitchName | Out-Null
-    } else {
-        Connect-VMNetworkAdapter -VMName $VMName -Name "TemporaryInternet" -SwitchName $SwitchName | Out-Null
-    }
-}
-
 function Remove-InternetAdapterIfAny {
+    <#
+    .SYNOPSIS
+        Remove adaptador TemporaryInternet (legado) se existir — nunca é criado pelo fluxo actual.
+    #>
     param([string] $VMName)
     try {
-        $a = Get-VMNetworkAdapter -VMName $VMName -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq "TemporaryInternet" } | Select-Object -First 1
-        if ($a) {
-            Remove-VMNetworkAdapter -VMName $VMName -Name "TemporaryInternet" -ErrorAction SilentlyContinue | Out-Null
+        $vm = Get-VM -Name $VMName -ErrorAction SilentlyContinue
+        if ($vm -and $vm.State -eq 'Running') {
+            Stop-SandboxVM -VMName $VMName -ErrorAction SilentlyContinue
         }
-    } catch { }
+        $adapters = @(Get-VMNetworkAdapter -VMName $VMName -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -eq "TemporaryInternet" })
+        foreach ($a in $adapters) {
+            Write-LogHost "      A remover adaptador legado TemporaryInternet (switch: $($a.SwitchName))..."
+            Remove-VMNetworkAdapter -VMName $VMName -Name $a.Name -ErrorAction Stop | Out-Null
+        }
+    } catch {
+        Write-LogWarning "Falha ao remover TemporaryInternet: $($_.Exception.Message)"
+    }
 }

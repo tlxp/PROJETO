@@ -2,6 +2,8 @@
 
 Interface web para análise de ficheiros executáveis (.exe) e DLLs, integrada com o backend **RAT Analyzer**. Permite arrastar ficheiros, executar análise em tempo real e visualizar relatórios, pseudo-código C e código IL com destaque de indicadores de risco.
 
+Estado da auditoria: [`docs/AUDITORIA.md`](../docs/AUDITORIA.md) (Jun 2026 — concluída).
+
 ## Funcionalidades
 
 - **Zona de arrastar** — Arraste ficheiros .exe ou .dll para iniciar a análise
@@ -28,7 +30,7 @@ npm i
 npm run dev
 ```
 
-A aplicação abre em `http://localhost:5173` (ou na porta indicada no terminal). Por defeito, a API do backend é `http://localhost:8000`.
+A aplicação abre em **http://localhost:8080** (porta definida em `vite.config.ts`). Por defeito, a API do backend é `http://127.0.0.1:8000` (fallback em `src/lib/api.ts` se `VITE_API_URL` não estiver definida).
 
 ### Configurar URL da API
 
@@ -36,10 +38,13 @@ Crie um ficheiro `.env` na raiz de `frontend` (pode usar `.env.example` como bas
 
 ```env
 # URL da API Python (RAT Analyzer)
-VITE_API_URL=http://localhost:8000
+VITE_API_URL=http://127.0.0.1:8000
+
+# Obrigatório quando o backend exige RATANALYZER_API_TOKEN (mesmo valor)
+# VITE_API_TOKEN=seu-token
 ```
 
-Em produção, defina `VITE_API_URL` para o URL do seu backend.
+Em produção, defina `VITE_API_URL` e `VITE_API_TOKEN` (ver [`docs/production-secrets.md`](../docs/production-secrets.md)).
 
 ## Scripts disponíveis
 
@@ -49,7 +54,8 @@ Em produção, defina `VITE_API_URL` para o URL do seu backend.
 | `npm run build`| Build de produção                  |
 | `npm run preview` | Pré-visualizar build de produção |
 | `npm run lint` | Verificação ESLint                 |
-| `npm run test` | Testes com Vitest                  |
+| `npm run test` | Testes unitários (Vitest)           |
+| `npm run test:watch` | Testes em modo watch        |
 
 ## Tecnologias
 
@@ -58,26 +64,42 @@ Em produção, defina `VITE_API_URL` para o URL do seu backend.
 - **Tailwind CSS** + **shadcn/ui** (Radix UI)
 - **Framer Motion** — Animações
 - **Lucide React** — Ícones
-- **React Query** — Estado e cache de dados (se aplicável)
 
 ## Estrutura relevante
 
 ```
 frontend/
 ├── src/
+│   ├── lib/
+│   │   ├── api.ts           # Cliente HTTP (base URL, timeout, erros)
+│   │   ├── analysis.ts      # Normalização de jobs, parsers de relatório
+│   │   ├── cCodeXref.ts     # Sessão de xrefs no pseudo-C
+│   │   └── artifactNaming.ts
+│   ├── hooks/
+│   │   ├── useAnalysisJob.ts           # Polling de jobs (AbortController)
+│   │   ├── useAnalysisStream.ts        # Streaming NDJSON
+│   │   ├── useIndexAnalysisSession.ts  # Sessão de upload/análise na página Index
+│   │   └── useIndexResultsViewModel.ts # Estado da grelha de resultados
 │   ├── pages/
-│   │   └── Index.tsx      # Página principal (drop zone + painéis)
+│   │   ├── Index.tsx            # Orquestrador (~75 linhas)
+│   │   └── Index/               # IndexHeader, AnalysisResultsView, UploadView, …
 │   ├── components/
 │   │   ├── FileDropZone.tsx
 │   │   ├── CodePanel.tsx
-│   │   └── ui/            # Componentes shadcn
-│   └── ...
-├── .env.example           # Exemplo de variáveis de ambiente
+│   │   ├── RouteErrorBoundary.tsx  # Error boundary por rota
+│   │   └── ui/                  # shadcn (dialog, tooltip, sonner)
+│   └── test/                    # 29 testes Vitest
+├── .env.example
 ├── package.json
 └── README.md
 ```
 
+## Segurança
+
+- Com `RATANALYZER_API_TOKEN` no backend, defina `VITE_API_TOKEN` com o mesmo valor (rebuild obrigatório).
+- O output de análise é renderizado como texto — **não** usar `dangerouslySetInnerHTML` em conteúdo de relatórios.
+
 ## Notas
 
 - O backend deve expor o endpoint `/api/analyze_stream` para análise em streaming.
-- Para pseudo-C de binários nativos, o backend precisa de Ghidra configurado (`GHIDRA_INSTALL_DIR`).
+- Para pseudo-C de binários nativos: `pip install --require-hashes -r backend/requirements-ghidra.lock` e `GHIDRA_INSTALL_DIR`.

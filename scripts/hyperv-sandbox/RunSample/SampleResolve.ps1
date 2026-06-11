@@ -2,7 +2,11 @@
 # Carregado via dot-sourcing (mesmo scope).
 
 function Resolve-AutoSamplePath {
-    param([string] $ProvidedPath, [string] $SamplesDir)
+    param(
+        [string] $ProvidedPath,
+        [string] $SamplesDir,
+        [switch] $AllowAutoSample
+    )
 
     function Ensure-DefaultSampleExists {
         param([string] $Dir)
@@ -59,6 +63,10 @@ public static class Program
         Select-Object -First 1
 
     if (-not $candidate) {
+        if (-not $AllowAutoSample) {
+            Write-Error "Nenhuma amostra em '$SamplesDir'. Forneça -SamplePath ou use -AllowAutoSample (apenas dev/teste)."
+            exit 1
+        }
         $auto = Ensure-DefaultSampleExists -Dir $SamplesDir
         if (-not (Test-Path -LiteralPath $auto)) {
             Write-Error "Nenhuma amostra encontrada e falhou ao criar sample automático em: $SamplesDir"

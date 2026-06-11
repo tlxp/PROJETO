@@ -1,0 +1,286 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { ApiError, isAbortError } from "@/lib/api";
+import {
+  buildAnalysisResultFromJob,
+  publishStaticAnalysisResult,
+  type AnalysisMode,
+  type AnalysisResult,
+} from "@/lib/analysis";
+import { useAnalysisJob } from "@/hooks/useAnalysisJob";
+import { useAnalysisStream } from "@/hooks/useAnalysisStream";
+import type { StillRunningJob } from "@/pages/Index/UploadView";
+import { MOCK_DEMO_RESULT } from "@/pages/Index/mockDemo";
+
+/**
+ * Estado e orquestração de análise da página Index (upload, streaming, jobs, job externo).
+ */
+export function useIndexAnalysisSession() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { jobId: jobIdFromPath } = useParams<{ jobId?: string }>();
+
+  const [file, setFile] = useState<File | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [analysisLogs, setAnalysisLogs] = useState<string[]>([]);
+  const [ghidraProgress, setGhidraProgress] = useState<number | null>(null);
+  const [analysisMode, setAnalysisMode] = useState<AnalysisMode>("static");
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+  const [stillRunningJob, setStillRunningJob] = useState<StillRunningJob | null>(null);
+
+  const stream = useAnalysisStream();
+  const jobApi = useAnalysisJob();
+  const analyzeRunRef = useRef(0);
+
+  const handleFileLoaded = useCallback((f: File) => {
+    setFile(f);
+    setShowResults(false);
+    setAnalysisResult(null);
+    setError(null);
+    setAnalysisLogs([]);
+    setGhidraProgress(null);
+    setStillRunningJob(null);
+  }, []);
+
+  const handleClear = useCallback(() => {
+    analyzeRunRef.current += 1;
+    stream.cancel();
+    jobApi.cancel();
+    setFile(null);
+    setShowResults(false);
+    setAnalysisResult(null);
+    setError(null);
+    setAnalysisLogs([]);
+    setGhidraProgress(null);
+    setIsAnalyzing(false);
+    setStillRunningJob(null);
+    setCurrentJobId(null);
+    navigate("/", { replace: true });
+  }, [navigate, stream, jobApi]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search ?? "");
+    const jobIdFromQuery = params.get("jobId");
+    const jobId = jobIdFromPath ?? jobIdFromQuery;
+    if (!jobId) return;
+    if (jobId === currentJobId) return;
+
+    let cancelled = false;
+    const signal = jobApi.beginSession();
+    const runId = ++analyzeRunRef.current;
+
+    const loadExternalJob = async () => {
+      setShowResults(true);
+      setIsAnalyzing(true);
+      setError(null);
+      setStillRunningJob(null);
+      setAnalysisLogs([`A carregar resultados externos para jobId=${jobId}...`]);
+
+      try {
+        if (!cancelled && !jobIdFromPath && jobIdFromQuery) {
+          navigate(`/analysis/${encodeURIComponent(jobId)}`, { replace: true });
+        }
+
+        const outcome = await jobApi.pollJob(jobId, signal, (status, attempt) => {
+          if (!cancelled && (attempt === 1 || attempt % 10 === 0)) {
+            setAnalysisLogs((prev) => [
+              ...prev,
+              `Job externo ainda em processamento (estado atual: ${status}, tentativa ${attempt}).`,
+            ]);
+          }
+        });
+        if (cancelled) return;
+
+        if (outcome.kind === "failed") {
+          setError(outcome.error);
+          return;
+        }
+        if (outcome.kind === "still-running") {
+          setStillRunningJob({ jobId, lastStatus: outcome.lastStatus });
+          return;
+        }
+
+        const root = outcome.job;
+        const chosen = buildAnalysisResultFromJob(
+          root,
+          typeof root.fileName === "string" ? root.fileName : undefined
+        );
+        if (!chosen) {
+          setError("Nenhum resultado disponível para o job externo.");
+          return;
+        }
+
+        setAnalysisResult(chosen);
+        setShowResults(true);
+        setCurrentJobId(jobId);
+      } catch (e) {
+        if (cancelled || isAbortError(e)) return;
+        setError(e instanceof Error ? e.message : "Erro ao carregar resultados externos.");
+      } finally {
+        if (!cancelled && analyzeRunRef.current === runId) {
+          setIsAnalyzing(false);
+        }
+      }
+    };
+
+    void loadExternalJob();
+    return () => {
+      cancelled = true;
+    };
+  }, [location.search, currentJobId, jobIdFromPath, navigate, jobApi]);
+
+  const loadMockDemo = useCallback(() => {
+    setFile(null);
+    setAnalysisResult(MOCK_DEMO_RESULT);
+    setShowResults(true);
+    setError(null);
+  }, []);
+
+  const finishJobOutcome = useCallback(
+    (jobId: string, job: Record<string, unknown>, fallbackFileName?: string) => {
+      const chosen = buildAnalysisResultFromJob(job, fallbackFileName);
+      if (!chosen) {
+        throw new Error("Nenhum resultado disponível na análise.");
+      }
+      setCurrentJobId(jobId);
+      navigate(`/analysis/${encodeURIComponent(jobId)}`, { replace: false });
+      setAnalysisResult(chosen);
+      setShowResults(true);
+    },
+    [navigate]
+  );
+
+  const handleAnalyze = useCallback(async () => {
+    if (!file) return;
+    const runId = ++analyzeRunRef.current;
+    const isCurrent = () => analyzeRunRef.current === runId;
+    setIsAnalyzing(true);
+    setError(null);
+    setAnalysisLogs([]);
+    setGhidraProgress(null);
+    setStillRunningJob(null);
+
+    try {
+      if (analysisMode === "static") {
+        const streamResult = await stream.run(file, {
+          onLog: (msg) => setAnalysisLogs((prev) => [...prev, msg]),
+          onGhidraProgress: (pct) => setGhidraProgress(pct),
+          onError: (msg) => setError(msg),
+          onResult: (data) => {
+            setAnalysisResult(data);
+            setShowResults(true);
+          },
+        });
+
+        if (streamResult && isCurrent()) {
+          try {
+            const jobId = await publishStaticAnalysisResult(streamResult);
+            if (!isCurrent()) return;
+            setCurrentJobId(jobId);
+            navigate(`/analysis/${encodeURIComponent(jobId)}`, { replace: false });
+            setAnalysisLogs((prev) => [...prev, `Resultado registado no backend: ${jobId}`]);
+          } catch (e) {
+            if (isAbortError(e)) return;
+            const message =
+              e instanceof Error ? e.message : "Falha ao registar o resultado estático no backend.";
+            setAnalysisLogs((prev) => [...prev, message]);
+          }
+        }
+        return;
+      }
+
+      const signal = jobApi.beginSession();
+      const submitData = await jobApi.submitJob(file, analysisMode, signal);
+      if (!isCurrent()) return;
+      setAnalysisLogs((prev) => [...prev, `Job criado: ${submitData.jobId}`]);
+
+      const outcome = await jobApi.pollJob(submitData.jobId, signal, (status, attempt) => {
+        if (isCurrent() && (attempt === 1 || attempt % 10 === 0)) {
+          setAnalysisLogs((prev) => [...prev, `Estado do job: ${status}`]);
+        }
+      });
+      if (!isCurrent()) return;
+
+      if (outcome.kind === "failed") {
+        throw new Error(outcome.error);
+      }
+      if (outcome.kind === "still-running") {
+        setStillRunningJob({ jobId: submitData.jobId, lastStatus: outcome.lastStatus });
+        return;
+      }
+
+      finishJobOutcome(submitData.jobId, outcome.job, file.name);
+    } catch (e) {
+      if (!isCurrent() || isAbortError(e)) return;
+      if (e instanceof ApiError && e.status === 404) {
+        setError("Job de análise não encontrado.");
+      } else {
+        setError(e instanceof Error ? e.message : "Erro ao analisar o ficheiro.");
+      }
+    } finally {
+      if (isCurrent()) {
+        setIsAnalyzing(false);
+      }
+    }
+  }, [file, analysisMode, stream, jobApi, navigate, finishJobOutcome]);
+
+  const handleResumeWaiting = useCallback(async () => {
+    const pending = stillRunningJob;
+    if (!pending) return;
+    const runId = ++analyzeRunRef.current;
+    const isCurrent = () => analyzeRunRef.current === runId;
+    setIsAnalyzing(true);
+    setError(null);
+
+    try {
+      const signal = jobApi.beginSession();
+      const outcome = await jobApi.pollJob(pending.jobId, signal, (status, attempt) => {
+        if (isCurrent() && (attempt === 1 || attempt % 10 === 0)) {
+          setAnalysisLogs((prev) => [...prev, `Estado do job: ${status}`]);
+        }
+      });
+      if (!isCurrent()) return;
+
+      if (outcome.kind === "failed") {
+        setStillRunningJob(null);
+        throw new Error(outcome.error);
+      }
+      if (outcome.kind === "still-running") {
+        setStillRunningJob({ jobId: pending.jobId, lastStatus: outcome.lastStatus });
+        return;
+      }
+
+      setStillRunningJob(null);
+      finishJobOutcome(pending.jobId, outcome.job, file?.name);
+    } catch (e) {
+      if (!isCurrent() || isAbortError(e)) return;
+      setError(e instanceof Error ? e.message : "Erro ao aguardar pela análise.");
+    } finally {
+      if (isCurrent()) {
+        setIsAnalyzing(false);
+      }
+    }
+  }, [stillRunningJob, jobApi, file?.name, finishJobOutcome]);
+
+  return {
+    file,
+    isAnalyzing,
+    showResults,
+    analysisResult,
+    error,
+    analysisLogs,
+    ghidraProgress,
+    analysisMode,
+    setAnalysisMode,
+    currentJobId,
+    stillRunningJob,
+    handleFileLoaded,
+    handleClear,
+    handleAnalyze,
+    handleResumeWaiting,
+    loadMockDemo,
+  };
+}

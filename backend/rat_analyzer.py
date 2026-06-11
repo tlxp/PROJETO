@@ -6,12 +6,15 @@ Projeto de Licenciatura - Deteção de Remote Access Trojans
 
 import argparse
 import json
+import logging
 import sys
 import os
 from pathlib import Path
 from datetime import datetime
 
 import config
+
+logger = logging.getLogger("rat_analyzer")
 from artifact_naming import short_stem
 from pipeline_version import compute_pipeline_version
 from modules.static_analyzer import StaticAnalyzer
@@ -75,14 +78,14 @@ class RATAnalyzer:
         }
     
     def _log(self, msg: str) -> None:
-        """Imprime ou envia via callback para logs em tempo real."""
+        """Envia via callback (streaming/API) ou regista no logger do pipeline."""
         if self._log_callback is not None:
             try:
                 self._log_callback(msg)
+                return
             except Exception:
-                print(msg, flush=True)
-        else:
-            print(msg, flush=True)
+                logger.warning("Callback de log falhou; a usar logger.", exc_info=True)
+        logger.info("%s", msg)
 
     def _log_dotnet_decompilation(self, decomp_result: dict) -> None:
         """Regista o resultado da descompilação .NET sem stack traces nem texto duplicado."""
@@ -197,13 +200,13 @@ class RATAnalyzer:
             self.analysis_results["obfuscated_snippets_deobfuscated_file"] = obfuscated_snippets_deobfuscated_file
             self.analysis_results["obfuscation_snippets_summary"] = obfuscation_snippets_summary
 
-            print("[*] A aplicar deobfuscação ao código descompilado...")
+            self._log("[*] A aplicar deobfuscação ao código descompilado...")
             out_deob = Path(consolidated_file).parent / (sstem + ".deobfuscated.cs")
             do_result = self.deobfuscator.deobfuscate_source(consolidated_file, str(out_deob))
             if do_result.get("success"):
                 deobfuscated_file = do_result.get("output_file", "")
                 if do_result.get("base64_decoded"):
-                    print(f"[+] Código desobfuscado guardado: {deobfuscated_file} ({do_result['base64_decoded']} Base64 decodificados)")
+                    self._log(f"[+] Código desobfuscado guardado: {deobfuscated_file} ({do_result['base64_decoded']} Base64 decodificados)")
         else:
             # Binário nativo ou .NET AOT: assembly e Ghidra diretamente no binário original (sem deobfuscação binária)
             self._log("[7a] Desmontagem (assembly) do binário...")

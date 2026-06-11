@@ -3,6 +3,7 @@ Módulo de integração com ILSpy CLI (ILSpyCmd)
 Descompila assemblies .NET (.exe/.dll) para código fonte C#
 """
 
+import logging
 import os
 import subprocess
 import shutil
@@ -12,6 +13,8 @@ from typing import Optional, Dict
 
 from artifact_naming import short_stem
 import config
+
+logger = logging.getLogger("rat_analyzer_dotnet_decompiler")
 
 
 class DotNetDecompiler:
@@ -96,6 +99,7 @@ class DotNetDecompiler:
     
     def _is_dotnet_assembly(self, assembly_path: Path) -> bool:
         """Verifica se o ficheiro é um assembly .NET válido"""
+        pe = None
         try:
             pe = pefile.PE(str(assembly_path))
             # Verificar se tem CLR header (indicador de assembly .NET)
@@ -106,7 +110,14 @@ class DotNetDecompiler:
                         return True
             return False
         except Exception:
+            logger.debug("Falha ao verificar metadados .NET em %s", assembly_path, exc_info=True)
             return False
+        finally:
+            if pe is not None:
+                try:
+                    pe.close()
+                except Exception:
+                    logger.debug("Falha ao fechar pefile em %s", assembly_path, exc_info=True)
 
     @staticmethod
     def _no_managed_metadata_result() -> Dict[str, str]:
@@ -190,8 +201,8 @@ class DotNetDecompiler:
                     "Descompilação não concluída.\n\n" + msg,
                     encoding="utf-8",
                 )
-            except Exception:
-                pass
+            except OSError:
+                logger.debug("Falha ao escrever _erro_descompilacao.txt em %s", output_dir, exc_info=True)
 
         # Verificar se o ILSpy está disponível
         if not self.is_available():
@@ -291,17 +302,17 @@ class DotNetDecompiler:
                             continue
                         try:
                             f.unlink()
-                        except Exception:
-                            pass
+                        except OSError:
+                            logger.debug("Falha ao remover ficheiro ILSpy intermédio: %s", f, exc_info=True)
                     # Remover diretórios vazios
                     for d in sorted([p for p in output_dir.rglob("*") if p.is_dir()], key=lambda p: len(str(p)), reverse=True):
                         try:
                             if not any(d.iterdir()):
                                 d.rmdir()
-                        except Exception:
-                            pass
+                        except OSError:
+                            logger.debug("Falha ao remover diretório vazio: %s", d, exc_info=True)
             except Exception:
-                pass
+                logger.debug("Falha na limpeza da árvore ILSpy em %s", output_dir, exc_info=True)
 
             result["success"] = True
             return result
@@ -320,22 +331,24 @@ class DotNetDecompiler:
                 )
             try:
                 (output_dir / "_erro_descompilacao.txt").write_text("Descompilação não concluída.\n\n" + result["error"], encoding="utf-8")
-            except Exception:
-                pass
+            except OSError:
+                logger.debug("Falha ao escrever erro ILSpy (not found) em %s", output_dir, exc_info=True)
             return result
         except subprocess.TimeoutExpired:
             result["error"] = "ILSpy demorou mais de 60 segundos e foi interrompido."
+            logger.warning("Timeout ILSpy ao descompilar %s", assembly)
             try:
                 (output_dir / "_erro_descompilacao.txt").write_text("Descompilação não concluída.\n\n" + result["error"], encoding="utf-8")
-            except Exception:
-                pass
+            except OSError:
+                logger.debug("Falha ao escrever erro ILSpy (timeout) em %s", output_dir, exc_info=True)
             return result
         except Exception as e:
             result["error"] = f"Erro inesperado: {str(e)}"
+            logger.exception("Erro inesperado ao descompilar %s", assembly)
             try:
                 (output_dir / "_erro_descompilacao.txt").write_text("Descompilação não concluída.\n\n" + result["error"], encoding="utf-8")
-            except Exception:
-                pass
+            except OSError:
+                logger.debug("Falha ao escrever erro ILSpy (inesperado) em %s", output_dir, exc_info=True)
             return result
     
     def _consolidate_cs_files(self, cs_files: list, output_file: Path):

@@ -38,4 +38,21 @@ if ($pipeState -eq "Completed") {
     } catch { }
     try { Stop-Job $pipeJob -ErrorAction SilentlyContinue } catch { }
     try { Remove-Job $pipeJob -Force -ErrorAction SilentlyContinue } catch { }
+
+    # Última tentativa antes de desligar a VM: o guest escreve sempre o relatório
+    # em C:\analysis.txt, mesmo quando o envio via COM1 falha.
+    if ($cred -is [pscredential]) {
+        Write-LogHost "      A tentar recuperar relatório diretamente do guest (C:\analysis.txt)..."
+        try {
+            Copy-SandboxVMFileFromGuest -VMName $VMName -Credential $cred `
+                -GuestSourcePath "C:\analysis.txt" -HostDestinationPath $ReportOutputPath -Retries 3 -DelaySeconds 3
+            if (Test-Path -LiteralPath $ReportOutputPath) {
+                Write-LogHost "      Relatório recuperado do guest (fallback final): $ReportOutputPath"
+                Add-LogLine -Path $HostLogPath -Value "Report recovered via final guest copy fallback"
+            }
+        } catch {
+            Write-LogWarning "      Fallback final falhou: $($_.Exception.Message)"
+            Add-LogLine -Path $HostLogPath -Value "Final guest copy fallback failed: $($_.Exception.Message)"
+        }
+    }
 }

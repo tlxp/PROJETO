@@ -5,9 +5,30 @@ e como preparar uma VM Windows no Hyper-V de raiz. É o guia de referência comp
 do projeto consulte o [README principal](../README.md).
 
 > **Alternativa por porta serial (sem HTTP/VM Agent):** a pasta
-> [`scripts/hyperv-sandbox/`](../scripts/hyperv-sandbox/README.md) contém um fluxo completo que cria a VM,
-> executa a amostra, monitoriza alterações (ficheiros, registry, processos, rede, serviços, tarefas
-> agendadas) e devolve o relatório ao host por **Named Pipe (COM1)** e/ou **Copy-VMFile**, sem rede.
+> [`scripts/hyperv-sandbox/`](../scripts/hyperv-sandbox/README.md) contém um fluxo **independente** (Caminho B)
+> usado pela app WPF: executa a amostra na VM, monitoriza alterações e devolve o relatório por **COM1 → Named Pipe**
+> com fallback **Copy-VMFile**. **Não** é invocado pelo driver `hyperv.py` do backend.
+
+---
+
+## Dois caminhos — escolha o guia certo
+
+| | **Caminho A — Backend + VM Agent** | **Caminho B — Scripts PowerShell** |
+|---|-----------------------------------|-------------------------------------|
+| **Orquestrador** | `backend/vm_orchestrator.py` | `04-Run-Sample.ps1` / WPF |
+| **Comunicação** | HTTP (`vm-agent`) | COM1 / Copy-VMFile |
+| **Config VM típica** | Qualquer Gen2 manual (`win-sandbox`, …) **ou** partilhar nomes com `_Config.ps1` | `_Config.ps1`: `MalwareSandbox`, `CleanState`, `D:\PROJETOVM`, **Gen1** |
+| **Guia** | Secções abaixo (endpoints API, env vars, VM Agent) | [`scripts/hyperv-sandbox/README.md`](../scripts/hyperv-sandbox/README.md) |
+
+### Mapeamento de configuração (Caminho A)
+
+| Variável de ambiente (backend) | Equivalente em `_Config.ps1` (Caminho B) | Notas |
+|--------------------------------|----------------------------------------|-------|
+| `HYPERV_VM_NAME` | `PROJETOVM_VMName` (`MalwareSandbox`) | Nome exacto da VM no Hyper-V |
+| `HYPERV_SNAPSHOT_NAME` | `PROJETOVM_SnapshotName` (`CleanState`) | Checkpoint limpo |
+| `VM_AGENT_BASE_URL` | — | Ex.: `http://192.168.100.10:5000` (IP estático na VM) |
+| `VM_AGENT_TOKEN` | — | Header `X-Agent-Token` (**obrigatório** no arranque do agent; dev: `VM_AGENT_ALLOW_INSECURE=1`) |
+| `SANDBOX_VM_OP_TIMEOUT_SECONDS` | — | Timeout PowerShell restore/start (default 120 s) |
 
 ---
 
@@ -33,10 +54,11 @@ O orquestrador dinâmico (`backend/vm_orchestrator.py`) escolhe um driver via va
   Não executa o ficheiro. Apenas devolve um relatório sintético para validar o fluxo end-to-end.
 
 - `SANDBOX_VM_DRIVER=hyperv`
-  Usa uma VM Hyper-V local (ver guia abaixo) ou o fluxo serial em `scripts/hyperv-sandbox/`.
+  Restaura snapshot e arranca a VM via PowerShell; comunica com o **VM Agent HTTP** (`vm-agent/`).
+  **Não** executa `04-Run-Sample.ps1` — esse script pertence ao Caminho B (WPF).
 
-- `SANDBOX_VM_DRIVER=proxmox` (skeleton)
-  Preparado para ligar a um Proxmox/VM real, mas ainda não implementado.
+- `SANDBOX_VM_DRIVER=proxmox`
+  Driver Proxmox via API REST + VM Agent HTTP (requer config completa).
 
 ## Variáveis de ambiente (para ligar um hypervisor real)
 
@@ -53,17 +75,18 @@ Para **Proxmox**:
 - `PROXMOX_SNAPSHOT`
 
 Para **Hyper-V (Windows host local)**:
-- `HYPERV_VM_NAME` — nome exato da VM no Hyper-V (ex.: `win-sandbox`)
-- `HYPERV_SNAPSHOT_NAME` — nome do checkpoint "limpo" (ex.: `clean-snap`)
+- `HYPERV_VM_NAME` — nome exacto da VM (ex.: `MalwareSandbox` se usar `_Config.ps1`, ou `win-sandbox` se criou manualmente)
+- `HYPERV_SNAPSHOT_NAME` — checkpoint limpo (ex.: `CleanState` ou `clean-snap`)
 
-Comum aos dois:
-- `VM_AGENT_BASE_URL` — URL HTTP do VM Agent (ex.: `http://192.168.100.10:5000`)
+Comum aos dois drivers HTTP:
+- `VM_AGENT_BASE_URL` — URL do VM Agent (ex.: `http://192.168.100.10:5000`)
+- `VM_AGENT_TOKEN` — token partilhado; o backend envia `X-Agent-Token` e o agent **exige** no arranque (dev local: `VM_AGENT_ALLOW_INSECURE=1`)
 
-Timeouts (opcionais, aplicam-se aos dois drivers):
-- `SANDBOX_HTTP_TIMEOUT_SECONDS`
-- `SANDBOX_BOOT_WAIT_SECONDS`
-- `SANDBOX_AGENT_WAIT_SECONDS`
-- `SANDBOX_DYNAMIC_TIMEOUT_SECONDS`
+Timeouts (opcionais):
+- `SANDBOX_HTTP_TIMEOUT_SECONDS` — pedidos HTTP ao agent
+- `SANDBOX_BOOT_WAIT_SECONDS` / `SANDBOX_AGENT_WAIT_SECONDS` — espera após start da VM
+- `SANDBOX_DYNAMIC_TIMEOUT_SECONDS` — timeout da execução na VM
+- `SANDBOX_VM_OP_TIMEOUT_SECONDS` — restore/start Hyper-V via PowerShell (default **120**)
 
 ## Protocolo esperado do VM Agent
 
@@ -86,32 +109,45 @@ Na pasta `vm-agent/` existe um **agent de exemplo em .NET 8** (minimal API) pron
   - `GET /api/health` — healthcheck simples
   - `POST /api/upload` — recebe o ficheiro (campo `file`) e grava em `samples/`
   - `POST /api/run` — executa a amostra com timeout configurável (`{"timeoutSeconds": 300}`) e guarda stdout/stderr/exitCode
-  - `GET /api/report` — devolve JSON com:
-    - `status`, `startedAt`, `finishedAt`, `exitCode`, `stdout`, `stderr`
-    - placeholders vazios para `processes`, `fileSystem`, `registry`, `network`, `mutexes`, `persistence`, `privilegeEscalation`, `sensitiveApiCalls`
+  - `GET /api/report` — devolve JSON comportamental:
+    - `status`, `startedAt`, `finishedAt`, `exitCode`, `stdout`, `stderr`, `fileName`
+    - `monitoring: "not_implemented"` — telemetria Sysmon/ETW ainda não preenchida
+    - arrays vazios reservados para `processes`, `fileSystem`, `registry`, `network`, …
 
-Passos básicos dentro da VM:
+Passos básicos dentro da VM (**com segurança**):
 
-```bash
-cd C:\caminho\para\PROJETO\vm-agent
+```powershell
+cd C:\vm-agent
 dotnet build -c Release
-dotnet run --urls http://0.0.0.0:5000
+
+# Obrigatório — o processo termina se VM_AGENT_TOKEN estiver vazio
+$env:VM_AGENT_TOKEN = "seu-token-secreto"
+
+# Bind apenas ao IP interno da VM — NÃO use 0.0.0.0 em produção
+dotnet run --urls http://192.168.100.10:5000
 ```
+
+> Em desenvolvimento local apenas: `$env:VM_AGENT_ALLOW_INSECURE = "1"` permite arrancar sem token (API aberta na rede da VM).
 
 E configure no host:
 
-- `VM_AGENT_BASE_URL=http://IP_DA_VM:5000`
-- `SANDBOX_VM_DRIVER=hyperv` (ou `proxmox` se usar Proxmox)
+- `VM_AGENT_BASE_URL=http://192.168.100.10:5000`
+- `VM_AGENT_TOKEN=<mesmo token>`
+- `SANDBOX_VM_DRIVER=hyperv`
 
 Quando adicionar Sysmon/ETW/hooking, basta preencher as listas no JSON de `/api/report` — o backend já está
 preparado para guardar esse objeto em `dynamicReport` e enviá-lo para o frontend.
 
 ---
 
-## Guia completo: criar a VM de sandbox no Hyper-V (Windows)
+## Guia manual Hyper-V (Caminho A — VM Agent)
 
-Este guia descreve **todos os passos**, sem resumos, para ter uma VM Windows isolada (sem internet) no
-Hyper-V, pronta para análise dinâmica com o driver `hyperv`.
+> **Alternativa automatizada (Caminho B):** use `scripts/hyperv-sandbox/01-Setup-MalwareSandbox.ps1`
+> que cria `MalwareSandbox` em `D:\PROJETOVM` com **Gen1** e snapshot `CleanState`.
+> O guia abaixo descreve criação **manual** de uma VM (exemplo Gen2 `win-sandbox`) para o driver `hyperv` + VM Agent.
+
+Este guia descreve passos para ter uma VM Windows isolada (sem internet) no
+Hyper-V, pronta para análise dinâmica com o driver `hyperv` e o **VM Agent HTTP**.
 
 ### Pré-requisitos
 
@@ -171,6 +207,10 @@ Get-NetAdapter | Where-Object { $_.Name -like "*SandboxSwitch*" } | ForEach-Obje
 
 Assim, dentro da VM podes configurar, por exemplo, `192.168.100.10` com gateway `192.168.100.1`; o backend
 no host usará `VM_AGENT_BASE_URL=http://192.168.100.10:5000`.
+
+No **Caminho B** (scripts `hyperv-sandbox/`), o setup (`01-Setup-MalwareSandbox.ps1` / `Setup/Phase4-Switch.ps1`)
+cria também a regra de firewall `PROJETOVM Block inbound from sandbox` que bloqueia tráfego inbound do segmento
+`192.168.100.0/24` para o host. Cada run do `04-Run-Sample.ps1` revalida que a VM só tem adaptadores no switch Internal.
 
 ---
 
@@ -302,22 +342,17 @@ Dentro da VM:
 4. Na pasta do agent:
 
 ```powershell
-cd C:\vm-agent
-dotnet restore
-dotnet build -c Release
-dotnet run --urls http://0.0.0.0:5000
+dotnet run --urls http://192.168.100.10:5000
 ```
 
-O agent fica a escutar em todas as interfaces na porta 5000. No host, o backend usará
-`VM_AGENT_BASE_URL=http://192.168.100.10:5000` (ou o IP que definiste).
+(Com `$env:VM_AGENT_TOKEN` definido — ver secção VM Agent acima.)
 
-Para testar a partir do host (PowerShell):
+O agent escuta no IP configurado. No host:
 
 ```powershell
-Invoke-RestMethod -Uri "http://192.168.100.10:5000/api/health" -UseBasicParsing
+$env:VM_AGENT_TOKEN = "<mesmo token>"
+Invoke-RestMethod -Uri "http://192.168.100.10:5000/api/health" -Headers @{ "X-Agent-Token" = $env:VM_AGENT_TOKEN }
 ```
-
-Deve devolver algo como `{ "status": "ok", "component": "vm-agent" }`.
 
 ---
 
@@ -350,9 +385,10 @@ $env:SANDBOX_VM_DRIVER = "hyperv"
 $env:HYPERV_VM_NAME = "win-sandbox"
 $env:HYPERV_SNAPSHOT_NAME = "clean-snap"
 $env:VM_AGENT_BASE_URL = "http://192.168.100.10:5000"
+$env:VM_AGENT_TOKEN = "seu-token-secreto"
 
-cd backend   # a partir da raiz do repositório clonado
-uvicorn api:app --reload --host 0.0.0.0 --port 8000
+cd backend
+uvicorn api:app --reload --host 127.0.0.1 --port 8000
 ```
 
 Ajusta `VM_AGENT_BASE_URL` se usaste outro IP na VM.
@@ -361,7 +397,7 @@ Ajusta `VM_AGENT_BASE_URL` se usaste outro IP na VM.
 
 ### 12. Uso na webapp (drag-and-drop)
 
-1. Arranca o frontend (`npm run dev` em `frontend`).
+1. Arranca o frontend (`npm run dev` em `frontend` — **http://localhost:8080**).
 2. Escolhe **"Apenas dinâmica"** ou **"Ambas"**.
 3. Faz upload do ficheiro (drag-and-drop ou seleção).
 

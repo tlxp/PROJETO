@@ -175,6 +175,20 @@ internal static class GhidraDependencyHelper
         log($"[INFO] Ghidra: a transferir {zipName} ...");
         await DownloadFileWithProgressAsync(http, zipUrl, zipPath, log, ct).ConfigureAwait(false);
 
+        var shaUrl = DownloadIntegrity.TryFindGithubSha256AssetUrl(releaseJson, zipName);
+        if (shaUrl != null)
+        {
+            log("[INFO] Ghidra: a verificar SHA-256 do release oficial...");
+            var shaText = await http.GetStringAsync(shaUrl, ct).ConfigureAwait(false);
+            var expected = DownloadIntegrity.ParseSha256FileContent(shaText);
+            DownloadIntegrity.VerifySha256OrThrow(zipPath, expected);
+            log("[OK] Ghidra: SHA-256 verificado.");
+        }
+        else
+        {
+            log("[AVISO] Ghidra: ficheiro .sha256 não encontrado no release — transferência sem verificação de hash.");
+        }
+
         log("[INFO] Ghidra: a extrair (pode demorar)...");
         var extractRoot = Path.Combine(baseDir, "extract-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(extractRoot);

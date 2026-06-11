@@ -2,8 +2,6 @@ import React, { useRef, useEffect, useMemo, useState, useCallback, useLayoutEffe
 import { motion } from "framer-motion";
 import { Maximize2, Download, ChevronRight, ChevronDown } from "lucide-react";
 import type {
-  DisplayLineRange,
-  FoldBlock,
   FunctionHighlight,
   Row,
   CodePanelProps,
@@ -27,7 +25,6 @@ const CodePanel: React.FC<CodePanelProps> = ({
   windowContextLines = 1000,
   windowChunkLines = 400,
   windowMaxLines = 2500,
-  highlightedLineRange,
   permanentHighlightRanges,
   functionHighlights,
   onViewportLineChange,
@@ -55,6 +52,12 @@ const CodePanel: React.FC<CodePanelProps> = ({
   const lastScrollTopRef = useRef<number>(0);
   const lastWheelShiftAtRef = useRef<number>(0);
   const wheelRemainderPxRef = useRef<number>(0);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
+
+  const VIRTUALIZE_THRESHOLD = 150;
+  const VIRTUAL_OVERSCAN = 20;
+  const DEFAULT_ROW_HEIGHT = 18;
 
   const lines = useMemo(() => code.split("\n"), [code]);
   const totalLines = lines.length;
@@ -288,6 +291,35 @@ const CodePanel: React.FC<CodePanelProps> = ({
 
   const shouldLimit = !isWindowMode && !displayLineRanges?.length && !showAll && totalLines > maxInitialLines;
 
+  const shouldVirtualize =
+    !isWindowMode && !displayLineRanges?.length && foldedRows.length > VIRTUALIZE_THRESHOLD;
+
+  const virtualSlice = useMemo(() => {
+    if (!shouldVirtualize) {
+      return { rows: foldedRows, topPad: 0, bottomPad: 0, startIdx: 0 };
+    }
+    const rowH = rowHeightRef.current ?? DEFAULT_ROW_HEIGHT;
+    const start = Math.max(0, Math.floor(scrollTop / rowH) - VIRTUAL_OVERSCAN);
+    const visible = Math.ceil(Math.max(viewportHeight, rowH) / rowH) + 2 * VIRTUAL_OVERSCAN;
+    const end = Math.min(foldedRows.length, start + visible);
+    return {
+      rows: foldedRows.slice(start, end),
+      topPad: start * rowH,
+      bottomPad: Math.max(0, foldedRows.length - end) * rowH,
+      startIdx: start,
+    };
+  }, [DEFAULT_ROW_HEIGHT, foldedRows, scrollTop, shouldVirtualize, viewportHeight]);
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const update = () => setViewportHeight(el.clientHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const functionHighlightRanges = useMemo(() => {
     const ranges =
       (functionHighlights ?? [])
@@ -330,6 +362,7 @@ const CodePanel: React.FC<CodePanelProps> = ({
     const prevTop = lastScrollTopRef.current;
     const curTop = el.scrollTop;
     lastScrollTopRef.current = curTop;
+    setScrollTop(curTop);
     const delta = curTop - prevTop;
 
     // Notificar linha aproximada no viewport (throttle) — útil para sincronizar lista lateral
@@ -661,10 +694,19 @@ const CodePanel: React.FC<CodePanelProps> = ({
       >
         <table className="w-full border-collapse">
           <tbody>
-            {foldedRows.map((row, idx) => {
+            {virtualSlice.topPad > 0 ? (
+              <tr aria-hidden="true">
+                <td
+                  colSpan={language === "report" ? 1 : 3}
+                  style={{ height: virtualSlice.topPad, padding: 0, border: 0 }}
+                />
+              </tr>
+            ) : null}
+            {virtualSlice.rows.map((row, idx) => {
+              const rowIdx = virtualSlice.startIdx + idx;
               if (row.type === "gap") {
                 return (
-                  <tr key={`gap-${idx}`} className="bg-muted/30">
+                  <tr key={`gap-${rowIdx}`} className="bg-muted/30">
                     <td className="w-5 min-w-[20px] border-r border-border/20 p-0" />
                     <td className="select-none border-r border-border/30 px-3 py-1 text-right text-[11px] text-muted-foreground/50 w-10">
                       …
@@ -678,7 +720,7 @@ const CodePanel: React.FC<CodePanelProps> = ({
               if (row.type === "foldPlaceholder") {
                 const count = row.endLine - row.startLine;
                 return (
-                  <tr key={`fold-${row.startLine}-${row.endLine}-${idx}`} className="bg-muted/20">
+                  <tr key={`fold-${row.startLine}-${row.endLine}-${rowIdx}`} className="bg-muted/20">
                     <td className="w-5 min-w-[20px] border-r border-border/20 p-0 align-middle" />
                     <td className="select-none border-r border-border/30 px-2 py-0.5 text-right text-[10px] text-muted-foreground/60 w-10" />
                     <td className="px-4 py-0.5 text-[11px] text-muted-foreground italic">
@@ -703,7 +745,7 @@ const CodePanel: React.FC<CodePanelProps> = ({
                   : "";
                 return (
                   <tr
-                    key={`${lineNumber}-${idx}`}
+                    key={`${lineNumber}-${rowIdx}`}
                     data-line={lineNumber}
                     ref={setRowHeightRef}
                     className={`transition-colors ${rowHighlightClass || "hover:bg-code-line/40"}`}
@@ -736,7 +778,6 @@ const CodePanel: React.FC<CodePanelProps> = ({
                   (r) => lineNumber === r.start || lineNumber === r.end
                 );
               const fn = getFunctionForLine(lineNumber);
-              const isInHighlightedFunction = fn != null;
               const isFlaggedFunctionEdge =
                 fn != null && (lineNumber === fn.startLine || lineNumber === fn.endLine);
               const isHoveredBlockEdge =
@@ -764,7 +805,7 @@ const CodePanel: React.FC<CodePanelProps> = ({
                   : undefined;
               return (
                 <tr
-                  key={`${lineNumber}-${idx}`}
+                  key={`${lineNumber}-${rowIdx}`}
                   data-line={lineNumber}
                   ref={setRowHeightRef}
                   className={`transition-colors ${rowHighlightClass || "hover:bg-code-line/50"}`}
@@ -831,6 +872,14 @@ const CodePanel: React.FC<CodePanelProps> = ({
                 </tr>
               );
             })}
+            {virtualSlice.bottomPad > 0 ? (
+              <tr aria-hidden="true">
+                <td
+                  colSpan={language === "report" ? 1 : 3}
+                  style={{ height: virtualSlice.bottomPad, padding: 0, border: 0 }}
+                />
+              </tr>
+            ) : null}
           </tbody>
         </table>
 

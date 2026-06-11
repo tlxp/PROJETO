@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { ArrowDown, Code2, GitBranch, Terminal } from "lucide-react";
 import CodePanel from "@/components/CodePanel";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { apiFetchJson, isAbortError } from "@/lib/api";
 import {
   buildXrefViewModel,
   openXrefExplorerTab,
@@ -13,7 +14,6 @@ import {
 } from "@/lib/cCodeXref";
 import { buildShortFileName } from "@/lib/artifactNaming";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const MENTION_CONTEXT_LINES = 50;
 const MENTION_CHUNK_LINES = 1;
 const MENTION_WINDOW_MAX_LINES = 1200;
@@ -74,6 +74,8 @@ const XrefExplorerPage: React.FC = () => {
   const [exportOpen, setExportOpen] = useState(false);
   const [windowFocusLine, setWindowFocusLine] = useState<number | null>(null);
   const [expandedMentionsByNode, setExpandedMentionsByNode] = useState<Record<string, boolean>>({});
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retryToken, setRetryToken] = useState(0);
 
   const wordFromQuery = useMemo(() => {
     const params = new URLSearchParams(location.search ?? "");
@@ -106,14 +108,11 @@ const XrefExplorerPage: React.FC = () => {
     let cancelled = false;
 
     const run = async () => {
+      setLoadError(null);
       try {
-        const res = await fetch(`${API_BASE}/api/analysis/${encodeURIComponent(jobId)}`);
-        if (!res.ok) {
-          if (!cancelled) setPayload(null);
-          return;
-        }
-        const job = (await res.json()) as unknown;
-        const rec = (job && typeof job === "object" ? (job as Record<string, unknown>) : null) ?? {};
+        const rec = await apiFetchJson<Record<string, unknown>>(
+          `/api/analysis/${encodeURIComponent(jobId)}`
+        );
 
         // Backends diferentes: alguns devolvem cCode no topo, outros dentro de staticResult.
         const staticResult =
@@ -150,8 +149,12 @@ const XrefExplorerPage: React.FC = () => {
             flaggedIndicators,
           });
         }
-      } catch {
-        if (!cancelled) setPayload(null);
+      } catch (e) {
+        if (cancelled || isAbortError(e)) return;
+        setPayload(null);
+        setLoadError(
+          e instanceof Error ? e.message : "Erro ao carregar a análise do backend."
+        );
       }
     };
 
@@ -159,7 +162,7 @@ const XrefExplorerPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [jobId, wordFromQuery]);
+  }, [jobId, wordFromQuery, retryToken]);
 
   const model = useMemo(() => {
     if (!payload?.code || !payload.word) return null;
@@ -222,13 +225,6 @@ const XrefExplorerPage: React.FC = () => {
   );
 
   const baseName = (payload?.fileName ?? "output").replace(/\.[^.]+$/, "") || "output";
-  const exportBaseName = buildShortFileName({
-    baseName,
-    kind: "xrefs",
-    parts: [payload?.word ?? "symbol"],
-    ext: "txt",
-    maxTotal: 90,
-  }).replace(/\.txt$/i, "");
 
   if (!payload) {
     return (
@@ -245,9 +241,24 @@ const XrefExplorerPage: React.FC = () => {
           </div>
         </header>
         <main className="container py-12 max-w-lg space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Não há dados de análise neste separador. Abra os xrefs a partir do pseudo-C (duplo-clique num símbolo e clique no número de menções na barra lateral).
-          </p>
+          {loadError ? (
+            <>
+              <p className="text-sm font-medium text-destructive">
+                Falha ao carregar a análise: {loadError}
+              </p>
+              <button
+                type="button"
+                onClick={() => setRetryToken((t) => t + 1)}
+                className="rounded-md border border-border bg-secondary px-3 py-1.5 text-sm font-medium text-secondary-foreground transition-colors hover:bg-secondary/80"
+              >
+                Tentar novamente
+              </button>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Não há dados de análise neste separador. Abra os xrefs a partir do pseudo-C (duplo-clique num símbolo e clique no número de menções na barra lateral).
+            </p>
+          )}
           <Link
             to={jobId ? `/analysis/${encodeURIComponent(jobId)}` : "/"}
             className="inline-flex text-sm font-medium text-primary hover:underline"

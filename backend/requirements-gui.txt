@@ -1,0 +1,3 @@
+# Dependências apenas para a GUI Python opcional (rat_analyzer_gui.py)
+# Instalar com: pip install -r requirements-gui.lock
+windnd>=1.0.4,<2.0

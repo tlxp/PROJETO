@@ -70,9 +70,9 @@ else {
         try {
             Write-LogHost ('         [RUN]  {0}' -f $it.Name)
             $res = Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
-                param($PathExe, $Args)
+                param($PathExe, $InstallerArgs)
                 if (-not (Test-Path -LiteralPath $PathExe)) { return @{ ok = $false; code = -1; msg = "Instalador não encontrado no guest." } }
-                $p = Start-Process -FilePath $PathExe -ArgumentList $Args -Wait -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+                $p = Start-Process -FilePath $PathExe -ArgumentList $InstallerArgs -Wait -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
                 if (-not $p) { return @{ ok = $false; code = -2; msg = "Falha ao iniciar instalador." } }
                 return @{ ok = $true; code = [int]$p.ExitCode; msg = "ok" }
             } -ArgumentList $dst, $it.Args -ErrorAction Stop

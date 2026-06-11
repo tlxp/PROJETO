@@ -1,157 +1,130 @@
-# Sandbox Hyper-V — análise comportamental (Guest Service + COM1 opcional)
+# Sandbox Hyper-V — análise comportamental (COM1 + Copy-VMFile)
 
-Ambiente isolado para análise comportamental de malware: VM Hyper-V sem internet, snapshot limpo. Por defeito (**`_Config.ps1`:** `GuestService`) o relatório chega só por **Copy-VMFile**. Para **COM1 → Named Pipe** (SBXREP1), use `-ReportTransport Both` ou `Serial`, ou defina `PROJETOVM_ReportTransport` em `_Config.ps1`.
+Ambiente isolado para análise comportamental de malware: VM Hyper-V **sem internet**, snapshot limpo, execução da amostra **dentro da VM** e recolha do relatório no host.
 
-- **Pasta base:** `D:\PROJETOVM` (VM, Reports, Samples, Logs).
-- **Fluxo:** criar VM (Gen1 recomendada para COM1) → colocar .exe/.dll → executar na VM → monitorizar alterações → relatório em terceira pessoa → recolher no host por **pipe serial** e/ou **Copy-VMFile** nos caminhos de `D:\PROJETOVM\Reports\` → restaurar snapshot → encerrar VM.
+> **Auditoria (Jun 2026):** isolamento de rede por run, credenciais sem fallback inseguro, cleanup `try/finally` — [`docs/AUDITORIA.md`](../../docs/AUDITORIA.md).
+
+Este pipeline é usado pela **app desktop WPF** (`wpf-gui`) e pode ser executado **manualmente** no host. **Não** é invocado pelo backend Python — ver [Dois caminhos de análise dinâmica](#dois-caminhos-de-análise-dinâmica) abaixo.
+
+## Transporte de relatórios (implementação actual)
+
+O `04-Run-Sample.ps1` **sempre**:
+
+1. Arranca um job em background que escuta o **Named Pipe** ligado ao **COM1** da VM (VM **Generation 1**).
+2. Executa a análise na VM; o guest envia o relatório **linha-a-linha** (`START_OF_REPORT` … `END_OF_REPORT`) via `vm/Send-ReportViaCom.ps1`.
+3. Se o pipe falhar ou expirar, recorre ao **Copy-VMFile** (Guest Service Interface, activado só durante o run) para ler `C:\analysis.txt` ou artefactos em `D:\PROJETOVM\Reports\`.
+
+> **Nota:** Não existe parâmetro `-ReportTransport` nem variável `PROJETOVM_ReportTransport` no código actual. O protocolo binário **SBXREP1** (`FILE …`) descrito em versões antigas da documentação **não está implementado** — ver [`SERIAL_REPORT_PROTOCOL.md`](SERIAL_REPORT_PROTOCOL.md).
+
+- **Pasta base:** `D:\PROJETOVM` (VM, Reports, Samples, Logs) — configurável em `_Config.ps1`.
+- **VM:** `MalwareSandbox` · **Snapshot:** `CleanState` · **Switch:** `SandboxSwitch` (Internal).
+- **Fluxo:** restore snapshot → start VM → copiar amostra/scripts → executar na VM → relatório por pipe (+ fallback Copy-VMFile) → stop VM → restore snapshot.
+
+## Dois caminhos de análise dinâmica
+
+| | **A — Backend + VM Agent (HTTP)** | **B — Scripts PowerShell (este README)** |
+|---|-----------------------------------|------------------------------------------|
+| **Quem orquestra** | `backend/vm_orchestrator.py` + driver `hyperv` | WPF ou `04-Run-Sample.ps1` manual |
+| **Comunicação** | HTTP para `vm-agent` (`/api/upload`, `/api/run`, `/api/report`) | COM1 → Named Pipe + Copy-VMFile |
+| **Config** | Env vars (`HYPERV_VM_NAME`, `VM_AGENT_BASE_URL`, …) | `_Config.ps1` (`D:\PROJETOVM`, …) |
+| **Documentação** | [`docs/sandbox-hyperv-setup.md`](../../docs/sandbox-hyperv-setup.md) (Caminho A) | Este ficheiro (Caminho B) |
+
+Os dois caminhos são **independentes**. Podem partilhar a mesma VM física se os nomes/snapshot coincidirem, mas normalmente usa-se **ou** o agent HTTP **ou** o pipeline serial.
+
+## Convenções dos scripts
+
+- Ficheiros `.ps1`: **UTF-8 com BOM**, fim de linha **CRLF** (ver [`docs/ps1-scripts.md`](../../docs/ps1-scripts.md)).
+- Mensagens ao utilizador em **português** com acentos; identificadores de funções em inglês.
+- CI valida UTF-8: `python scripts/ci/check_ps1_utf8.py`.
 
 ## Pré-requisitos
 
 - Windows 10/11 Pro ou Enterprise (ou Server) com **Hyper-V**.
 - PowerShell **como Administrador** para setup e orquestração.
-- **ISO do Windows:** **en-US** (English United States) apenas — mais nada é suportado para instalação unattended.
-- VM com Windows instalada; **COM1/pipe** exige **VM Generation 1** (definido em `_Config.ps1`). Em Gen2 o `04` usa automaticamente só Guest Service.
+- **ISO Windows en-US** (English United States) — necessário para instalação unattended.
+- VM **Generation 1** (BIOS) para COM1/pipe — definido em `_Config.ps1` (`PROJETOVM_VMGeneration = 1`).
 
 ## Estrutura de ficheiros
 
-Os scripts de topo são **numerados** pela ordem em que normalmente se executam. Cada um delega o
-trabalho pesado em módulos dentro de uma sub-pasta com o mesmo nome (decomposição por fases para
-facilitar leitura e manutenção). Os módulos partilhados estão em `SandboxCommon/` (importados via
-`SandboxCommon.psm1`).
-
 ```
 scripts/hyperv-sandbox/
-├── _Config.ps1                      # Configuração central (D:\PROJETOVM, VM, snapshot, transporte)
-├── SandboxCommon.psm1               # Módulo agregador (importa SandboxCommon/*.ps1)
-│
-├── 00-Reset-Sandbox.ps1             # Host: repõe a sandbox a partir do snapshot limpo
-├── 01-Setup-MalwareSandbox.ps1      # Host: setup único (pastas, VM, switch, IP host, snapshot)
-├── 02-Host-ReceiveReport.ps1        # Host: escuta o Named Pipe (COM1) e grava o relatório
-├── 03-Install-SysmonInGuest.ps1     # Host: instala Sysmon dentro da VM
-├── 04-Run-Sample.ps1                # Host: orquestra uma análise (restore → run → relatório → restore)
-├── 05-FirstTimeVmSetup.ps1          # Host: primeira entrada (valida guest, isola, cria snapshot)
-├── 06-Prepare-GuestDependencies.ps1 # Host: descarrega/encena runtimes para o guest
-├── 07-Ensure-Runtimes.ps1           # Host: garante runtimes (.NET, VC++, WebView2) no guest
-│
-├── Setup/                           # Fases do 01 (HyperV, dirs, ISO, switch, VM, firmware, install…)
-├── FirstTimeVmSetup/                # Fases do 05 (pré-check, boot, guest service, isolamento…)
-├── RunSample/                       # Fases do 04 (setup, boot, cópia, execução, espera, recolha…)
-├── EnsureRuntimes/                  # Fases do 07 (plano, resolução, boot, cópia/instalação, verify)
-├── PrepareGuestDependencies/        # Fluxos do 06 (download, staging)
-├── InstallSysmon/                   # Apoio do 03 (resolução do Sysmon)
-├── SandboxCommon/                   # Módulos partilhados (logging, hashing, ISO/unattend, pipe…)
-│
-├── tools/                           # Ferramentas e manifestos (winutil.ps1 é de terceiros)
-├── offline/runtimes/                # Runtimes em modo offline
+├── _Config.ps1                      # Config central (paths, VM, snapshot, credenciais guest)
+├── SandboxCommon.psm1               # Módulo agregador (SandboxCommon/*.ps1)
+├── 00-Reset-Sandbox.ps1             # Repõe sandbox (confirmação SIM)
+├── 01-Setup-MalwareSandbox.ps1      # Setup único (pastas, VM, switch, snapshot)
+├── 04-Run-Sample.ps1                # Orquestra uma análise (try/finally de cleanup)
+├── RunSample/                       # Fases A–G do 04
+├── SandboxCommon/                   # Logging, pipe, VM, ficheiros, …
 ├── vm/                              # Scripts executados DENTRO da VM
-│   ├── Run-MalwareAnalysis.ps1      # VM: baseline → executa sample → diff → relatório
-│   ├── RunMalwareAnalysis/          # Fases da análise dentro da VM (baseline, execução, scoring…)
-│   ├── Prepare-RealisticEnvironment.ps1
-│   ├── Launch-AnalysisDetached.ps1
-│   └── Send-ReportViaCom.ps1        # VM: envia o relatório pelo COM1 (SBXREP1)
-│
-├── SERIAL_REPORT_PROTOCOL.md        # Especificação SBXREP1 (COM1 / Named Pipe)
-├── autounattend-*.xml               # Resposta unattend para instalação do Windows
+│   ├── Run-MalwareAnalysis.ps1
+│   └── Send-ReportViaCom.ps1        # Envio linha-a-linha pelo COM1
+├── SERIAL_REPORT_PROTOCOL.md        # Protocolo real (START_OF_REPORT)
 └── README.md
 ```
 
-## Estrutura em D:\PROJETOVM (após setup)
+## Configuração (`_Config.ps1` e variáveis de ambiente)
 
-```
-D:\PROJETOVM\
-├── VM\           # Configuração da VM e Sandbox.vhdx
-├── Reports\      # Relatórios de análise (.txt)
-├── Samples\      # Amostras a analisar (.exe / .dll)
-└── Logs\         # Logs de execução (opcional)
-```
+| Variável | Default / origem | Descrição |
+|----------|------------------|-----------|
+| `PROJETOVM_BasePath` | `D:\PROJETOVM` | Pasta raiz (override: env `PROJETOVM_BasePath`) |
+| `PROJETOVM_VMName` | `MalwareSandbox` | Nome da VM |
+| `PROJETOVM_SnapshotName` | `CleanState` | Snapshot limpo |
+| `PROJETOVM_SwitchName` | `SandboxSwitch` | Switch Internal |
+| `PROJETOVM_VMGeneration` | `1` | Gen1 para COM1 |
+| `PROJETOVM_GuestUser` | `analyst` | Utilizador guest (override: env `PROJETOVM_GuestUser`) |
+| `PROJETOVM_GuestPassword` | *(obrigatório)* | **Obrigatória** via env. Dev: `PROJETOVM_ALLOW_INSECURE_DEFAULTS=1` usa password de exemplo. |
 
 ## Instalação (fazer uma vez)
 
-1. Abra **PowerShell como Administrador**.
-2. Navegue até à pasta dos scripts:
+1. PowerShell **como Administrador**:
    ```powershell
    cd "<RAIZ-DO-REPO>\scripts\hyperv-sandbox"
-   ```
-3. Execute o setup:
-   ```powershell
    .\01-Setup-MalwareSandbox.ps1
    ```
-   - Se o Hyper-V não estiver ativo, o script ativa-o e pede **reinício**; após reiniciar, execute o script novamente.
-   - O script cria `D:\PROJETOVM`, a VM `MalwareSandbox`, o switch interno `SandboxSwitch`, atribui 192.168.100.1/24 ao adaptador do host (se existir), e cria o snapshot `CleanState` (se a VM estiver desligada).
-   - Se a VM `MalwareSandbox` e/ou o VHDX `Sandbox.vhdx` já existirem, o script pergunta se quer **eliminar e reinstalar de raiz**.
-   - Para reinstalar **sem pedir confirmação** (opção usada pela GUI quando deteta recursos existentes), execute:
-     ```powershell
-     .\01-Setup-MalwareSandbox.ps1 -ForceReinstall
-     ```
-   - Quando o setup é iniciado pela GUI WPF (`wpf-gui/Views/VmAnalysisWindow.xaml.cs`), é feita uma pré-checagem e é apresentado um pop-up para confirmar a reinstalação.
-4. Instale o **Windows** na VM (ligar DVD/ISO, arrancar, concluir instalação).
-5. Dentro da VM: desative rede pública; opcionalmente configure IP estático (ex.: 192.168.100.10/24, gateway 192.168.100.1).
-6. (Opcional mas recomendado) Instale **Sysmon** na VM com configuração personalizada:
-   ```powershell
-   # No host, após o Windows estar instalado na VM e Sysmon existir em D:\Tools\Sysmon\
-   cd "<RAIZ-DO-REPO>\scripts\hyperv-sandbox"
-   .\03-Install-SysmonInGuest.ps1 `
-     -SysmonExePath "D:\Tools\Sysmon\Sysmon64.exe" `
-     -SysmonConfigPath "D:\Tools\Sysmon\sysmon-config.xml"
-   ```
-7. (Opcional manual) copie para a VM o script da pasta `vm\` apenas se não usar apenas o `04-Run-Sample.ps1` para cópias:
-   - `Run-MalwareAnalysis.ps1`
-8. Desligue a VM e crie/atualize o snapshot limpo:
-   ```powershell
-   Stop-VM -Name MalwareSandbox -Force
-   Checkpoint-VM -Name MalwareSandbox -SnapshotName CleanState
-   ```
+2. Instale o Windows na VM; conclua o first-time setup (`05-FirstTimeVmSetup.ps1` se aplicável).
+3. Desligue a VM e confirme o snapshot `CleanState`.
 
 ## Utilização
 
-### Executar uma amostra (host)
-
-Coloque o ficheiro suspeito em `D:\PROJETOVM\Samples\` (ou use outro caminho). No **host**, como Administrador:
+### Executar uma amostra
 
 ```powershell
 cd "<RAIZ-DO-REPO>\scripts\hyperv-sandbox"
 .\04-Run-Sample.ps1 -SamplePath "D:\PROJETOVM\Samples\suspeito.exe" -TimeoutSeconds 120
 ```
 
-O relatório será guardado em `D:\PROJETOVM\Reports\analysis_<RunId>.txt` (e JSON/artefactos ao lado). O ficheiro `D:\PROJETOVM\Logs\Runs\<RunId>\run_<RunId>.json` regista `report_transport`, estado do pipe e caminhos.
+| Parâmetro | Descrição |
+|-----------|-----------|
+| `-SamplePath` | Caminho no **host** do `.exe`. Se omitido, usa o `.exe`/`.dll` mais recente em `Samples\`. |
+| `-AllowAutoSample` | Se não houver amostra em `Samples\`, gera `sample_autogen.exe` inofensivo (apenas dev/teste). |
+| `-TimeoutSeconds` | Timeout da execução **dentro da VM** (default 120). |
+| `-GlobalTimeoutSeconds` | Deadline global do run no host (default 600). |
+| `-BootWaitSeconds` | Reservado / margem de arranque (ver fases). |
 
-**Transporte de relatórios:** por defeito só **Guest Service**. Para ativar COM1 + pipe: `-ReportTransport Both` (serial + cópia de refugo) ou `Serial`. Em `_Config.ps1`, `PROJETOVM_ReportTransport` pode fixar o modo por omissão.
+Relatório: `D:\PROJETOVM\Reports\analysis_<RunId>.txt` · Logs: `D:\PROJETOVM\Logs\Runs\<RunId>\`.
 
-```powershell
-.\04-Run-Sample.ps1 -SamplePath "D:\PROJETOVM\Samples\suspeito.exe" -TimeoutSeconds 120 -ReportTransport Serial
-```
+### Cleanup em falha
 
-Se o PowerShell Direct falhar de forma persistente, copie a amostra com o `04` até ao passo de cópia ou use `Copy-VMFile` manualmente; **dentro da VM** pode executar:
-
-```powershell
-cd C:\analysis_work
-.\Run-MalwareAnalysis.ps1 -SamplePath "C:\analysis_work\suspeito.exe" -TimeoutSeconds 120 -HostRunId "<mesmo RunId do host>" -SerialReport:$true
-```
-
-O `04` continua a aceitar ficheiros em `C:\analysis.txt` via **Copy-VMFile** quando o transporte inclui Guest Service ou como retorno se o serial falhar.
+O `04-Run-Sample.ps1` envolve as fases num `try/finally`: se o run falhar a meio, tenta parar a VM, restaurar o snapshot, desactivar o Guest Service e parar o job do pipe.
 
 ## Conteúdo do relatório
 
-- **Alterações em ficheiros:** criação, modificação e remoção nas pastas monitorizadas (`C:\Users\Public`, `C:\Windows\Temp`, `C:\ProgramData`, `C:\analysis_work`, `C:\Users\*\AppData\Local\Temp`, `C:\Users\*\AppData\Roaming`).
-- **Registry:** alterações em Run, RunOnce, RunServices, Services, Image File Execution Options, StartupApproved.
-- **Processos:** processos criados durante a análise (nome, PID, caminho).
-- **Rede:** diferenças nas conexões TCP (Listen/Established) em relação ao baseline.
-- **Serviços:** novos serviços em execução.
-- **Tarefas agendadas:** novas tarefas agendadas (Task Scheduler).
-- **Nota:** para chamadas API e rede em detalhe, recomenda-se **Sysmon** na VM e análise dos eventos (EID 3, 10, 22, etc.); o relatório base não inclui hooking de APIs.
+Gerado por `vm/Run-MalwareAnalysis.ps1` dentro da VM:
 
-## Configuração
-
-Todas as variáveis (pasta base, nome da VM, snapshot, **ReportTransport** por defeito, limite de tamanho por ficheiro no serial) estão em **`_Config.ps1`**. A pasta base é **`D:\PROJETOVM`**. Para usar outra pasta, edite `$script:PROJETOVM_BasePath` em `_Config.ps1`.
+- Alterações em ficheiros, registry, processos, rede (TCP), serviços, tarefas agendadas.
+- Para telemetria avançada (Sysmon/ETW), instale Sysmon na VM (`03-Install-SysmonInGuest.ps1`).
 
 ## Segurança
 
-- VM com rede **Internal**: sem acesso à internet.
-- Snapshot limpo antes/depois de cada análise.
-- Comunicação host↔VM: **Guest Service** (`Copy-VMFile`, activado só durante `04-Run-Sample.ps1`; desactivado ao terminar) e, opcionalmente, **COM1** para relatórios (Named Pipe; só **Gen1**).
-- Evitar: partilhas de pastas, clipboard, drag-and-drop, bridge para a internet.
+- VM em switch **Internal** — sem internet por defeito.
+- **Preflight de rede** em cada run (`Assert-SandboxVmNetworkIsolation` em `RunSample/PhaseA-Setup.ps1`): falha se existir adaptador fora do switch Internal esperado.
+- **Firewall no host** (`Ensure-SandboxHostFirewall`): bloqueia inbound de `192.168.100.0/24` no adaptador do switch (criado no setup e ao atribuir IP).
+- Snapshot limpo antes/depois de cada análise; `04-Run-Sample.ps1` com `try/finally` e `PhaseG-Finish.ps1`.
+- Guest Service Interface activado **apenas** durante o `04`; desactivado no fim.
+- **Não** versionar passwords reais — `PROJETOVM_GuestPassword` obrigatória em produção.
+- Evitar Enhanced Session / clipboard partilhado durante runs de malware.
+- `tools/winutil.ps1` **não** está no repositório (script de terceiros); transferir localmente só se necessário.
 
-## Integração com o backend (opcional)
+## Integração com o backend
 
-O driver `backend/vm_drivers/hyperv.py` pode **lançar** `04-Run-Sample.ps1` com o caminho da amostra e **ler os ficheiros** em `D:\PROJETOVM\Reports\`.
-
+O driver `backend/vm_drivers/hyperv.py` **não** executa `04-Run-Sample.ps1`. Usa **VM Agent HTTP** (`vm-agent/`) com restore/start via PowerShell e pedidos a `/api/upload`, `/api/run`, `/api/report`. Para integrar os scripts PowerShell no backend seria necessário um wrapper Python (não implementado).

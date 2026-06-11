@@ -1,36 +1,36 @@
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
+import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { withRouteBoundary } from "@/components/RouteErrorBoundary";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
-import ResultadosPage from "./pages/ResultadosPage";
+import ResultadosRedirect from "./pages/ResultadosPage";
 import XrefExplorerPage from "./pages/XrefExplorerPage";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
-
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          {/* Rotas com jobId (permalinks) */}
-          <Route path="/analysis/:jobId" element={<Index />} />
-          <Route path="/analysis/:jobId/xref" element={<XrefExplorerPage />} />
+  <TooltipProvider>
+    <Toaster />
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={withRouteBoundary("Início", <Index />)} />
+        {/* Rota canónica com jobId (permalinks) */}
+        <Route path="/analysis/:jobId" element={withRouteBoundary("Análise", <Index />)} />
+        <Route
+          path="/analysis/:jobId/xref"
+          element={withRouteBoundary("Explorador Xref", <XrefExplorerPage />)}
+        />
 
-          {/* Back-compat */}
-          <Route path="/xref" element={<XrefExplorerPage />} />
-          <Route path="/resultados" element={<ResultadosPage />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
+        {/* Back-compat: /resultados?jobId=... redireciona para /analysis/:jobId */}
+        <Route
+          path="/resultados"
+          element={withRouteBoundary("Resultados", <ResultadosRedirect />)}
+        />
+        <Route path="/xref" element={withRouteBoundary("Explorador Xref", <XrefExplorerPage />)} />
+        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+        <Route path="*" element={withRouteBoundary("Página", <NotFound />)} />
+      </Routes>
+    </BrowserRouter>
+  </TooltipProvider>
 );
 
 export default App;
