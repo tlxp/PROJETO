@@ -11,11 +11,15 @@ if (Driver configurado?) then (hyperv / proxmox)
   :Arrancar VM isolada (sem Internet);
   if (Caminho A — vm-agent HTTP?) then (sim)
     :Upload + run + report via vm-agent;
-  else (Caminho B — PowerShell)
-    :04-Run-Sample.ps1\n(pipe COM1 + Copy-VMFile);
+    :Executar amostra com timeout;
+    :Recolher comportamento\n(processos, ficheiros, registo, rede);
+  else (Caminho B — PowerShell / WPF)
+    :04-Run-Sample.ps1\n(restore, copiar amostra/scripts);
+    :Executar Run-MalwareAnalysis na VM;
+    :Aguardar guest_analysis_done.txt;
+    :Copiar relatório guest→host\n(PsDirect / Copy-VMFile);
+    :Verificar SHA256 após cópia;
   endif
-  :Executar amostra com timeout;
-  :Recolher comportamento\n(processos, ficheiros, registo, rede);
   :Restaurar snapshot e parar VM;
 else (stub)
   :Gerar resultado sintético (sem execução real);

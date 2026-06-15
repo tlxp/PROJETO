@@ -82,7 +82,6 @@ try {
 # aponta para ...\RunSample. A pasta vm\ está na raiz hyperv-sandbox ($SandboxRoot).
 $scriptDir = Join-Path $SandboxRoot "vm"
 $runScript = Join-Path $scriptDir "Run-MalwareAnalysis.ps1"
-$sendScript = Join-Path $scriptDir "Send-ReportViaCom.ps1"
 if (-not (Test-Path -LiteralPath $runScript)) {
     throw "Run-MalwareAnalysis.ps1 não encontrado no host em: $runScript"
 }
@@ -97,14 +96,9 @@ if (-not (Test-Path -LiteralPath $analysisLibDir)) {
 foreach ($lib in (Get-ChildItem -LiteralPath $analysisLibDir -Filter "*.ps1" -File)) {
     Copy-SandboxVMFile -VMName $VMName -Credential $cred -SourcePath $lib.FullName -DestinationPath "$VMScriptsPath\RunMalwareAnalysis\$($lib.Name)"
 }
-if (-not (Test-Path -LiteralPath $sendScript)) {
-    throw "Send-ReportViaCom.ps1 não encontrado no host em: $sendScript"
-}
-Copy-SandboxVMFile -VMName $VMName -Credential $cred -SourcePath $sendScript -DestinationPath "$VMScriptsPath\Send-ReportViaCom.ps1"
 
 # Launcher destacado: corre Run-MalwareAnalysis.ps1 num processo separado dentro da VM
-# para que a análise sobreviva ao fecho da sessão PowerShell Direct (VMBus) e o relatório
-# chegue ao host por COM1 mesmo que o PS Direct caia ("Hyper-V socket target process has ended").
+# para que a análise sobreviva ao fecho da sessão PowerShell Direct (VMBus).
 $launchScript = Join-Path $scriptDir "Launch-AnalysisDetached.ps1"
 if (-not (Test-Path -LiteralPath $launchScript)) {
     throw "Launch-AnalysisDetached.ps1 não encontrado no host em: $launchScript"

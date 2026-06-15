@@ -8,7 +8,8 @@ FAQ geral: [`docs/faq.md`](../../docs/faq.md) · índice: [`docs/README.md`](../
 |---------|-------|
 | `Assert-SandboxVmNetworkIsolation` falha | VM só com adaptador no switch Internal `SandboxSwitch` |
 | Credenciais guest falham | `PROJETOVM_GuestUser` / `PROJETOVM_GuestPassword` |
-| Timeout no relatório | Ver fallback Copy-VMFile; [`SERIAL_REPORT_PROTOCOL.md`](SERIAL_REPORT_PROTOCOL.md) |
+| Timeout no relatório | Verificar `guest_analysis_done.txt` no guest; logs em `sandbox_run_*.log`; [`SERIAL_REPORT_PROTOCOL.md`](SERIAL_REPORT_PROTOCOL.md) |
+| SHA256 do relatório não coincide | Cópia corrompida ou guest com script antigo — repetir run após `PhaseC` copiar `Run-MalwareAnalysis.ps1` atualizado |
 | VM não arranca | Espaço em disco; restaurar `CleanState` |
 | Amostra falha na VM | Runtimes: [`offline/runtimes/`](offline/runtimes/README.md) |
 | Run anterior incompleto | `00-Reset-Sandbox.ps1` ou stop + restore snapshot |

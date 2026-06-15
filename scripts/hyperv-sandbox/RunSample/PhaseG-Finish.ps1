@@ -22,16 +22,17 @@ $status = if (Test-ReportLooksComplete -Path $ReportOutputPath) { "ok" }
           elseif ((Test-Path -LiteralPath $ReportOutputPath) -and ((Get-Item -LiteralPath $ReportOutputPath).Length -gt 0)) { "partial" }
           else { "failed" }
 $jsonData = @{
-    run_id         = $RunId
-    sample_path    = $SamplePath
-    sample_sha256  = $sampleSha256
-    vm_name        = $VMName
-    snapshot       = $SnapshotName
-    analysis_start = $analysisStart.ToString("yyyy-MM-dd HH:mm:ss")
-    analysis_end   = $analysisEnd.ToString("yyyy-MM-dd HH:mm:ss")
-    report_path    = $ReportOutputPath
-    report_lines   = $pipeResult
-    status         = $status
+    run_id              = $RunId
+    sample_path         = $SamplePath
+    sample_sha256       = $sampleSha256
+    vm_name             = $VMName
+    snapshot            = $SnapshotName
+    analysis_start      = $analysisStart.ToString("yyyy-MM-dd HH:mm:ss")
+    analysis_end        = $analysisEnd.ToString("yyyy-MM-dd HH:mm:ss")
+    report_path         = $ReportOutputPath
+    report_sha256       = if ($reportSha256) { $reportSha256 } else { $null }
+    report_hash_verified = $reportHashVerified
+    status              = $status
 }
 try {
     $jsonData | ConvertTo-Json -Depth 4 | Set-Content -Path $HostJsonPath -Encoding UTF8

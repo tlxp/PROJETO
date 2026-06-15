@@ -1,19 +1,5 @@
-﻿# 6) Receptor do pipe + lançamento da análise na VM
-# O job do pipe arranca aqui (VM já a correr) para evitar sessão COM1 ociosa desde o boot.
-# Tem de estar ligado antes do guest escrever no COM1 no fim da análise.
-Write-LogHost "[6/7] A iniciar receptor do pipe e lançar análise na VM..."
-if (-not $pipeJob) {
-    $pipeJob = Start-Job -ScriptBlock {
-        param($PipeName, $OutputPath, $TimeoutSecondsLocal, $ModulePath, $IdleReconnectSec)
-        Write-Host "[PIPE] Job worker arrancou pid=$PID utc=$([DateTime]::UtcNow.ToString('o'))"
-        Import-Module $ModulePath -DisableNameChecking -ErrorAction Stop
-        return (Receive-SandboxReportFromPipe -PipeName $PipeName -OutputPath $OutputPath `
-            -TimeoutSeconds $TimeoutSecondsLocal -IdleReconnectSeconds $IdleReconnectSec)
-    } -ArgumentList $RunPipeName, $ReportOutputPath, $pipeTimeoutSeconds, $modulePath, $pipeIdleReconnectSeconds
-    Add-LogLine -Path $HostLogPath -Value "Pipe job started: Id=$($pipeJob.Id) path=\\.\pipe\$RunPipeName timeout=${pipeTimeoutSeconds}s"
-    Write-LogHost "      [PIPE-HOST] Job receptor id=$($pipeJob.Id) pipe=\\.\pipe\$RunPipeName"
-    Start-Sleep -Seconds 3
-}
+﻿# 6) Lançar análise na VM
+Write-LogHost "[6/7] A lançar análise na VM..."
 
 $analysisSuccess = $false
 
@@ -39,7 +25,6 @@ try {
     Write-LogWarning "Lançamento da análise destacada falhou (tentativa 1): $($_.Exception.Message)"
     Add-LogLine -Path $HostLogPath -Value "Detached launch failed (try1): $($_.Exception.Message)"
 
-    # Repetir se a VM ainda estiver ativa
     $vmState = (Get-VM -Name $VMName -ErrorAction SilentlyContinue).State
     if ($vmState -eq 'Running') {
         Write-LogWarning "VM ainda em execução. A tentar re-lançar análise..."
@@ -58,15 +43,7 @@ try {
     }
 }
 
-Start-Sleep -Seconds 1
-$earlyState = $null
-try { $earlyState = (Get-Job -Id $pipeJob.Id -ErrorAction SilentlyContinue).State } catch { }
-$pipeReportAlreadyReceived = ($earlyState -eq "Completed")
-if ($pipeReportAlreadyReceived) {
-    Write-LogHost "      [PIPE] Relatório já recebido durante execução da análise."
-}
-
-# Confirmar que o processo destacado arrancou de facto no guest (evita espera infinita no pipe).
+# Confirmar que o processo destacado arrancou de facto no guest.
 if ($analysisSuccess -and $cred -is [pscredential]) {
     Start-Sleep -Seconds 3
     try {

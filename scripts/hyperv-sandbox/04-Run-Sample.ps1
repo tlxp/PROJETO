@@ -1,10 +1,10 @@
 ﻿<#
 .SYNOPSIS
-    Orquestração no host: restaura VM, copia amostra, executa análise, recebe relatório via pipe, restaura snapshot.
+    Orquestração no host: restaura VM, copia amostra, executa análise, recolhe relatório via PsDirect, restaura snapshot.
 .DESCRIPTION
     Fluxo: Restore snapshot -> Start VM -> transferência via PowerShell Direct ->
-    Copiar sample e scripts para VM -> Iniciar listener do pipe em background ->
-    Executar análise na VM (Invoke-Command ou manual) -> Esperar relatório ->
+    Copiar sample e scripts para VM -> Executar análise na VM ->
+    Copiar relatório guest->host com verificação SHA256 -> Stop VM -> Restore snapshot.
     Stop VM -> Restore snapshot -> Relatório em D:\PROJETOVM\Reports\.
 .PARAMETER SamplePath
     Caminho no HOST do ficheiro .exe ou .dll a analisar.
@@ -43,7 +43,6 @@ if (Test-Path $configScript) { . $configScript }
 $BasePath = $script:PROJETOVM_BasePath
 $VMName = $script:PROJETOVM_VMName
 $SnapshotName = $script:PROJETOVM_SnapshotName
-$PipeName = $script:PROJETOVM_PipeName
 $ReportsDir = $script:PROJETOVM_ReportsPath
 # Raiz da pasta hyperv-sandbox. As fases são dot-sourced a partir de .\RunSample\,
 # por isso DENTRO delas $PSScriptRoot aponta para ...\RunSample (e não para esta raiz).
@@ -80,14 +79,6 @@ function Invoke-SandboxRunEmergencyCleanup {
     if ($script:SandboxRunCleanupDone) { return }
     $script:SandboxRunCleanupDone = $true
     Write-Warning "[CLEANUP] A executar limpeza de emergência do run sandbox..."
-    try {
-        if ($pipeJob -and ($pipeJob.State -eq 'Running' -or $pipeJob.HasMoreData)) {
-            Stop-Job -Job $pipeJob -ErrorAction SilentlyContinue
-            Remove-Job -Job $pipeJob -Force -ErrorAction SilentlyContinue
-        }
-    } catch {
-        Write-Warning "[CLEANUP] Falha ao parar job de pipe: $_"
-    }
     try {
         if ($VMName) { Stop-SandboxVM -VMName $VMName -ErrorAction SilentlyContinue }
     } catch {
@@ -135,8 +126,6 @@ try {
         # PhaseG marca conclusão normal; só fazemos emergency cleanup se ainda não terminou.
         $vm = if ($VMName) { Get-VM -Name $VMName -ErrorAction SilentlyContinue } else { $null }
         if ($vm -and $vm.State -eq 'Running') {
-            Invoke-SandboxRunEmergencyCleanup
-        } elseif ($pipeJob -and ($pipeJob.State -eq 'Running')) {
             Invoke-SandboxRunEmergencyCleanup
         }
     }

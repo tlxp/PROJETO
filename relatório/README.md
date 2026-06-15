@@ -55,5 +55,5 @@ pdflatex main.tex
 | Capítulo | Conteúdo ligado ao repo |
 |----------|-------------------------|
 | 4 — Arquitetura | Diagramas em `docs/diagrams/` |
-| 5 — Implementação | `frontend/`, `backend/`, `wpf-gui/`, sandbox |
+| 5 — Implementação | `frontend/`, `backend/`, `wpf-gui/`, sandbox (PsDirect + SHA256; histórico COM1 no texto) |
 | Segurança | [`docs/SEGURANCA.md`](../docs/SEGURANCA.md) |

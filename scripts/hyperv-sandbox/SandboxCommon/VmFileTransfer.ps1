@@ -284,10 +284,80 @@ function Copy-SandboxGuestDiagnostics {
     return @($copied)
 }
 
+function Get-SandboxGuestReportDigest {
+    <#
+    .SYNOPSIS
+        Obtém SHA256 e tamanho do relatório no guest (de guest_analysis_done.txt ou cálculo directo).
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $VMName,
+        [Parameter(Mandatory = $true)][pscredential] $Credential,
+        [string] $GuestReportPath = "C:\analysis.txt",
+        [string] $GuestDonePath = "C:\analysis_work\guest_analysis_done.txt"
+    )
+
+    try {
+        return Invoke-Command -VMName $VMName -Credential $Credential -ScriptBlock {
+            param($ReportPath, $DonePath)
+            $out = [ordered]@{
+                sha256      = ""
+                reportBytes = 0
+            }
+
+            if (Test-Path -LiteralPath $DonePath) {
+                try {
+                    $done = Get-Content -LiteralPath $DonePath -Raw -Encoding UTF8 | ConvertFrom-Json
+                    if ($done.reportSha256) { $out.sha256 = [string]$done.reportSha256 }
+                    if ($done.reportBytes) { $out.reportBytes = [long]$done.reportBytes }
+                } catch { }
+            }
+
+            if (-not (Test-Path -LiteralPath $ReportPath)) {
+                return [pscustomobject]$out
+            }
+
+            if ($out.reportBytes -le 0) {
+                $out.reportBytes = [long](Get-Item -LiteralPath $ReportPath).Length
+            }
+            if ([string]::IsNullOrWhiteSpace($out.sha256) -and $out.reportBytes -gt 0) {
+                $out.sha256 = (Get-FileHash -LiteralPath $ReportPath -Algorithm SHA256 -ErrorAction Stop).Hash
+            }
+            return [pscustomobject]$out
+        } -ArgumentList $GuestReportPath, $GuestDonePath -ErrorAction Stop
+    } catch {
+        return [pscustomobject]@{ sha256 = ""; reportBytes = 0 }
+    }
+}
+
+function Assert-SandboxCopiedReportHash {
+    <#
+    .SYNOPSIS
+        Verifica SHA256 do relatório copiado para o host contra o digest do guest (após cópia concluída).
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $HostReportPath,
+        [Parameter(Mandatory = $true)][string] $ExpectedSha256,
+        [long] $ExpectedBytes = 0
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ExpectedSha256)) {
+        throw "Digest SHA256 do guest ausente; não é possível validar a cópia do relatório."
+    }
+
+    if ($ExpectedBytes -gt 0) {
+        $hostBytes = [long](Get-Item -LiteralPath $HostReportPath).Length
+        if ($hostBytes -ne $ExpectedBytes) {
+            throw "Tamanho do relatório copiado não coincide. Guest: $ExpectedBytes bytes | Host: $hostBytes bytes"
+        }
+    }
+
+    return (Assert-FileSha256 -Path $HostReportPath -ExpectedSha256 $ExpectedSha256 -Label "relatório copiado")
+}
+
 function Try-ReceiveSandboxGuestReport {
     <#
     .SYNOPSIS
-        Tenta obter o relatório do guest via PsDirect quando o pipe COM1 ainda não entregou.
+        Obtém o relatório do guest via PsDirect / Copy-VMFile e valida SHA256 após a cópia.
     #>
     param(
         [Parameter(Mandatory = $true)][string] $VMName,
@@ -331,6 +401,26 @@ function Try-ReceiveSandboxGuestReport {
         -GuestSourcePath $GuestReportPath -HostDestinationPath $HostDestinationPath -Retries 3 -DelaySeconds 2
 
     $pulled = Test-Path -LiteralPath $HostDestinationPath
+    $hashVerified = $false
+    $reportSha256 = ""
+
+    if ($pulled) {
+        $digest = Get-SandboxGuestReportDigest -VMName $VMName -Credential $Credential `
+            -GuestReportPath $GuestReportPath -GuestDonePath $GuestDonePath
+        $shouldVerify = (-not $AllowPartial) -or $reportStatus.complete
+        if ($shouldVerify -and -not [string]::IsNullOrWhiteSpace($digest.sha256)) {
+            try {
+                $reportSha256 = Assert-SandboxCopiedReportHash -HostReportPath $HostDestinationPath `
+                    -ExpectedSha256 $digest.sha256 -ExpectedBytes $digest.reportBytes
+                $hashVerified = $true
+            } catch {
+                try { Remove-Item -LiteralPath $HostDestinationPath -Force -ErrorAction SilentlyContinue } catch { }
+                $pulled = $false
+                throw "Verificação SHA256 do relatório falhou: $($_.Exception.Message)"
+            }
+        }
+    }
+
     $diagCopied = @()
     if ($pulled -and $AllowPartial -and -not [string]::IsNullOrWhiteSpace($HostDiagnosticsDir)) {
         $diagCopied = Copy-SandboxGuestDiagnostics -VMName $VMName -Credential $Credential `
@@ -343,6 +433,8 @@ function Try-ReceiveSandboxGuestReport {
         guestDone         = $guestDone
         reportStatus      = $reportStatus
         partial           = (-not $reportStatus.complete) -and $AllowPartial
+        hashVerified      = $hashVerified
+        reportSha256      = $reportSha256
         diagnosticsCopied = $diagCopied
     }
 }

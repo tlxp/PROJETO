@@ -4,7 +4,7 @@ Pasta do `main.tex` (`\graphicspath{{imagens/}}`). Visão geral: [`../README.md`
 
 > **Nota:** o relatório académico (`relatório/main.tex`) vive no mesmo repositório que o código
 > para facilitar a entrega da licenciatura. A **fonte técnica** dos diagramas do cap. 4 está em
-> [`docs/diagrams/`](../../docs/diagrams/) - edite apenas lá; esta pasta guarda os PNG gerados.
+> [`docs/diagrams/`](../../docs/diagrams/) — edite apenas lá; esta pasta guarda os PNG gerados.
 
 ## Capítulo 4
 

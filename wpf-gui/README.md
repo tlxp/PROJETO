@@ -21,13 +21,13 @@ Visão geral: [README principal](../README.md) · sandbox: [`scripts/hyperv-sand
 | Fluxo | O que faz |
 |-------|-----------|
 | **Análise estática** | Envia a amostra ao backend FastAPI, obtém `jobId` e abre o browser em `http://localhost:8080/resultados?jobId=…`. |
-| **Análise comportamental** | Orquestra `scripts/hyperv-sandbox/` (`04-Run-Sample.ps1`): restore snapshot → execução na VM → relatório por COM1 / Copy-VMFile. |
+| **Análise comportamental** | Orquestra `scripts/hyperv-sandbox/` (`04-Run-Sample.ps1`): restore snapshot → execução na VM → cópia do relatório (PsDirect) com verificação SHA256. |
 | **Arranque integrado** | `StartupSequence` verifica ou inicia uvicorn (porta **8000**) e `npm run dev` (porta **8080**). |
 | **Bootstrap de dependências** | Instala/valida Python, npm, Ghidra, ILSpy, Java e ADK do sandbox (verificação SHA-256 opcional). |
 | **Manutenção de storage** | Janela para estimar/limpar artefatos do backend (`/api/storage/*`). |
 | **Credenciais guest** | Diálogo `VmGuestCredentialsWindow` para PowerShell Direct na VM. |
 
-> A análise dinâmica pelo WPF usa o **pipeline serial PowerShell** (Caminho B), **não** o driver `hyperv.py` do backend nem o vm-agent HTTP (Caminho A).
+> A análise dinâmica pelo WPF usa o **pipeline PowerShell Hyper-V** (Caminho B), **não** o driver `hyperv.py` do backend nem o vm-agent HTTP (Caminho A).
 
 ### Janelas principais
 

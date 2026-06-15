@@ -1,8 +1,8 @@
-﻿# 7) Aguardar relatório: pipe COM1 (primário) + cópia PsDirect (fallback imediato quando o guest termina).
-Write-LogHost "      A aguardar relatório via pipe (timeout: ${pipeTimeoutSeconds}s; fallback PsDirect activo)..."
-Add-LogLine -Path $HostLogPath -Value "Pipe wait begin: jobId=$($pipeJob.Id) earlyDone=$pipeReportAlreadyReceived analysisSuccess=$analysisSuccess"
+﻿# 7) Aguardar relatório via cópia guest->host (PsDirect / Copy-VMFile)
+Write-LogHost "      A aguardar relatório (cópia guest->host, timeout: ${reportTimeoutSeconds}s)..."
+Add-LogLine -Path $HostLogPath -Value "Report wait begin: analysisSuccess=$analysisSuccess"
 
-$waitSec = $pipeTimeoutSeconds
+$waitSec = $reportTimeoutSeconds
 $guestDonePath = "$VMScriptsPath\guest_analysis_done.txt"
 $guestReportPath = "C:\analysis.txt"
 $guestPidSeenRunning = $false
@@ -17,20 +17,8 @@ $guestPullPollSeconds = 3
 $lastGuestPullUtc = [DateTime]::MinValue
 $launchNoLifeDeadline = (Get-Date).AddSeconds(45)
 $guestState = $null
-$pipeWaitAbortedEarly = $false
-$pipeWaitAbortReason = ""
-
-function Receive-PipeJobOutput {
-    try {
-        $tmp = Receive-Job $pipeJob -ErrorAction SilentlyContinue 2>&1
-        foreach ($item in @($tmp)) {
-            $s = ($item | Out-String).TrimEnd()
-            if ([string]::IsNullOrWhiteSpace($s) -or $s -eq "True") { continue }
-            Write-LogHost ("      [PIPE] {0}" -f $s)
-            Add-LogLine -Path $HostLogPath -Value ("[PIPE] " + $s)
-        }
-    } catch { }
-}
+$waitAbortedEarly = $false
+$waitAbortReason = ""
 
 function Try-PullGuestReport {
     param(
@@ -49,8 +37,14 @@ function Try-PullGuestReport {
 
         if ($pull.pulled) {
             $partialNote = if ($pull.partial) { " (parcial)" } else { "" }
-            Write-LogHost "      Relatório obtido via cópia guest->host ($Reason)${partialNote}: $ReportOutputPath"
-            Add-LogLine -Path $HostLogPath -Value "Report pulled via guest copy ($Reason)$partialNote"
+            $hashNote = if ($pull.hashVerified) { " SHA256 OK" } else { "" }
+            Write-LogHost "      Relatório obtido via cópia guest->host ($Reason)${partialNote}${hashNote}: $ReportOutputPath"
+            Add-LogLine -Path $HostLogPath -Value "Report pulled via guest copy ($Reason)$partialNote$hashNote"
+            if ($pull.reportSha256) {
+                $reportSha256 = $pull.reportSha256
+                Add-LogLine -Path $HostLogPath -Value "Report SHA256: $reportSha256"
+            }
+            if ($pull.hashVerified) { $reportHashVerified = $true }
             if ($pull.diagnosticsCopied -and $pull.diagnosticsCopied.Count -gt 0) {
                 $diagMsg = "Guest diagnostics copied: $($pull.diagnosticsCopied -join ', ')"
                 Write-LogHost "      $diagMsg"
@@ -59,26 +53,16 @@ function Try-PullGuestReport {
             return $true
         }
     } catch {
-        Write-LogWarning "      Fallback cópia guest->host falhou: $($_.Exception.Message)"
-        Add-LogLine -Path $HostLogPath -Value "Guest copy fallback failed: $($_.Exception.Message)"
+        Write-LogWarning "      Cópia guest->host falhou: $($_.Exception.Message)"
+        Add-LogLine -Path $HostLogPath -Value "Guest copy failed: $($_.Exception.Message)"
     }
     return $false
 }
 
 if ($waitSec -gt 0) {
     $waitDeadline = (Get-Date).AddSeconds($waitSec)
-    $lastJobLog = Get-Date
-    while (-not $pipeReportAlreadyReceived -and (Get-Date) -lt $waitDeadline) {
-        $st = $null
-        try { $st = (Get-Job -Id $pipeJob.Id -ErrorAction SilentlyContinue).State } catch { }
-        if ($st -eq "Completed") {
-            $pipeReportAlreadyReceived = $true
-            break
-        }
-        if ($st -eq "Failed" -or $st -eq "Stopped") { break }
-
-        Receive-PipeJobOutput
-
+    $lastStatusLog = Get-Date
+    while (-not $reportReceived -and (Get-Date) -lt $waitDeadline) {
         $nowUtc = [DateTime]::UtcNow
         if ($cred -is [pscredential] -and ($nowUtc - $lastGuestDiagUtc).TotalSeconds -ge $guestDiagIntervalSeconds) {
             $lastGuestDiagUtc = $nowUtc
@@ -108,7 +92,6 @@ if ($waitSec -gt 0) {
 
                 $msg = "Guest diag: pidRunning=$($guestState.pidRunning) reportBytes=$($guestState.reportBytes) doneFile=$($guestState.doneFile) aliveFile=$($guestState.aliveFile) reportComplete=$($guestState.reportComplete)"
                 if ($guestState.launchError) { $msg += " launchError=$($guestState.launchError)" }
-                if ($guestState.com1LogTail) { $msg += " com1=$($guestState.com1LogTail)" }
                 if ($guestState.crashLogTail) { $msg += " crash=$($guestState.crashLogTail)" }
                 Add-LogLine -Path $HostLogPath -Value $msg
                 Write-LogHost "      [GUEST] $msg"
@@ -117,24 +100,23 @@ if ($waitSec -gt 0) {
             }
         }
 
-        # Abortar cedo: launch aparentou OK mas o processo nunca arrancou de facto.
         if ($analysisSuccess -and $detachedAnalysisPid -gt 0 -and (Get-Date) -gt $launchNoLifeDeadline) {
             $noLife = $guestState -and (-not $guestPidSeenRunning) -and ($guestState.reportBytes -le 0) -and (-not $guestState.doneFile)
             if ($noLife) {
                 $errDetail = if ($guestState.launchError) { $guestState.launchError } else { "sem guest_alive.txt nem relatório" }
-                Write-LogWarning "      Análise destacada não arrancou no guest ($errDetail). A abortar espera do pipe."
+                Write-LogWarning "      Análise destacada não arrancou no guest ($errDetail). A abortar espera."
                 Add-LogLine -Path $HostLogPath -Value "Early abort: detached analysis never started ($errDetail)"
-                $pipeWaitAbortedEarly = $true
-                $pipeWaitAbortReason = "detached analysis never started"
+                $waitAbortedEarly = $true
+                $waitAbortReason = "detached analysis never started"
                 break
             }
         }
 
         if (-not $analysisSuccess) {
-            Write-LogWarning "      Lançamento da análise falhou no host. A abortar espera do pipe."
+            Write-LogWarning "      Lançamento da análise falhou no host. A abortar espera."
             Add-LogLine -Path $HostLogPath -Value "Early abort: host launch failed"
-            $pipeWaitAbortedEarly = $true
-            $pipeWaitAbortReason = "host launch failed"
+            $waitAbortedEarly = $true
+            $waitAbortReason = "host launch failed"
             break
         }
 
@@ -150,15 +132,14 @@ if ($waitSec -gt 0) {
             $stallDetail = "pid morto/inactivo há $([int]((Get-Date) - $guestPidDeadSince).TotalSeconds)s, relatório=$($guestState.reportBytes) bytes, sem REPORT_END;"
             if ($guestState.reportBytes -gt 200) {
                 if (Try-PullGuestReport -AllowPartial:$true -Reason "análise parada no guest ($stallDetail)") {
-                    $pipeReportAlreadyReceived = $true
-                    Stop-SandboxPipeReportJob -PipeJob $pipeJob
+                    $reportReceived = $true
                     break
                 }
             }
-            Write-LogWarning "      Análise no guest parou sem concluir ($stallDetail). A abortar espera do pipe."
+            Write-LogWarning "      Análise no guest parou sem concluir ($stallDetail). A abortar espera."
             Add-LogLine -Path $HostLogPath -Value "Early abort: guest analysis stalled ($stallDetail)"
-            $pipeWaitAbortedEarly = $true
-            $pipeWaitAbortReason = "guest analysis stalled without completion"
+            $waitAbortedEarly = $true
+            $waitAbortReason = "guest analysis stalled without completion"
             break
         }
 
@@ -184,48 +165,33 @@ if ($waitSec -gt 0) {
             }
 
             if ($pullReason -and (Try-PullGuestReport -AllowPartial:($allowPartial) -Reason $pullReason)) {
-                $pipeReportAlreadyReceived = $true
-                Stop-SandboxPipeReportJob -PipeJob $pipeJob
+                $reportReceived = $true
                 break
             }
         }
 
-        if (((Get-Date) - $lastJobLog).TotalSeconds -ge 10) {
+        if (((Get-Date) - $lastStatusLog).TotalSeconds -ge 15) {
             $remain = [int]($waitDeadline - (Get-Date)).TotalSeconds
-            $pj = Get-Job -Id $pipeJob.Id -ErrorAction SilentlyContinue
-            $hm = if ($pj) { [string]$pj.HasMoreData } else { "?" }
-            Write-LogHost "      [PIPE-HOST] job id=$($pipeJob.Id) state=$st hasMoreData=$hm resto~${remain}s"
-            Add-LogLine -Path $HostLogPath -Value "PIPE-HOST heartbeat state=$st hasMore=$hm rest=${remain}s"
-            $lastJobLog = Get-Date
+            Write-LogHost "      [WAIT] resto~${remain}s doneFile=$($guestState.doneFile) reportBytes=$($guestState.reportBytes)"
+            Add-LogLine -Path $HostLogPath -Value "Report wait heartbeat rest=${remain}s done=$($guestState.doneFile) bytes=$($guestState.reportBytes)"
+            $lastStatusLog = Get-Date
         }
 
         Start-Sleep -Seconds 2
     }
 
-    $jobCompleted = $false
-    try {
-        $st2 = (Get-Job -Id $pipeJob.Id -ErrorAction SilentlyContinue).State
-        $jobCompleted = ($st2 -eq "Completed")
-        if ($jobCompleted) { $pipeReportAlreadyReceived = $true }
-    } catch { }
-
-    if (-not $jobCompleted -and -not $pipeReportAlreadyReceived) {
-        if ($cred -is [pscredential] -and (Try-PullGuestReport -AllowPartial:$true -Reason "última tentativa antes de timeout")) {
-            $pipeReportAlreadyReceived = $true
-        }
+    if (-not $reportReceived -and (Try-PullGuestReport -AllowPartial:$true -Reason "última tentativa antes de timeout")) {
+        $reportReceived = $true
     }
 
-    if (-not $jobCompleted -and -not $pipeReportAlreadyReceived) {
-        if ($pipeWaitAbortedEarly) {
-            Write-LogWarning "      Espera do pipe abortada ($pipeWaitAbortReason)."
-            Add-LogLine -Path $HostLogPath -Value "Pipe wait aborted early: $pipeWaitAbortReason"
+    if (-not $reportReceived) {
+        if ($waitAbortedEarly) {
+            Write-LogWarning "      Espera abortada ($waitAbortReason)."
+            Add-LogLine -Path $HostLogPath -Value "Report wait aborted early: $waitAbortReason"
         } else {
-            Write-LogWarning "      Listener do pipe não terminou a tempo (timeout após ${waitSec}s)."
-            Add-LogLine -Path $HostLogPath -Value "Pipe listener timeout after ${waitSec}s"
+            Write-LogWarning "      Relatório não obtido a tempo (timeout após ${waitSec}s)."
+            Add-LogLine -Path $HostLogPath -Value "Report wait timeout after ${waitSec}s"
         }
-        Stop-SandboxPipeReportJob -PipeJob $pipeJob
-    } elseif ($pipeReportAlreadyReceived -and -not $jobCompleted) {
-        Stop-SandboxPipeReportJob -PipeJob $pipeJob
     }
 } else {
     Write-LogWarning "      Sem tempo restante para aguardar relatório."

@@ -2,7 +2,7 @@
 
 Agente HTTP **minimal API** (.NET 8) que corre **dentro da VM Windows** da sandbox. Recebe amostras, executa-as com timeout e devolve relatório comportamental em JSON. Usado pelo **Caminho A** (`backend/vm_orchestrator.py` + driver `hyperv` ou `proxmox`).
 
-> **Não confundir** com o pipeline PowerShell serial (`04-Run-Sample.ps1` / **Caminho B**), que não usa este agente.
+> **Não confundir** com o pipeline PowerShell Hyper-V (`04-Run-Sample.ps1` / **Caminho B**), que não usa este agente.
 
 Escolha A vs B: [`docs/README.md`](../docs/README.md#análise-dinâmica--qual-caminho-usar) · setup Hyper-V: [`docs/sandbox-hyperv-setup.md`](../docs/sandbox-hyperv-setup.md).
 

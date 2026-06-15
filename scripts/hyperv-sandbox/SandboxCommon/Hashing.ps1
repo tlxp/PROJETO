@@ -29,3 +29,34 @@
     # Devolver o hash calculado para diagnóstico/logs
     return $actual
 }
+
+function Assert-FileSha256 {
+    param(
+        [Parameter(Mandatory = $true)][string] $Path,
+        [Parameter(Mandatory = $true)][string] $ExpectedSha256,
+        [string] $Label = "ficheiro"
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        throw "O $Label não foi encontrado em: $Path"
+    }
+
+    $expected = ($ExpectedSha256 -replace '\s', '').ToUpperInvariant()
+    if ([string]::IsNullOrWhiteSpace($expected)) {
+        throw "SHA-256 esperado vazio para o $Label."
+    }
+
+    $actual = $null
+    try {
+        $h = Get-FileHash -LiteralPath $Path -Algorithm SHA256 -ErrorAction Stop
+        $actual = ($h.Hash -replace '\s', '').ToUpperInvariant()
+    } catch {
+        throw "Falha ao calcular SHA-256 do $Label em '$Path': $($_.Exception.Message)"
+    }
+
+    if ($actual -ne $expected) {
+        throw "SHA-256 do $Label NÃO coincide. Esperado: $expected | Atual: $actual | Ficheiro: $Path"
+    }
+
+    return $actual
+}

@@ -70,15 +70,6 @@ Add-LogLine -Path $HostLogPath -Value "Report: $ReportOutputPath"
 Add-LogLine -Path $HostLogPath -Value "RunDir: $RunDir"
 Add-LogLine -Path $HostLogPath -Value "Network preflight OK: VM adapters only on Internal switch '$expectedSwitch'"
 
-# Limpar jobs de pipe orfaos, VM ligada e COM1 residual antes de preparar este run
-Clear-SandboxPipeEnvironment -VMName $VMName -LogPath $HostLogPath
-Write-LogHost "[1/7] Ambiente de pipes limpo (jobs orfaos / VM / COM1)"
-
-if ($vmObj.Generation -ge 2) {
-    Write-LogWarning "      VM '$VMName' e Gen$($vmObj.Generation): COM1->Named Pipe costuma não funcionar (use VM Gen1 / PROJETOVM_VMGeneration=1, ou relatório so por Guest Service)."
-    Add-LogLine -Path $HostLogPath -Value "WARNING: Gen$($vmObj.Generation) VM -- serial pipe transport often unavailable"
-}
-
 Write-LogHost "=== Orquestração Sandbox Hyper-V ==="
 Write-LogHost "Amostra: $SamplePath"
 Write-LogHost "Hash SHA256: $sampleSha256"
@@ -89,19 +80,12 @@ Write-LogHost ""
 $credCandidates = New-SandboxCredentialCandidates -UserName $GuestUser -Password $GuestPassword -ComputerName $VMName
 $cred = $credCandidates | Select-Object -First 1
 
-# 1) Nome do pipe único por run (evita conflitos)
-$RunPipeName = ($PipeName + "_" + $RunId) -replace "[^A-Za-z0-9_\-\.]", "_"
-Add-LogLine -Path $HostLogPath -Value "Pipe name: $RunPipeName"
-
-# 2) Preparar pipe do run (o job receptor arranca em PhaseD, quando a VM já está pronta)
-$modulePath = Join-Path $SandboxRoot "SandboxCommon.psm1"
-# Teto do pipe: tempo da amostra + ~25 min de overhead (baseline/after/diff/COM1).
+# Tempo máximo para aguardar relatório (cópia guest->host via PsDirect)
 $analysisOverheadSeconds = 1500
 $sampleWindowSeconds = if ($WaitForSampleExit) { 7200 } else { $TimeoutSeconds }
-$pipeTimeoutSeconds = $sampleWindowSeconds + $analysisOverheadSeconds
-$pipeIdleReconnectSeconds = if ($script:PROJETOVM_PipeIdleReconnectSec -gt 0) {
-    [int]$script:PROJETOVM_PipeIdleReconnectSec
-} else { 900 }
-$pipeJob = $null
+$reportTimeoutSeconds = $sampleWindowSeconds + $analysisOverheadSeconds
 $detachedAnalysisPid = 0
-Write-LogHost "[2/7] Pipe do relatório: \\.\pipe\$RunPipeName (receptor arranca antes do lançamento da análise)"
+$reportReceived = $false
+$reportSha256 = ""
+$reportHashVerified = $false
+Write-LogHost "[2/7] Relatório: cópia guest->host via PsDirect (timeout ${reportTimeoutSeconds}s)"

@@ -5,14 +5,13 @@ e como preparar uma VM Windows no Hyper-V de raiz. É o guia de referência comp
 do projeto consulte o [README principal](../README.md).
 
 > **Aviso Gen1 vs Gen2:** Este guia descreve o **Caminho A** (backend + VM Agent HTTP). A VM pode ser **Gen2**
-> (exemplo manual `win-sandbox` abaixo). O **Caminho B** (WPF / `04-Run-Sample.ps1`) **exige VM Generation 1**
-> para COM1 - ver [`scripts/hyperv-sandbox/README.md`](../scripts/hyperv-sandbox/README.md). Não misture os
-> guias sem alinhar a geração da VM.
+> (exemplo manual `win-sandbox` abaixo). O **Caminho B** (WPF / `04-Run-Sample.ps1`) funciona com **Gen1 ou Gen2**
+> (cópia via PsDirect) - ver [`scripts/hyperv-sandbox/README.md`](../scripts/hyperv-sandbox/README.md).
 
-> **Alternativa por porta serial (sem HTTP/VM Agent):** a pasta
+> **Alternativa PowerShell (sem HTTP/VM Agent):** a pasta
 > [`scripts/hyperv-sandbox/`](../scripts/hyperv-sandbox/README.md) contém um fluxo **independente** (Caminho B)
-> usado pela app WPF: executa a amostra na VM, monitoriza alterações e devolve o relatório por **COM1 → Named Pipe**
-> com fallback **Copy-VMFile**. **Não** é invocado pelo driver `hyperv.py` do backend.
+> usado pela app WPF: executa a amostra na VM, monitoriza alterações e copia o relatório para o host via
+> **PsDirect / Copy-VMFile**, com verificação **SHA256** após a cópia. **Não** é invocado pelo driver `hyperv.py` do backend.
 
 ## Índice
 

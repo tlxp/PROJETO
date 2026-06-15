@@ -4,8 +4,8 @@
 # A análise é lançada de forma DESTACADA (Launch-AnalysisDetached.ps1): um processo
 # powershell.exe separado dentro da VM corre Run-MalwareAnalysis.ps1 e o host devolve
 # logo o controlo. Assim a análise sobrevive ao fecho da sessão PowerShell Direct
-# (VMBus) e o relatório chega ao host por COM1 -> Named Pipe, mesmo que o PS Direct
-# caia a meio ("The Hyper-V socket target process has ended.").
+# (VMBus) mesmo que a sessão caia a meio ("The Hyper-V socket target process has ended.").
+# O relatório é copiado para o host via PsDirect após conclusão no guest.
 
 function Start-DetachedAnalysisInVm {
     param(

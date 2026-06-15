@@ -82,7 +82,7 @@ Se estas entradas aparecerem, o pipeline de telemetria comportamental está func
 
 | Sintoma | Ação |
 |---------|-------|
-| Relatório vazio ou timeout | [`TROUBLESHOOTING.md`](../scripts/hyperv-sandbox/TROUBLESHOOTING.md) - credenciais guest, pipe COM1, fallback Copy-VMFile |
+| Relatório vazio ou timeout | [`TROUBLESHOOTING.md`](../scripts/hyperv-sandbox/TROUBLESHOOTING.md) - credenciais guest, PsDirect, verificação SHA256 |
 | Amostra falha na VM (exit ≠ 0) | Runtimes em falta - [`offline/runtimes/README.md`](../scripts/hyperv-sandbox/offline/runtimes/README.md), `07-Ensure-Runtimes.ps1` |
 | Sem entradas de registry/ficheiros | Confirme que está no **Caminho B**, não no vm-agent |
 | VM em estado sujo | `00-Reset-Sandbox.ps1` ou restore manual do snapshot `CleanState` |

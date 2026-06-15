@@ -1,10 +1,10 @@
 # RAT Analyzer
 
-Ferramenta de análise automática de executáveis (`.exe`) e bibliotecas (`.dll`) para deteção de
-**RATs (Remote Access Trojans)**, combinando **análise estática**, **regras YARA** e **análise
-comportamental/dinâmica** em sandbox de VM isolada.
+Plataforma integrada para triagem e análise de malware: deteção de **RATs (Remote Access Trojans)** com
+**análise estática**, **regras YARA**, **scoring de risco** e **análise comportamental** em sandbox de VM
+isolada — num único fluxo operacional (web, API ou desktop).
 
-> Projeto desenvolvido no âmbito de uma licenciatura. Visa também ser uma ferramenta **educativa** de
+> Projeto desenvolvido no âmbito de uma **licenciatura**. Visa também ser uma ferramenta **educativa** de
 > análise de malware: além de detetar, explica o que cada função suspeita parece fazer.
 
 ---
@@ -16,7 +16,7 @@ comportamental/dinâmica** em sandbox de VM isolada.
 - [Estrutura do repositório](#estrutura-do-repositório)
 - [Início rápido](#início-rápido)
 - [Segurança e configuração](#segurança-e-configuração) · [`docs/SEGURANCA.md`](docs/SEGURANCA.md)
-- [Auditoria e qualidade](#auditoria-e-qualidade)
+- [Segurança e auditoria](#segurança-e-auditoria)
 - [Testes e CI](#testes-e-ci)
 - [Módulos de análise](#módulos-de-análise)
 - [Scoring de risco](#scoring-de-risco)
@@ -29,7 +29,7 @@ comportamental/dinâmica** em sandbox de VM isolada.
 
 ## Visão geral
 
-O fluxo final pretendido é **integrado**: o utilizador arrasta um ficheiro, escolhe o tipo de análise e
+O fluxo é **integrado**: o utilizador arrasta um ficheiro, escolhe o tipo de análise e
 recebe relatórios detalhados a partir de um único ecossistema de ferramentas.
 
 1. **Arrastar** um ficheiro (`.exe`, `.dll`, `.cs`, etc.) para a interface (web ou desktop WPF).
@@ -55,7 +55,7 @@ recebe relatórios detalhados a partir de um único ecossistema de ferramentas.
 | **VM Agent** | [`vm-agent/`](vm-agent/README.md) | .NET 8 · Minimal API | Agent HTTP que corre dentro da VM sandbox (upload/run/report). |
 | **Teste benigno** | [`benign-vm-test/`](benign-vm-test/README.md) | .NET 8 | Programa inofensivo para validar o pipeline da VM. |
 | **Exemplos .NET** *(opcional)* | [`programa/`](programa/README.md) | C# | Projetos de exemplo para testes manuais e fluxo *arrastar .cs → compilar*. |
-| **Sandbox Hyper-V** | [`scripts/hyperv-sandbox/`](scripts/hyperv-sandbox/README.md) | PowerShell | Automação Hyper-V: cria VM, executa amostra e devolve relatório por serial/Copy-VMFile. |
+| **Sandbox Hyper-V** | [`scripts/hyperv-sandbox/`](scripts/hyperv-sandbox/README.md) | PowerShell | Automação Hyper-V: cria VM, executa amostra e copia relatório (PsDirect + SHA256). |
 | **Regras YARA** | [`yara_rules/`](yara_rules/README.md) | YARA | Assinaturas carregadas pelo scanner. |
 | **Documentação** | [`docs/`](docs/README.md) | Markdown · PUML | Guias, especificações e diagramas. |
 
@@ -159,7 +159,7 @@ em `DATA_DIR/reports/`.
 
 ## Segurança e configuração
 
-> **Uso local/educativo.** Não exponha o backend nem o vm-agent à Internet sem autenticação e isolamento.
+> **Contexto académico / laboratório.** Em produção, configure autenticação, bind local ou reverse proxy com TLS, e isolamento da sandbox antes de expor serviços à rede.
 
 **Arquitetura de segurança (estrutura completa):** [`docs/SEGURANCA.md`](docs/SEGURANCA.md) - zonas de confiança, auth por componente, uploads, sandbox e checklist.
 
@@ -179,9 +179,9 @@ em `DATA_DIR/reports/`.
 
 ---
 
-## Auditoria e qualidade
+## Segurança e auditoria
 
-Remediação concluída (Jun 2026) - [`docs/AUDITORIA.md`](docs/AUDITORIA.md) · segurança estrutural ★★★★★ - [`docs/SEGURANCA.md`](docs/SEGURANCA.md) · deploy: [`docs/production-secrets.md`](docs/production-secrets.md).
+Documentação operacional: [`docs/SEGURANCA.md`](docs/SEGURANCA.md) (arquitetura e checklist) · [`docs/production-secrets.md`](docs/production-secrets.md) (segredos e deploy) · [`docs/AUDITORIA.md`](docs/AUDITORIA.md) (remediação Jun 2026).
 
 ---
 
@@ -238,9 +238,9 @@ flowchart TD
     VM -->|Não| STUB["Driver stub (default)<br/>valida fluxo sem executar"]
     VM -->|Sim| WHO{Quem orquestra?}
     WHO -->|Webapp / API FastAPI| A["Caminho A - vm-agent HTTP<br/>SANDBOX_VM_DRIVER=hyperv"]
-    WHO -->|App WPF ou scripts PS1| B["Caminho B - PowerShell serial<br/>04-Run-Sample.ps1"]
+    WHO -->|App WPF ou scripts PS1| B["Caminho B - PowerShell Hyper-V<br/>04-Run-Sample.ps1"]
     A --> AGENT["Telemetria básica via vm-agent<br/>VM Gen1 ou Gen2"]
-    B --> SERIAL["Telemetria completa<br/>ficheiros, registry, rede<br/>VM Gen1 obrigatório"]
+    B --> PSDIRECT["Telemetria completa<br/>ficheiros, registry, rede<br/>cópia PsDirect + SHA256"]
     START --> PROX{"Driver proxmox?"}
     PROX -->|Sim| WARN["Experimental - sem guia<br/>use hyperv ou Caminho B"]
 ```
@@ -261,7 +261,7 @@ FAQ: [`docs/faq.md`](docs/faq.md) · diagnóstico Caminho B: [`scripts/hyperv-sa
 ## Limitações e roadmap
 
 **Limitações**
-- A análise dinâmica depende de infraestrutura de sandbox (VM + vm-agent/serial + configuração).
+- A análise dinâmica depende de infraestrutura de sandbox (VM + vm-agent ou pipeline Hyper-V + configuração).
 - O driver `stub` (default) não executa o ficheiro; valida apenas o fluxo end-to-end.
 - A deobfuscação é básica; as regras YARA v2 são heurísticas educativas (confirmar com análise estática/dinâmica).
 - Afinamento fino das regras YARA por família de malware requer amostras reais no laboratório.
@@ -279,4 +279,4 @@ FAQ: [`docs/faq.md`](docs/faq.md) · diagnóstico Caminho B: [`scripts/hyperv-sa
 
 ## Licença
 
-[MIT](LICENSE) - projeto desenvolvido no âmbito académico (licenciatura). Sugestões e melhorias são bem-vindas - ver [`CONTRIBUTING.md`](CONTRIBUTING.md).
+[MIT](LICENSE) — projeto desenvolvido no âmbito académico (licenciatura). Sugestões e melhorias são bem-vindas — ver [`CONTRIBUTING.md`](CONTRIBUTING.md).

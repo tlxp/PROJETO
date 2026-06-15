@@ -60,7 +60,7 @@ flowchart TB
     WPF -->|X-API-Token| API
     WPF --> PS
     API -->|driver hyperv + X-Agent-Token| VMA
-    PS -->|COM1 / Copy-VMFile| VMPS
+    PS -->|PsDirect + SHA256| VMPS
     VMA --> SAMPLE
     VMPS --> SAMPLE
 
@@ -172,8 +172,8 @@ Ver `.gitignore` na raiz e `backend/config.py`.
 | Rede guest | Switch Internal, **sem Internet** | Idem |
 | Estado limpo | Restore snapshot `CleanState` antes do run | Idem |
 | Telemetria | Básica (processo, stdout/stderr) | Completa (ficheiros, registry, rede, Sysmon) |
-| Transporte de relatório | HTTP JSON | COM1 serial + fallback Copy-VMFile |
-| Gen VM | Gen1 ou Gen2 | **Gen1** (COM1) |
+| Transporte de relatório | HTTP JSON | PsDirect / Copy-VMFile + SHA256 |
+| Gen VM | Gen1 ou Gen2 | Gen1 ou Gen2 (default setup: Gen1) |
 
 Guias: [`sandbox-hyperv-setup.md`](sandbox-hyperv-setup.md) · [`../scripts/hyperv-sandbox/README.md`](../scripts/hyperv-sandbox/README.md).
 

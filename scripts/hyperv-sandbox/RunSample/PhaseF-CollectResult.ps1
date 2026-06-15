@@ -1,58 +1,61 @@
-﻿# Recolher resultado do pipe
-$pipeResult = $null
-$pipeState = $null
-try { 
-    $pipeState = (Get-Job -Id $pipeJob.Id -ErrorAction SilentlyContinue).State 
-} catch { }
+﻿# Recolher e validar relatório copiado do guest
+if (Test-Path -LiteralPath $ReportOutputPath) {
+    Write-LogHost "      Relatório no host: $ReportOutputPath"
+    Add-LogLine -Path $HostLogPath -Value "Report on host: $ReportOutputPath"
 
-if ($pipeState -eq "Completed") {
-    $pipeResult = Receive-Job $pipeJob -ErrorAction SilentlyContinue
-    Remove-Job $pipeJob -Force -ErrorAction SilentlyContinue
-    Add-LogLine -Path $HostLogPath -Value "Pipe lines received: $pipeResult"
-    if (Test-Path $ReportOutputPath) {
-        Write-LogHost "      Relatório recebido via pipe: $ReportOutputPath"
-        Add-LogLine -Path $HostLogPath -Value "Report received successfully via pipe"
-
-        if (-not (Test-ReportLooksComplete -Path $ReportOutputPath)) {
-            Write-LogWarning "      Relatório via pipe parece incompleto (verificar manualmente: $ReportOutputPath)."
-            Add-LogLine -Path $HostLogPath -Value "Pipe report appears incomplete"
+    if ($reportHashVerified -and $reportSha256) {
+        Add-LogLine -Path $HostLogPath -Value "Report hash verified: $reportSha256"
+    } elseif (-not $reportHashVerified -and $cred -is [pscredential]) {
+        try {
+            $digest = Get-SandboxGuestReportDigest -VMName $VMName -Credential $cred `
+                -GuestReportPath "C:\analysis.txt" -GuestDonePath "$VMScriptsPath\guest_analysis_done.txt"
+            if (-not [string]::IsNullOrWhiteSpace($digest.sha256)) {
+                $reportSha256 = Assert-SandboxCopiedReportHash -HostReportPath $ReportOutputPath `
+                    -ExpectedSha256 $digest.sha256 -ExpectedBytes $digest.reportBytes
+                $reportHashVerified = $true
+                Write-LogHost "      SHA256 do relatório verificado: $reportSha256"
+                Add-LogLine -Path $HostLogPath -Value "Report hash verified (post-collect): $reportSha256"
+            }
+        } catch {
+            Write-LogWarning "      Verificação SHA256 falhou: $($_.Exception.Message)"
+            Add-LogLine -Path $HostLogPath -Value "Report hash verification failed: $($_.Exception.Message)"
+            try { Remove-Item -LiteralPath $ReportOutputPath -Force -ErrorAction SilentlyContinue } catch { }
         }
-    } else {
-        Write-LogWarning "      Pipe concluído mas ficheiro de relatório não encontrado."
-        Add-LogLine -Path $HostLogPath -Value "Pipe completed but report file not found"
     }
-} elseif (Test-Path -LiteralPath $ReportOutputPath) {
-    Write-LogHost "      Relatório obtido via fallback (Copy-VMFile), pipe estado=$pipeState"
-    Add-LogLine -Path $HostLogPath -Value "Report from Copy-VMFile fallback; pipe state=$pipeState"
-} else {
-    Write-LogWarning "      Listener do pipe não completou (estado=$pipeState). O relatório não foi obtido."
-    Add-LogLine -Path $HostLogPath -Value "Pipe state=$pipeState; report not obtained"
 
-    # Tentar obter output de erro do job para diagnóstico
-    try {
-        $jobErrors = Receive-Job $pipeJob -ErrorAction SilentlyContinue 2>&1
-        if ($jobErrors) {
-            Add-LogLine -Path $HostLogPath -Value "Pipe job output: $jobErrors"
-            Write-LogWarning "      Detalhes do erro do pipe: $jobErrors"
+    if (Test-Path -LiteralPath $ReportOutputPath) {
+        if (-not (Test-ReportLooksComplete -Path $ReportOutputPath)) {
+            Write-LogWarning "      Relatório parece incompleto (verificar manualmente: $ReportOutputPath)."
+            Add-LogLine -Path $HostLogPath -Value "Report appears incomplete"
         }
-    } catch { }
-    try { Stop-Job $pipeJob -ErrorAction SilentlyContinue } catch { }
-    try { Remove-Job $pipeJob -Force -ErrorAction SilentlyContinue } catch { }
+    }
+} else {
+    Write-LogWarning "      Relatório não foi obtido do guest."
+    Add-LogLine -Path $HostLogPath -Value "Report not obtained from guest"
 
-    # Última tentativa antes de desligar a VM: o guest escreve sempre o relatório
-    # em C:\analysis.txt, mesmo quando o envio via COM1 falha.
     if ($cred -is [pscredential]) {
         Write-LogHost "      A tentar recuperar relatório diretamente do guest (C:\analysis.txt)..."
         try {
             Copy-SandboxVMFileFromGuest -VMName $VMName -Credential $cred `
                 -GuestSourcePath "C:\analysis.txt" -HostDestinationPath $ReportOutputPath -Retries 3 -DelaySeconds 3
             if (Test-Path -LiteralPath $ReportOutputPath) {
-                Write-LogHost "      Relatório recuperado do guest (fallback final): $ReportOutputPath"
-                Add-LogLine -Path $HostLogPath -Value "Report recovered via final guest copy fallback"
+                $digest = Get-SandboxGuestReportDigest -VMName $VMName -Credential $cred `
+                    -GuestReportPath "C:\analysis.txt" -GuestDonePath "$VMScriptsPath\guest_analysis_done.txt"
+                if (-not [string]::IsNullOrWhiteSpace($digest.sha256)) {
+                    $reportSha256 = Assert-SandboxCopiedReportHash -HostReportPath $ReportOutputPath `
+                        -ExpectedSha256 $digest.sha256 -ExpectedBytes $digest.reportBytes
+                    $reportHashVerified = $true
+                    Add-LogLine -Path $HostLogPath -Value "Report recovered and hash verified: $reportSha256"
+                    Write-LogHost "      Relatório recuperado e SHA256 verificado: $ReportOutputPath"
+                } else {
+                    Add-LogLine -Path $HostLogPath -Value "Report recovered via final guest copy (no guest hash to verify)"
+                    Write-LogHost "      Relatório recuperado (sem hash guest para validar): $ReportOutputPath"
+                }
             }
         } catch {
-            Write-LogWarning "      Fallback final falhou: $($_.Exception.Message)"
-            Add-LogLine -Path $HostLogPath -Value "Final guest copy fallback failed: $($_.Exception.Message)"
+            Write-LogWarning "      Recuperação final falhou: $($_.Exception.Message)"
+            Add-LogLine -Path $HostLogPath -Value "Final guest copy failed: $($_.Exception.Message)"
+            try { Remove-Item -LiteralPath $ReportOutputPath -Force -ErrorAction SilentlyContinue } catch { }
         }
     }
 }

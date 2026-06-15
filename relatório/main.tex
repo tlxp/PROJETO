@@ -445,7 +445,7 @@ persistência e entropia; classificar em CRÍTICO/ALTO/MÉDIO/BAIXO/MUITO BAIXO.
 incrementais durante a análise estática. \\
 \fr{08} &
 \textbf{Orquestração VM.} Dois caminhos dinâmicos: (A) backend Python + vm-agent HTTP;
-(B) scripts PowerShell + COM1/Named Pipe (WPF). \\
+(B) scripts PowerShell + cópia PsDirect/\texttt{Copy-VMFile} com verificação SHA256 (WPF). \\
 \fr{09} &
 \textbf{Assistente Gemini no pseudo-C.} No painel de código C descompilado, o utilizador pode
 configurar uma API key do Google AI Studio (armazenamento local) e perguntar, via chat, o que faz
@@ -671,15 +671,34 @@ expõe \texttt{/api/upload}, \texttt{/api/run} e \texttt{/api/report} com header
 
 \subsection{Caminho B — Scripts PowerShell}
 
-O \texttt{04-Run-Sample.ps1} executa fases A--G: setup, boot VM, cópia de amostra, execução,
-espera de relatório (COM1/Named Pipe + fallback \texttt{Copy-VMFile}), cleanup \texttt{try/finally}.
+O \texttt{04-Run-Sample.ps1} executa fases A--G: setup, boot VM, cópia de amostra e scripts,
+execução destacada na guest, espera de \texttt{guest\_analysis\_done.txt}, cópia do relatório
+guest$\rightarrow$host via \textbf{PowerShell Direct} ou \texttt{Copy-VMFile}, verificação
+\textbf{SHA256} após a cópia, e cleanup \texttt{try/finally}.
 
 Fluxo dentro da VM (\texttt{vm/Run-MalwareAnalysis.ps1}):
 \begin{itemize}
     \item Baseline de processos, ficheiros, registry e rede.
     \item Execução da amostra com timeout configurável.
-    \item Diff pós-execução; envio via \texttt{Send-ReportViaCom.ps1}.
+    \item Diff pós-execução; marcador \texttt{REPORT\_END;} e ficheiro
+          \texttt{guest\_analysis\_done.txt} com \texttt{reportSha256} e \texttt{reportBytes}.
 \end{itemize}
+
+O host valida integridade comparando o hash e o tamanho do ficheiro copiado com o digest
+registado no guest; em caso de discrepância, o relatório no host é descartado.
+
+\subsubsection{Abordagens anteriores de transporte}
+\label{sec:caminho-b-historico}
+
+Iterações anteriores do Caminho B exploraram o envio do relatório de texto por porta
+\textbf{COM1} mapeada para um \textbf{Named Pipe} no host
+(\texttt{Send-ReportViaCom.ps1}, protocolo \texttt{START\_OF\_REPORT} \ldots{}
+\texttt{END\_OF\_REPORT}), com \texttt{Copy-VMFile} como fallback quando o pipe expirava.
+Na prática, a cópia directa via PsDirect mostrou-se mais fiável (incluindo em VMs onde o
+par COM1/pipe falhava); o transporte serial foi \textbf{descontinuado} em favor da cópia
+com verificação criptográfica pós-transferência. O código legado
+(\texttt{SandboxCommon/SerialPipe.ps1}, \texttt{02-Host-ReceiveReport.ps1}) permanece no
+repositório apenas para referência. Detalhe técnico: \texttt{SERIAL\_REPORT\_PROTOCOL.md}.
 
 \IfFileExists{imagens/fig-5-4-hyperv-vm.png}{%
 \begin{figure}[H]
@@ -739,8 +758,8 @@ python rat_analyzer.py caminho/amostra.exe -o reports/ -v
 \end{table}
 
 Foi utilizado \texttt{benign-vm-test.exe} no \textbf{Caminho B} (pipeline PowerShell) para validar
-o pipeline dinâmico sem risco. Testes manuais confirmaram isolamento de rede, restore de snapshot
-e entrega de relatório por pipe. O \textbf{Caminho A} (vm-agent HTTP) valida execução e
+o pipeline dinâmico sem risco. Testes manuais confirmaram isolamento de rede, restore de snapshot,
+cópia do relatório via PsDirect e validação SHA256. O \textbf{Caminho A} (vm-agent HTTP) valida execução e
 \texttt{exitCode}, mas a telemetria comportamental completa ainda não está implementada no agent.
 
 \subsection{Documentação do repositório}
@@ -776,7 +795,7 @@ dinâmica para deteção de RATs, com:
 
 \begin{itemize}
     \item Pipeline estático completo (PE, YARA, deobfuscação, descompilação, scoring).
-    \item Sandbox Hyper-V isolada com duas vias de orquestração (HTTP e serial).
+    \item Sandbox Hyper-V isolada com duas vias de orquestração (HTTP e PowerShell Direct).
     \item Interfaces web e desktop funcionais, com testes CI e auditoria de segurança concluída.
     \item Documentação extensa e orientação educativa (indicadores explicáveis, pseudo-C/IL,
           assistente Gemini opcional no frontend).
@@ -832,11 +851,23 @@ SUSPICIOUS_IMPORTS = [
 # Deteta APIs de rede, criptografia e evasao
 \end{lstlisting}
 
-\section{Protocolo de relatório serial}
+\section{Protocolo de transferência de relatório (Caminho B)}
 
-O guest envia o relatório linha-a-linha via COM1:
+\subsection{Implementação actual}
+
+Após a análise, o guest grava \texttt{C:\textbackslash analysis.txt} e
+\texttt{C:\textbackslash analysis\_work\textbackslash guest\_analysis\_done.txt} (JSON com
+\texttt{reportSha256}, \texttt{reportBytes}, \texttt{transport=psdirect}). O host copia o
+relatório com PsDirect ou \texttt{Copy-VMFile} e só aceita o ficheiro se o SHA256 e o tamanho
+coincidirem com o digest do guest.
+
+\subsection{Abordagens anteriores (arquivo)}
+
+Versões anteriores enviavam o relatório \textbf{linha-a-linha} via COM1:
 \texttt{START\_OF\_REPORT} \textrightarrow{} linhas de conteúdo \textrightarrow{}
-\texttt{END\_OF\_REPORT}. Fallback: \texttt{Copy-VMFile} lê \texttt{C:\textbackslash analysis.txt}.
+\texttt{END\_OF\_REPORT}, com \texttt{Copy-VMFile} como fallback. Este desenho exigia VM
+Generation~1 para o par COM1/pipe e mostrou-se menos robusto que a cópia directa com hash
+(ver subsecção~\ref{sec:caminho-b-historico} no capítulo de implementação).
 
 % ============================================================
 % BIBLIOGRAFIA

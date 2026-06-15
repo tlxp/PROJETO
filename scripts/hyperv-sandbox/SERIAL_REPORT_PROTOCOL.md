@@ -1,53 +1,62 @@
-# Protocolo de relatório serial - COM1 → Named Pipe (implementado)
+# Protocolo de transferência de relatório — PsDirect + SHA256
 
-Canal usado pelo pipeline **`04-Run-Sample.ps1`** quando a VM é **Generation 1** e o COM1 está mapeado para `\\.\pipe\<nome>`.
+Canal usado pelo pipeline **`04-Run-Sample.ps1`**: o guest grava o relatório em disco e o host **copia** o ficheiro via **PowerShell Direct** ou **Copy-VMFile** (Guest Services), com **verificação SHA256 após a cópia**.
 
-## Ligação física (Hyper-V)
+> **Histórico:** versões anteriores enviavam o relatório por **COM1 → Named Pipe** (`Send-ReportViaCom.ps1`). Esse transporte foi **removido**; o código legado (`SandboxCommon/SerialPipe.ps1`, `02-Host-ReceiveReport.ps1`) permanece apenas para referência/debug.
 
-1. Com a VM **desligada**, o host configura `Set-VMComPort -Number 1 -Path \\.\pipe\<PipeShortName>` (ver `SandboxCommon/SerialPipe.ps1` → `Set-SandboxVMComPortPipe`).
-2. O nome do pipe por run é `<PROJETOVM_PipeName>_<RunId>` (sanitizado), definido em `RunSample/PhaseA-Setup.ps1`.
-3. O **servidor** do pipe é criado pelo **vmwp.exe** quando a VM arranca; o host liga-se como **cliente** (`NamedPipeClientStream`). Ver comentários em `Receive-SandboxReportFromPipe`.
+## Fluxo resumido
 
-## Formato do fluxo (UTF-8, linhas terminadas em CRLF no guest)
+1. Guest executa `vm/Run-MalwareAnalysis.ps1` → grava `C:\analysis.txt` e `C:\analysis.json`.
+2. Guest escreve marcador `REPORT_END;` e cria `C:\analysis_work\guest_analysis_done.txt` com metadados (incl. **SHA256**).
+3. Host (`RunSample/PhaseE-WaitReport.ps1`) faz polling até `guest_analysis_done.txt` ou `REPORT_END;`.
+4. Host copia `C:\analysis.txt` com `Try-ReceiveSandboxGuestReport` (`SandboxCommon/VmFileTransfer.ps1`).
+5. Host calcula SHA256 do ficheiro copiado e compara com o digest do guest; em caso de falha, **apaga** o ficheiro no host.
 
-Envio **texto linha-a-linha** - **não** blocos binários `FILE`.
+## Ficheiro de conclusão no guest (`guest_analysis_done.txt`)
 
-### Guest → host (`vm/Send-ReportViaCom.ps1`)
+JSON compacto (UTF-8), escrito por `Run-MalwareAnalysis.ps1` após o relatório estar fechado:
 
-1. `START_OF_REPORT`
-2. Cabeçalho opcional (metadados, uma linha cada):
-   - `VERSION=1`
-   - `TIMESTAMP=yyyy-MM-dd HH:mm:ss`
-   - `SHA256=<hash>` (se disponível)
-   - `REPORT_SIZE=<bytes>`
-   - `END_HEADER`
-3. Corpo: **cada linha do ficheiro de relatório** (`C:\analysis.txt`), uma linha serial de cada vez.
-4. `END_OF_REPORT` (ou `END_OF_REPORT_CHECKSUM` - também aceite pelo receptor)
+| Campo | Descrição |
+|-------|-----------|
+| `finishedUtc` | Timestamp ISO 8601 (UTC) |
+| `reportPath` | Caminho do relatório (ex.: `C:\analysis.txt`) |
+| `reportSha256` | SHA256 do ficheiro de relatório **no guest** |
+| `reportBytes` | Tamanho em bytes |
+| `jsonReportPath` | Caminho do JSON (ex.: `C:\analysis.json`) |
+| `pid` | PID do processo de análise |
+| `phaseError` | Erro de fase, se existir |
+| `transport` | `"psdirect"` |
 
-### Host (`SandboxCommon/SerialPipe.ps1`)
+## Validação no host (após cópia)
 
-Função **`Receive-SandboxReportFromPipe`**:
+Funções em `SandboxCommon/VmFileTransfer.ps1`:
 
-- Liga-se ao pipe com retries até `TimeoutSeconds`.
-- Acumula linhas entre `START_OF_REPORT` e `END_OF_REPORT` / `END_OF_REPORT_CHECKSUM`.
-- Grava o resultado em `OutputPath` (ex.: `D:\PROJETOVM\Reports\analysis_<RunId>.txt`).
+- **`Get-SandboxGuestReportDigest`** — lê `reportSha256` / `reportBytes` do `guest_analysis_done.txt` ou recalcula no guest.
+- **`Assert-SandboxCopiedReportHash`** — compara tamanho e SHA256 do ficheiro no host.
+- **`Assert-FileSha256`** — em `SandboxCommon/Hashing.ps1`.
 
-Job em background: iniciado em `RunSample/PhaseA-Setup.ps1` via `Start-Job` que importa `SandboxCommon.psm1` e chama `Receive-SandboxReportFromPipe`.
+Regras:
 
-## Fallback
+- Relatórios **completos** (`REPORT_END;` ou `guest_analysis_done.txt`): verificação **obrigatória** quando o guest fornece hash.
+- Cópias **parciais** (crash/stall): verificação só se o guest tiver digest e o relatório estiver marcado como completo.
 
-Se o pipe expirar ou falhar (`RunSample/PhaseE-WaitReport.ps1`, `PhaseF-CollectResult.ps1`):
+Destino no host: `D:\PROJETOVM\Reports\analysis_<RunId>.txt`.
 
-- **Copy-VMFile** para `C:\analysis.txt` ou ficheiros já escritos na VM.
-- Guest Service Interface ativado só durante o run.
+O JSON do run (`run_<RunId>.json`) inclui `report_sha256` e `report_hash_verified`.
+
+## Modos de cópia
+
+`Copy-SandboxVMFileFromGuest` escolhe automaticamente:
+
+1. **PsDirect** (chunks Base64) — quando `Copy-VMFile -FileSource Guest` não está disponível no Hyper-V instalado.
+2. **Copy-VMFile Guest** — quando o cmdlet suporta `FileSource Guest`; Guest Service Interface ativado só durante o run.
 
 ## Timeouts
 
-- Job do pipe: `$TimeoutSeconds + 900` segundos (margem para envio linha-a-linha).
-- `-GlobalTimeoutSeconds` no `04-Run-Sample.ps1`: deadline global do run no host.
+- Espera do relatório: `$TimeoutSeconds` da amostra + ~1500 s de overhead de análise (`RunSample/PhaseA-Setup.ps1`).
+- `-GlobalTimeoutSeconds` no `04-Run-Sample.ps1`: deadline global do run no host (estendido para amostras grandes).
 
----
+## Especificações não implementadas
 
-## Especificação futura (não implementada): SBXREP1 binário
-
-Versões antigas deste documento descreviam um protocolo **SBXREP1** com linhas `FILE <nome> <n_bytes>` seguidas de blocos binários brutos e funções `Receive-SandboxSerialReportBundle` / `Start-SandboxSerialReportReceiveJob`. **Esse formato não existe no código atual.** Se for implementado no futuro, deve conviver ou substituir o protocolo linha-a-linha acima.
+- Protocolo **SBXREP1** binário (`FILE <nome> <n_bytes>`).
+- Envio linha-a-linha **COM1** (`START_OF_REPORT` … `END_OF_REPORT`).
