@@ -8,7 +8,7 @@ try {
     } -ArgumentList $VMScriptsPath -ErrorAction SilentlyContinue
 } catch { }
 
-Copy-SandboxVMFile -VMName $VMName -SourcePath $SamplePath -DestinationPath $VMSamplePath
+Copy-SandboxVMFile -VMName $VMName -Credential $cred -SourcePath $SamplePath -DestinationPath $VMSamplePath
 
 # Preflight: garantir que o ficheiro na VM existe e é o mesmo (SHA256) e que parece executável PE.
 Write-LogHost "      A validar amostra dentro da VM (existência + SHA256 + header PE)..."
@@ -86,7 +86,7 @@ $sendScript = Join-Path $scriptDir "Send-ReportViaCom.ps1"
 if (-not (Test-Path -LiteralPath $runScript)) {
     throw "Run-MalwareAnalysis.ps1 não encontrado no host em: $runScript"
 }
-Copy-SandboxVMFile -VMName $VMName -SourcePath $runScript -DestinationPath "$VMScriptsPath\Run-MalwareAnalysis.ps1"
+Copy-SandboxVMFile -VMName $VMName -Credential $cred -SourcePath $runScript -DestinationPath "$VMScriptsPath\Run-MalwareAnalysis.ps1"
 
 # Run-MalwareAnalysis.ps1 faz dot-source das suas funções da subpasta RunMalwareAnalysis\.
 # Essas bibliotecas têm de existir na VM no mesmo diretório do script (mesmo $PSScriptRoot).
@@ -95,12 +95,12 @@ if (-not (Test-Path -LiteralPath $analysisLibDir)) {
     throw "Pasta de bibliotecas de análise não encontrada no host em: $analysisLibDir"
 }
 foreach ($lib in (Get-ChildItem -LiteralPath $analysisLibDir -Filter "*.ps1" -File)) {
-    Copy-SandboxVMFile -VMName $VMName -SourcePath $lib.FullName -DestinationPath "$VMScriptsPath\RunMalwareAnalysis\$($lib.Name)"
+    Copy-SandboxVMFile -VMName $VMName -Credential $cred -SourcePath $lib.FullName -DestinationPath "$VMScriptsPath\RunMalwareAnalysis\$($lib.Name)"
 }
 if (-not (Test-Path -LiteralPath $sendScript)) {
     throw "Send-ReportViaCom.ps1 não encontrado no host em: $sendScript"
 }
-Copy-SandboxVMFile -VMName $VMName -SourcePath $sendScript -DestinationPath "$VMScriptsPath\Send-ReportViaCom.ps1"
+Copy-SandboxVMFile -VMName $VMName -Credential $cred -SourcePath $sendScript -DestinationPath "$VMScriptsPath\Send-ReportViaCom.ps1"
 
 # Launcher destacado: corre Run-MalwareAnalysis.ps1 num processo separado dentro da VM
 # para que a análise sobreviva ao fecho da sessão PowerShell Direct (VMBus) e o relatório
@@ -109,7 +109,7 @@ $launchScript = Join-Path $scriptDir "Launch-AnalysisDetached.ps1"
 if (-not (Test-Path -LiteralPath $launchScript)) {
     throw "Launch-AnalysisDetached.ps1 não encontrado no host em: $launchScript"
 }
-Copy-SandboxVMFile -VMName $VMName -SourcePath $launchScript -DestinationPath "$VMScriptsPath\Launch-AnalysisDetached.ps1"
+Copy-SandboxVMFile -VMName $VMName -Credential $cred -SourcePath $launchScript -DestinationPath "$VMScriptsPath\Launch-AnalysisDetached.ps1"
 
 # Validar que o script principal chegou mesmo à VM antes de tentar executá-lo
 # (evita o erro tardio "'.\Run-MalwareAnalysis.ps1' is not recognized" dentro da VM).

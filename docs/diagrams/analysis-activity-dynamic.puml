@@ -1,28 +1,29 @@
 @startuml
-title Analise Dinamica (VM) - Diagrama de Atividade
+title Pipeline de análise dinâmica — RAT Analyzer
 
 start
-:Utilizador carrega ficheiro;
-:Frontend cria job dinamico;
-:Backend regista job e passa para running;
-:Orquestrador seleciona driver de VM;
+:Utilizador submete amostra\n(modo dynamic ou both);
+:Criar job na API (SQLite);
+:Orquestrador VM seleciona driver;
 
-if (Driver real configurado?) then (sim)
-  :Preparar ambiente de VM;
-  :Enviar amostra para agente de VM;
+if (Driver configurado?) then (hyperv / proxmox)
+  :Restaurar snapshot CleanState;
+  :Arrancar VM isolada (sem Internet);
+  if (Caminho A — vm-agent HTTP?) then (sim)
+    :Upload + run + report via vm-agent;
+  else (Caminho B — PowerShell)
+    :04-Run-Sample.ps1\n(pipe COM1 + Copy-VMFile);
+  endif
   :Executar amostra com timeout;
-  :Recolher comportamento (processos, ficheiros, rede, registo);
-else (nao - stub)
-  :Gerar comportamento sintetico (stub);
+  :Recolher comportamento\n(processos, ficheiros, registo, rede);
+  :Restaurar snapshot e parar VM;
+else (stub)
+  :Gerar resultado sintético (sem execução real);
 endif
 
-:Guardar dynamicResult e estado final do job;
-
-repeat
-  :Frontend consulta estado por jobId;
-repeat while (Job concluido?) is (nao)
-
-:Frontend apresenta resumo comportamental;
+:Guardar dynamicResult no job;
+:Frontend consulta estado (polling);
+:Apresentar relatório comportamental;
 stop
 
 @enduml

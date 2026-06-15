@@ -32,11 +32,83 @@ function Test-SandboxSerialTransportApplicable {
     }
 }
 
+function Stop-SandboxPipeReportJob {
+    param(
+        [Parameter(Mandatory = $true)] $PipeJob
+    )
+    if (-not $PipeJob) { return }
+    try { Stop-Job -Job $PipeJob -ErrorAction SilentlyContinue } catch { }
+    try { Remove-Job -Job $PipeJob -Force -ErrorAction SilentlyContinue } catch { }
+}
+
+function Clear-SandboxPipeEnvironment {
+    <#
+    .SYNOPSIS
+        Limpa estado residual de pipes/COM1 antes de um novo run (jobs orfaos, VM ligada, COM1 antigo).
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $VMName,
+        [string] $LogPath = "",
+        [int] $VmStopWaitSeconds = 8
+    )
+
+    function Write-PipeCleanupLog {
+        param([string] $Message)
+        if ($LogPath) {
+            try { Add-LogLine -Path $LogPath -Value $Message } catch { }
+        }
+    }
+
+    $stoppedJobs = 0
+    Get-Job -ErrorAction SilentlyContinue | ForEach-Object {
+        $jb = $_
+        $cmd = ""
+        try { $cmd = [string]$jb.Command } catch { }
+        if ($cmd -match 'Receive-SandboxReportFromPipe') {
+            try { Stop-Job -Job $jb -ErrorAction SilentlyContinue } catch { }
+            try { Remove-Job -Job $jb -Force -ErrorAction SilentlyContinue } catch { }
+            $stoppedJobs++
+            Write-PipeCleanupLog "Pipe cleanup: stopped orphan receiver job Id=$($jb.Id)"
+        }
+    }
+    if ($stoppedJobs -gt 0) {
+        Write-PipeCleanupLog "Pipe cleanup: removed $stoppedJobs orphan pipe receiver job(s)"
+    }
+
+    $vm = Get-VM -Name $VMName -ErrorAction SilentlyContinue
+    if (-not $vm) { return }
+
+    if ($vm.State -ne 'Off') {
+        Write-PipeCleanupLog "Pipe cleanup: stopping VM '$VMName' (state=$($vm.State)) to release vmwp pipe"
+        Stop-VM -Name $VMName -Force -ErrorAction SilentlyContinue | Out-Null
+        $deadline = (Get-Date).AddSeconds($VmStopWaitSeconds)
+        while ((Get-Date) -lt $deadline) {
+            $stateNow = (Get-VM -Name $VMName -ErrorAction SilentlyContinue).State
+            if ($stateNow -eq 'Off') { break }
+            Start-Sleep -Milliseconds 300
+        }
+        $finalState = (Get-VM -Name $VMName -ErrorAction SilentlyContinue).State
+        Write-PipeCleanupLog "Pipe cleanup: VM state after stop wait: $finalState"
+    }
+
+    # COM1 -> pipe descartavel (VM Off) para nao reutilizar mapeamento do run anterior
+    if ($vm.Generation -eq 1 -and (Get-VM -Name $VMName -ErrorAction SilentlyContinue).State -eq 'Off') {
+        $discard = "SandboxReportPipe_DISCARD_" + [guid]::NewGuid().ToString('N').Substring(0, 8)
+        try {
+            Set-VMComPort -VMName $VMName -Number 1 -Path "\\.\pipe\$discard" -ErrorAction Stop | Out-Null
+            Write-PipeCleanupLog "Pipe cleanup: COM1 reset to \\.\pipe\$discard"
+        } catch {
+            Write-PipeCleanupLog "Pipe cleanup: COM1 reset skipped: $($_.Exception.Message)"
+        }
+    }
+}
+
 function Receive-SandboxReportFromPipe {
     param(
         [string] $PipeName,
         [string] $OutputPath,
-        [int]    $TimeoutSeconds = 600
+        [int]    $TimeoutSeconds = 600,
+        [int]    $IdleReconnectSeconds = -1
     )
 
     # O servidor do named pipe do COM1 é criado pelo worker do Hyper-V (vmwp.exe)
@@ -49,7 +121,17 @@ function Receive-SandboxReportFromPipe {
 
     try {
         $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
-        Write-Host "[PIPE] ---- início receptor (cliente) pid=$PID utc=$([DateTime]::UtcNow.ToString('o')) pipe='$PipeName' timeout=${TimeoutSeconds}s out='$OutputPath'"
+        $configuredIdle = $IdleReconnectSeconds
+        if ($configuredIdle -lt 0) {
+            $configuredIdle = if ($script:PROJETOVM_PipeIdleReconnectSec -gt 0) {
+                [int]$script:PROJETOVM_PipeIdleReconnectSec
+            } elseif ($env:PROJETOVM_PipeIdleReconnectSec) {
+                [int]$env:PROJETOVM_PipeIdleReconnectSec
+            } else {
+                900
+            }
+        }
+        Write-Host "[PIPE] ---- início receptor (cliente) pid=$PID utc=$([DateTime]::UtcNow.ToString('o')) pipe='$PipeName' timeout=${TimeoutSeconds}s idleReconnect=${configuredIdle}s out='$OutputPath'"
 
         $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
         $reportLines = @()
@@ -84,9 +166,16 @@ function Receive-SandboxReportFromPipe {
                 $inReport = $false
                 $rxLines = 0
                 $lastProgress = [DateTime]::UtcNow
+                $lastDataUtc = [DateTime]::UtcNow
                 $sessionEof = $false
+                $idleReconnectSeconds = $configuredIdle
 
                 while ([DateTime]::UtcNow -lt $deadline -and -not $gotEndOfReport -and -not $sessionEof) {
+                    if ($idleReconnectSeconds -gt 0 -and ([DateTime]::UtcNow - $lastDataUtc).TotalSeconds -ge $idleReconnectSeconds) {
+                        Write-Host "[PIPE] Sessao#$sessionCount ociosa ${idleReconnectSeconds}s sem dados -- a religar"
+                        $sessionEof = $true
+                        continue
+                    }
                     # Leitura assíncrona para conseguir heartbeat e respeitar o deadline
                     # (PipeStream não suporta ReadTimeout em leituras síncronas).
                     $task = $reader.ReadLineAsync()
@@ -121,6 +210,7 @@ function Receive-SandboxReportFromPipe {
                     }
 
                     $rxLines++
+                    $lastDataUtc = [DateTime]::UtcNow
                     $line = ($raw -replace "`0", "").Trim()
                     if ([string]::IsNullOrWhiteSpace($line)) { continue }
 
@@ -128,6 +218,11 @@ function Receive-SandboxReportFromPipe {
                         $inReport = $true
                         $reportLines = @()
                         Write-Host "[PIPE] START_OF_REPORT recebido (sessao#$sessionCount) utc=$([DateTime]::UtcNow.ToString('o'))"
+                        continue
+                    }
+
+                    if (-not $inReport -and $line -match '^(COM1_|PIPE_)') {
+                        Write-Host "[PIPE] Guest sinal: '$line' sessao#$sessionCount"
                         continue
                     }
 

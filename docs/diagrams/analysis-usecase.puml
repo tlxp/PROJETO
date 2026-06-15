@@ -1,0 +1,26 @@
+@startuml
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+actor "Analista" as A
+
+rectangle "RAT Analyzer" {
+  usecase "Upload amostra" as UC1
+  usecase "Análise estática" as UC2
+  usecase "Análise dinâmica" as UC3
+  usecase "Consultar relatório" as UC4
+  usecase "Ver score e indicadores" as UC5
+  usecase "Ver pseudo-C / IL" as UC6
+  usecase "Explicar código (IA)" as UC7
+}
+
+A --> UC1
+A --> UC2
+A --> UC3
+A --> UC4
+UC2 ..> UC5 : <<include>>
+UC2 ..> UC6 : <<include>>
+UC6 ..> UC7 : <<extend>>
+
+@enduml

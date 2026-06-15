@@ -8,6 +8,9 @@ import type {
 } from "./CodePanel/types";
 import { getFoldBlocks } from "./CodePanel/utils";
 import { HighlightedLine } from "./CodePanel/HighlightedLine";
+import GeminiAssistDialog from "./CodePanel/GeminiAssistDialog";
+import GeminiIcon from "@/components/GeminiIcon";
+import { buildCodeExcerpt } from "@/lib/gemini";
 
 const CodePanel: React.FC<CodePanelProps> = ({
   title,
@@ -36,10 +39,13 @@ const CodePanel: React.FC<CodePanelProps> = ({
   hideWindowNotice = false,
   onWindowRangeChange,
   disableScroll = false,
+  geminiAssist = false,
+  geminiAllowMock = false,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showAll, setShowAll] = useState(false);
   const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
+  const [geminiDialogOpen, setGeminiDialogOpen] = useState(false);
   const [windowStart, setWindowStart] = useState<number | null>(null);
   const [windowEnd, setWindowEnd] = useState<number | null>(null);
   const [collapsedFoldStarts, setCollapsedFoldStarts] = useState<Set<number>>(new Set());
@@ -526,6 +532,26 @@ const CodePanel: React.FC<CodePanelProps> = ({
     hasFlaggedFunctions,
   ]);
 
+  const geminiCodeExcerpt = useMemo(
+    () =>
+      buildCodeExcerpt(lines, {
+        displayLineRanges,
+        windowStart: isWindowMode ? windowStart : null,
+        windowEnd: isWindowMode ? windowEnd : null,
+        maxInitialLines,
+        showAll,
+      }),
+    [
+      displayLineRanges,
+      isWindowMode,
+      lines,
+      maxInitialLines,
+      showAll,
+      windowEnd,
+      windowStart,
+    ],
+  );
+
   const downloadAllFlagged = useCallback(() => {
     if (!downloadFileName) return;
     if (!hasFlaggedFunctions) return;
@@ -570,6 +596,17 @@ const CodePanel: React.FC<CodePanelProps> = ({
               <Download className="h-3.5 w-3.5" />
             </button>
           )}
+          {geminiAssist && (
+            <button
+              type="button"
+              onClick={() => setGeminiDialogOpen(true)}
+              className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              title="Perguntar ao Gemini sobre o código visível"
+              aria-label="Assistente Gemini"
+            >
+              <GeminiIcon className="h-4 w-4" />
+            </button>
+          )}
           {onExpand && (
             <button
               type="button"
@@ -586,6 +623,15 @@ const CodePanel: React.FC<CodePanelProps> = ({
           )}
         </span>
       </div>
+
+      {geminiAssist && (
+        <GeminiAssistDialog
+          open={geminiDialogOpen}
+          onClose={() => setGeminiDialogOpen(false)}
+          codeExcerpt={geminiCodeExcerpt}
+          allowMock={geminiAllowMock}
+        />
+      )}
 
       {downloadDialogOpen && (
         <div

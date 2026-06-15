@@ -14,7 +14,7 @@ if ($existingVm) {
     }
     if (-not $reinstall) { Write-Host "      Cancelado."; exit 0 }
 
-    Write-Host "      A remover VM e artefactos..."
+    Write-Host "      A remover VM e artefatos..."
     if ($existingVm.State -ne "Off") {
         Stop-VM -Name $VMName -TurnOff -ErrorAction SilentlyContinue | Out-Null
         Start-Sleep -Seconds 5

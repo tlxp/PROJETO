@@ -26,6 +26,7 @@ type ResultsGridProps = {
     reasons?: string[];
   }[];
   baseDownloadName: string;
+  geminiAllowMock?: boolean;
   onExpand: (panel: "c" | "il" | "report") => void;
 };
 
@@ -41,6 +42,7 @@ const ResultsGrid: React.FC<ResultsGridProps> = ({
   highlightedLineRange,
   cFunctionHighlights,
   baseDownloadName,
+  geminiAllowMock = false,
   onExpand,
 }) => (
   <div className="grid grid-cols-1 gap-4 lg:grid-cols-3" style={{ height: "calc(100vh - 200px)" }}>
@@ -101,6 +103,8 @@ const ResultsGrid: React.FC<ResultsGridProps> = ({
         }
         maxInitialLines={800}
         showDisplayRangesNotice
+        geminiAssist
+        geminiAllowMock={geminiAllowMock}
         onExpand={() => onExpand("c")}
       />
     </div>

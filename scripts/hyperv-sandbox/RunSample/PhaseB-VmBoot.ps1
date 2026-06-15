@@ -1,6 +1,8 @@
 ﻿# 3) Restaurar snapshot limpo
 Write-LogHost "[3/7] A restaurar snapshot '$SnapshotName'..."
 Stop-SandboxVM -VMName $VMName
+# Breve espera para vmwp libertar handles do named pipe do COM1
+Start-Sleep -Milliseconds 400
 Restore-SandboxSnapshot -VMName $VMName -SnapshotName $SnapshotName
 Write-LogHost "      Snapshot restaurado."
 
@@ -25,7 +27,5 @@ if ($psDirectOk -is [pscredential]) {
     Write-Warning "      PowerShell Direct não ficou pronto após timeout. A continuar com cautela..."
 }
 
-# 5) Ativar Guest Service para Copy-VMFile (e opcionalmente Invoke-Command)
-Write-LogHost "[5/7] A ativar Guest Service para transferência..."
-Enable-SandboxGuestService -VMName $VMName
-$null = Wait-SandboxGuestServiceReady -VMName $VMName -TimeoutSeconds 120
+# Transferência host→guest via PowerShell Direct (Guest Services desactivados por política).
+Write-LogHost "[5/7] Transferência host→guest via PowerShell Direct..."

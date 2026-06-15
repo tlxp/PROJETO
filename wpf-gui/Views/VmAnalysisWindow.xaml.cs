@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Threading.Tasks;
 using System.Windows;
+using RatAnalyzer.Desktop.Services;
 using RatAnalyzer.Desktop.ViewModels;
 
 namespace RatAnalyzer.Desktop.Views;
@@ -9,11 +10,11 @@ public partial class VmAnalysisWindow : Window
 {
     private readonly VmAnalysisViewModel _viewModel;
 
-    public VmAnalysisWindow(string samplePath, bool runFirstTimeSetup)
+    public VmAnalysisWindow(string samplePath, bool runFirstTimeSetup, int sampleTimeoutSeconds, bool waitForSampleExit, VmGuestCredentials guestCredentials)
     {
         InitializeComponent();
 
-        _viewModel = new VmAnalysisViewModel(samplePath, runFirstTimeSetup, new VmAnalysisDialogsHost(this));
+        _viewModel = new VmAnalysisViewModel(samplePath, runFirstTimeSetup, sampleTimeoutSeconds, waitForSampleExit, guestCredentials, new VmAnalysisDialogsHost(this));
         _viewModel.RequestClose += Close;
         DataContext = _viewModel;
 

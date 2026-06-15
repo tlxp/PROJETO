@@ -1,8 +1,71 @@
-﻿function Copy-SandboxVMFile {
+﻿function Get-SandboxPsDirectChunkSize {
+    $configured = [int]$script:PROJETOVM_PsDirectChunkSizeBytes
+    if ($configured -gt 65536) { return $configured }
+    return 2097152
+}
+
+function Copy-SandboxVMFileToGuestViaPsDirect {
+    param(
+        [Parameter(Mandatory = $true)][string] $VMName,
+        [Parameter(Mandatory = $true)][pscredential] $Credential,
+        [Parameter(Mandatory = $true)][string] $HostSourcePath,
+        [Parameter(Mandatory = $true)][string] $GuestDestinationPath
+    )
+
+    if (-not (Test-Path -LiteralPath $HostSourcePath)) {
+        throw "Ficheiro host não encontrado: $HostSourcePath"
+    }
+
+    Invoke-Command -VMName $VMName -Credential $Credential -ScriptBlock {
+        param($Path)
+        $parent = Split-Path -Parent -Path $Path
+        if ($parent -and -not (Test-Path -LiteralPath $parent)) {
+            New-Item -ItemType Directory -Path $parent -Force | Out-Null
+        }
+    } -ArgumentList $GuestDestinationPath -ErrorAction Stop
+
+    $chunkSize = Get-SandboxPsDirectChunkSize
+    $offset = 0
+    $fs = [System.IO.File]::Open($HostSourcePath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+    try {
+        while ($true) {
+            $buffer = New-Object byte[] $chunkSize
+            $read = $fs.Read($buffer, 0, $chunkSize)
+            if ($read -le 0) { break }
+
+            $data = if ($read -lt $chunkSize) {
+                [Convert]::ToBase64String($buffer, 0, $read)
+            } else {
+                [Convert]::ToBase64String($buffer)
+            }
+
+            Invoke-Command -VMName $VMName -Credential $Credential -ScriptBlock {
+                param($Path, $Offset, $Base64Data, $IsFirst)
+                $bytes = [Convert]::FromBase64String($Base64Data)
+                $mode = if ($IsFirst) { [System.IO.FileMode]::Create } else { [System.IO.FileMode]::OpenOrCreate }
+                $fsOut = [System.IO.File]::Open($Path, $mode, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+                try {
+                    $null = $fsOut.Seek($Offset, [System.IO.SeekOrigin]::Begin)
+                    $fsOut.Write($bytes, 0, $bytes.Length)
+                } finally {
+                    $fsOut.Dispose()
+                }
+            } -ArgumentList $GuestDestinationPath, $offset, $data, ($offset -eq 0) -ErrorAction Stop
+
+            $offset += $read
+            if ($read -lt $chunkSize) { break }
+        }
+    } finally {
+        $fs.Dispose()
+    }
+}
+
+function Copy-SandboxVMFile {
     param(
         [string] $VMName,
         [string] $SourcePath,
         [string] $DestinationPath,
+        [pscredential] $Credential,
         [int] $Retries = 8,
         [int] $DelaySeconds = 3
     )
@@ -12,23 +75,72 @@
     }
 
     $svcName = Get-SandboxGuestServiceName -VMName $VMName
-    if (-not $svcName) {
-        throw "Guest Services n-o dispon-vel na VM '$VMName'. N-o - poss-vel usar Copy-VMFile. Instale/arranque o Windows na VM e garanta que o Integration Service 'Guest Services' existe/est- dispon-vel."
+    if ($script:PROJETOVM_UseGuestServices -and $svcName) {
+        Enable-VMIntegrationService -VMName $VMName -Name $svcName -ErrorAction SilentlyContinue
+        $guestReady = Wait-SandboxGuestServiceReady -VMName $VMName -TimeoutSeconds 120
+        if ($guestReady) {
+            for ($i = 1; $i -le $Retries; $i++) {
+                try {
+                    Copy-VMFile -VMName $VMName -SourcePath $SourcePath -DestinationPath $DestinationPath -CreateFullPath -FileSource Host -ErrorAction Stop
+                    return
+                } catch {
+                    if ($i -eq $Retries -and -not $Credential) { throw }
+                    if ($i -lt $Retries) {
+                        Write-LogWarning "Copy-VMFile falhou (tentativa $i/$Retries): $($_.Exception.Message). A tentar novamente em ${DelaySeconds}s..."
+                        Start-Sleep -Seconds $DelaySeconds
+                    }
+                }
+            }
+        }
     }
 
-    Enable-VMIntegrationService -VMName $VMName -Name $svcName -ErrorAction SilentlyContinue
-    $null = Wait-SandboxGuestServiceReady -VMName $VMName -TimeoutSeconds 120
+    if (-not $Credential) {
+        throw "N-o foi fornecida -Credential para c-pia via PowerShell Direct na VM '$VMName'."
+    }
 
     for ($i = 1; $i -le $Retries; $i++) {
         try {
-            Copy-VMFile -VMName $VMName -SourcePath $SourcePath -DestinationPath $DestinationPath -CreateFullPath -FileSource Host -ErrorAction Stop
+            if ($i -eq 1 -and $script:SandboxGuestFileCopyMode -ne "psdirect") {
+                $script:SandboxGuestFileCopyMode = "psdirect"
+                if ($script:PROJETOVM_UseGuestServices) {
+                    Write-LogHost "      Copy host->guest via PowerShell Direct (Guest Services indisponível nesta VM)."
+                } else {
+                    Write-LogHost "      Copy host->guest via PowerShell Direct (Guest Services desactivados por política de segurança)."
+                }
+            }
+            Copy-SandboxVMFileToGuestViaPsDirect -VMName $VMName -Credential $Credential `
+                -HostSourcePath $SourcePath -GuestDestinationPath $DestinationPath
             return
         } catch {
             if ($i -eq $Retries) { throw }
-            Write-LogWarning "Copy-VMFile falhou (tentativa $i/$Retries): $($_.Exception.Message). A tentar novamente em ${DelaySeconds}s..."
+            Write-LogWarning "PowerShell Direct (host->guest) falhou (tentativa $i/$Retries): $($_.Exception.Message). Repetição em ${DelaySeconds}s..."
             Start-Sleep -Seconds $DelaySeconds
         }
     }
+}
+
+function Update-SandboxCleanSnapshot {
+    param(
+        [Parameter(Mandatory = $true)][string] $VMName,
+        [Parameter(Mandatory = $true)][string] $SnapshotName
+    )
+    if ($script:DryRun) {
+        Write-LogHost "[DRY-RUN] Actualizaria snapshot '$SnapshotName' da VM '$VMName'."
+        return
+    }
+
+    Stop-SandboxVM -VMName $VMName
+    Start-Sleep -Milliseconds 500
+
+    $existing = Get-VMSnapshot -VMName $VMName -Name $SnapshotName -ErrorAction SilentlyContinue
+    if ($existing) {
+        Write-LogHost "        A remover snapshot anterior '$SnapshotName'..."
+        Remove-VMSnapshot -VMName $VMName -Name $SnapshotName -Confirm:$false -ErrorAction SilentlyContinue
+        Start-Sleep -Milliseconds 500
+    }
+
+    Checkpoint-VM -VMName $VMName -SnapshotName $SnapshotName -ErrorAction Stop
+    Write-LogHost "        Snapshot '$SnapshotName' actualizado com sucesso."
 }
 
 function Restore-SandboxSnapshot {
@@ -129,6 +241,112 @@ function Test-SandboxGuestAnalysisReportComplete {
     }
 }
 
+function Copy-SandboxGuestDiagnostics {
+    <#
+    .SYNOPSIS
+        Copia artefatos de diagnostico do guest para a pasta do run no host (pulls parciais).
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $VMName,
+        [Parameter(Mandatory = $true)][pscredential] $Credential,
+        [Parameter(Mandatory = $true)][string] $HostDiagnosticsDir,
+        [string] $GuestWorkDir = "C:\analysis_work"
+    )
+
+    if ([string]::IsNullOrWhiteSpace($HostDiagnosticsDir)) { return @() }
+
+    $copied = New-Object System.Collections.Generic.List[string]
+    $map = @(
+        @{ guest = 'analysis_crash.log'; host = 'guest_analysis_crash.log' }
+        @{ guest = 'analysis_launch.log'; host = 'guest_analysis_launch.log' }
+        @{ guest = 'launch_error.txt'; host = 'guest_launch_error.txt' }
+        @{ guest = 'sample_stderr.txt'; host = 'guest_sample_stderr.txt' }
+    )
+
+    foreach ($item in $map) {
+        $guestPath = Join-Path $GuestWorkDir $item.guest
+        $hostPath = Join-Path $HostDiagnosticsDir $item.host
+        try {
+            $exists = [bool](Invoke-Command -VMName $VMName -Credential $Credential -ScriptBlock {
+                param($Path)
+                Test-Path -LiteralPath $Path
+            } -ArgumentList $guestPath -ErrorAction Stop)
+            if (-not $exists) { continue }
+
+            Copy-SandboxVMFileFromGuest -VMName $VMName -Credential $Credential `
+                -GuestSourcePath $guestPath -HostDestinationPath $hostPath -Retries 2 -DelaySeconds 1
+            if (Test-Path -LiteralPath $hostPath) {
+                $copied.Add($item.host) | Out-Null
+            }
+        } catch { }
+    }
+
+    return @($copied)
+}
+
+function Try-ReceiveSandboxGuestReport {
+    <#
+    .SYNOPSIS
+        Tenta obter o relatório do guest via PsDirect quando o pipe COM1 ainda não entregou.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $VMName,
+        [Parameter(Mandatory = $true)][pscredential] $Credential,
+        [Parameter(Mandatory = $true)][string] $HostDestinationPath,
+        [string] $GuestReportPath = "C:\analysis.txt",
+        [string] $GuestDonePath = "C:\analysis_work\guest_analysis_done.txt",
+        [string] $HostDiagnosticsDir = "",
+        [string] $GuestWorkDir = "C:\analysis_work",
+        [switch] $AllowPartial
+    )
+
+    $guestDone = $false
+    try {
+        $guestDone = [bool](Invoke-Command -VMName $VMName -Credential $Credential -ScriptBlock {
+            param($Path)
+            Test-Path -LiteralPath $Path
+        } -ArgumentList $GuestDonePath -ErrorAction Stop)
+    } catch { }
+
+    $reportStatus = Test-SandboxGuestAnalysisReportComplete -VMName $VMName -Credential $Credential -ReportPath $GuestReportPath
+    $shouldPull = $false
+    $reason = ""
+
+    if ($guestDone) {
+        $shouldPull = $true
+        $reason = "guest_analysis_done.txt"
+    } elseif ($reportStatus.complete) {
+        $shouldPull = $true
+        $reason = "REPORT_END; em C:\analysis.txt"
+    } elseif ($AllowPartial -and $reportStatus.reportExists -and $reportStatus.reportBytes -gt 200) {
+        $shouldPull = $true
+        $reason = "relatório parcial ($($reportStatus.reportBytes) bytes, guest inativo)"
+    }
+
+    if (-not $shouldPull) {
+        return @{ pulled = $false; reason = ""; guestDone = $guestDone; reportStatus = $reportStatus; diagnosticsCopied = @() }
+    }
+
+    Copy-SandboxVMFileFromGuest -VMName $VMName -Credential $Credential `
+        -GuestSourcePath $GuestReportPath -HostDestinationPath $HostDestinationPath -Retries 3 -DelaySeconds 2
+
+    $pulled = Test-Path -LiteralPath $HostDestinationPath
+    $diagCopied = @()
+    if ($pulled -and $AllowPartial -and -not [string]::IsNullOrWhiteSpace($HostDiagnosticsDir)) {
+        $diagCopied = Copy-SandboxGuestDiagnostics -VMName $VMName -Credential $Credential `
+            -HostDiagnosticsDir $HostDiagnosticsDir -GuestWorkDir $GuestWorkDir
+    }
+
+    return @{
+        pulled            = $pulled
+        reason            = if ($pulled) { $reason } else { "" }
+        guestDone         = $guestDone
+        reportStatus      = $reportStatus
+        partial           = (-not $reportStatus.complete) -and $AllowPartial
+        diagnosticsCopied = $diagCopied
+    }
+}
+
 function Get-SandboxGuestFileCopyMode {
     if ($script:SandboxGuestFileCopyMode) { return $script:SandboxGuestFileCopyMode }
 
@@ -155,7 +373,7 @@ function Copy-SandboxVMFileFromGuestViaPsDirect {
         [Parameter(Mandatory = $true)][string] $HostDestinationPath
     )
 
-    $chunkSize = 524288
+    $chunkSize = Get-SandboxPsDirectChunkSize
     $offset = 0
     $parent = Split-Path -Parent -Path $HostDestinationPath
     if ($parent -and -not (Test-Path -LiteralPath $parent)) {

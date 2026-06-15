@@ -16,7 +16,7 @@ Start-Sleep -Seconds 2
 foreach ($it in $resolved) {
     $dst = Join-Path $vmInstallDir $it.File
     Write-LogHost ("  [COPY] {0} -> {1}" -f $it.File, $dst)
-    Copy-SandboxVMFile -VMName $VMName -SourcePath $it.HostPath -DestinationPath $dst
+    Copy-SandboxVMFile -VMName $VMName -Credential $cred -SourcePath $it.HostPath -DestinationPath $dst
 }
 
 Write-LogHost ""

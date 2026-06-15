@@ -1,7 +1,7 @@
 # PROJECT_ANALYSIS_DOCUMENT
 ## RAT Analyzer — Análise Avançada com Engenharia de Software Baseada em Grafos
 
-> **Documento arquivado** — movido para `docs/archive/`. Mantém-se como referência histórica de desenho (grafos, IA, Redis/RQ). **Não** use como manual operacional; consulte [`docs/README.md`](README.md) e os READMEs de cada componente.
+> **Documento arquivado** — movido para `docs/archive/`. Mantém-se como referência histórica de desenho (grafos, IA, Redis/RQ). **Não** use como manual operacional; consulte [`docs/README.md`](../README.md) e os READMEs de cada componente.
 
 > **Nota:** Várias funcionalidades descritas neste documento já estão implementadas (ex.: pipeline de jobs, análise estática/dinâmica stub, extração de trechos obfuscados, API de artifacts, frontend com links para trechos, integração WPF → browser). O documento mantém-se como referência de desenho e cenários.
 

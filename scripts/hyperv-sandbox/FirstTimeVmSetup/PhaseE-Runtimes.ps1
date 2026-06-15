@@ -13,7 +13,7 @@ if ($StageWinutil) {
         if (Test-Path -LiteralPath $winutil) {
             Write-LogHost ""
             Write-LogHost "       A copiar WinUtil (staging seguro, sem executar) para a VM..."
-            Copy-SandboxVMFile -VMName $VMName -SourcePath $winutil -DestinationPath "C:\analysis_work\deps\winutil.ps1"
+            Copy-SandboxVMFile -VMName $VMName -Credential $cred -SourcePath $winutil -DestinationPath "C:\analysis_work\deps\winutil.ps1"
             Write-LogHost "       WinUtil staged em: C:\analysis_work\deps\winutil.ps1"
             Write-LogHost "       Nota: execute manualmente apenas ações de INSTALL no WinUtil."
         } else {
@@ -61,7 +61,7 @@ else {
         $dst = Join-Path $vmInstallDir $realName
         try {
             Write-LogHost ('         [COPY] {0} -> {1}' -f $it.Name, $dst)
-            Copy-SandboxVMFile -VMName $VMName -SourcePath $src -DestinationPath $dst
+            Copy-SandboxVMFile -VMName $VMName -Credential $cred -SourcePath $src -DestinationPath $dst
         } catch {
             Write-LogWarning ('         Falha a copiar ''{0}'' para VM: {1}' -f $realName, $_.Exception.Message)
             continue

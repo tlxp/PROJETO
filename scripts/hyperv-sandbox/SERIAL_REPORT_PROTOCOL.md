@@ -1,4 +1,4 @@
-# Protocolo de relatório serial — COM1 → Named Pipe (implementado)
+# Protocolo de relatório serial - COM1 → Named Pipe (implementado)
 
 Canal usado pelo pipeline **`04-Run-Sample.ps1`** quando a VM é **Generation 1** e o COM1 está mapeado para `\\.\pipe\<nome>`.
 
@@ -10,7 +10,7 @@ Canal usado pelo pipeline **`04-Run-Sample.ps1`** quando a VM é **Generation 1*
 
 ## Formato do fluxo (UTF-8, linhas terminadas em CRLF no guest)
 
-Envio **texto linha-a-linha** — **não** blocos binários `FILE`.
+Envio **texto linha-a-linha** - **não** blocos binários `FILE`.
 
 ### Guest → host (`vm/Send-ReportViaCom.ps1`)
 
@@ -22,7 +22,7 @@ Envio **texto linha-a-linha** — **não** blocos binários `FILE`.
    - `REPORT_SIZE=<bytes>`
    - `END_HEADER`
 3. Corpo: **cada linha do ficheiro de relatório** (`C:\analysis.txt`), uma linha serial de cada vez.
-4. `END_OF_REPORT` (ou `END_OF_REPORT_CHECKSUM` — também aceite pelo receptor)
+4. `END_OF_REPORT` (ou `END_OF_REPORT_CHECKSUM` - também aceite pelo receptor)
 
 ### Host (`SandboxCommon/SerialPipe.ps1`)
 
@@ -39,7 +39,7 @@ Job em background: iniciado em `RunSample/PhaseA-Setup.ps1` via `Start-Job` que 
 Se o pipe expirar ou falhar (`RunSample/PhaseE-WaitReport.ps1`, `PhaseF-CollectResult.ps1`):
 
 - **Copy-VMFile** para `C:\analysis.txt` ou ficheiros já escritos na VM.
-- Guest Service Interface activado só durante o run.
+- Guest Service Interface ativado só durante o run.
 
 ## Timeouts
 
@@ -50,4 +50,4 @@ Se o pipe expirar ou falhar (`RunSample/PhaseE-WaitReport.ps1`, `PhaseF-CollectR
 
 ## Especificação futura (não implementada): SBXREP1 binário
 
-Versões antigas deste documento descreviam um protocolo **SBXREP1** com linhas `FILE <nome> <n_bytes>` seguidas de blocos binários brutos e funções `Receive-SandboxSerialReportBundle` / `Start-SandboxSerialReportReceiveJob`. **Esse formato não existe no código actual.** Se for implementado no futuro, deve conviver ou substituir o protocolo linha-a-linha acima.
+Versões antigas deste documento descreviam um protocolo **SBXREP1** com linhas `FILE <nome> <n_bytes>` seguidas de blocos binários brutos e funções `Receive-SandboxSerialReportBundle` / `Start-SandboxSerialReportReceiveJob`. **Esse formato não existe no código atual.** Se for implementado no futuro, deve conviver ou substituir o protocolo linha-a-linha acima.

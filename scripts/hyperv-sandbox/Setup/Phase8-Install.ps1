@@ -62,6 +62,20 @@ if ($snap) {
         throw "autounattend.xml não foi criado em '$unattendXml'. Abortando."
     }
 
+    # Credenciais do _Config / WPF (PROJETOVM_GuestUser/GuestPassword) têm de coincidir com a conta
+    # criada na VM — o ficheiro custom tem valores de exemplo embutidos (analyst / Analyst123!).
+    try {
+        Set-UnattendGuestCredentialsInPlace `
+            -UnattendXmlPath $unattendXml `
+            -UserName $GuestUser `
+            -Password $GuestPassword `
+            -DisplayName "Malware Analyst" `
+            -ComputerName $VMName
+        Log "Credenciais guest aplicadas ao autounattend.xml (user='$GuestUser')."
+    } catch {
+        throw "Falha ao aplicar credenciais guest ao autounattend.xml: $($_.Exception.Message)"
+    }
+
     # Normalizar idioma/locale no autounattend para o idioma do ISO (evita falhas em ISOs não en-US).
     try {
         if ($isoLang) {

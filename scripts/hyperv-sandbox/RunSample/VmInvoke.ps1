@@ -1,4 +1,4 @@
-﻿# Execução da análise dentro da VM.
+# Execução da análise dentro da VM.
 # Carregado via dot-sourcing (mesmo scope).
 #
 # A análise é lançada de forma DESTACADA (Launch-AnalysisDetached.ps1): um processo
@@ -13,6 +13,7 @@ function Start-DetachedAnalysisInVm {
         [pscredential] $Cred,
         [string] $VmSamplePath,
         [int] $TimeoutSec,
+        [bool] $WaitForSampleExit = $true,
         [string] $VmScriptDir,
         [string] $SampleSha256,
         [string] $HostRunId = ""
@@ -27,6 +28,7 @@ function Start-DetachedAnalysisInVm {
         WorkingDirectory   = $VmScriptDir
         SamplePath         = $VmSamplePath
         TimeoutSeconds     = $TimeoutSec
+        SampleTimeoutKill  = (-not $WaitForSampleExit)
         SampleHash         = $SampleSha256
         ExecutionMode      = "auto"
         SampleArguments    = ""

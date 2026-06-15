@@ -8,5 +8,14 @@
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="RatAnalyzer.Desktop.Tests" />
+  </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="RatAnalyzer.Desktop.Tests\**" />
+    <Content Remove="RatAnalyzer.Desktop.Tests\**" />
+    <None Remove="RatAnalyzer.Desktop.Tests\**" />
+    <EmbeddedResource Remove="RatAnalyzer.Desktop.Tests\**" />
+  </ItemGroup>
 </Project>

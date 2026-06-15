@@ -1,5 +1,9 @@
 """
-Driver Proxmox (skeleton).
+Driver Proxmox (EXPERIMENTAL — skeleton, não usar em produção).
+
+AVISO: sem guia de configuração, sem testes de integração no CI e sem suporte operacional.
+Para análise dinâmica real, use SANDBOX_VM_DRIVER=hyperv (Caminho A) ou o pipeline PowerShell
+(Caminho B). Ver docs/README.md § Análise dinâmica.
 
 Este driver fala com:
   - API do Proxmox (rollback snapshot, start VM)

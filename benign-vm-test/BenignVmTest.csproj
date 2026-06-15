@@ -2,9 +2,22 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <RootNamespace>BenignVmTest</RootNamespace>
     <TargetFramework>net8.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- Publicação: um único .exe sem DLLs lado a lado (ideal para cópia na sandbox). -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="BenignVmTest.Tests\**" />
+    <Content Remove="BenignVmTest.Tests\**" />
+    <None Remove="BenignVmTest.Tests\**" />
+    <EmbeddedResource Remove="BenignVmTest.Tests\**" />
+  </ItemGroup>
 
 </Project>

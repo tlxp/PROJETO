@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Configuração central do sandbox Hyper-V. Todas as pastas usam D:\PROJETOVM.
 .DESCRIPTION
@@ -23,7 +23,7 @@ $script:PROJETOVM_VMProcessorCount    = 0       # 0 = auto
 $script:PROJETOVM_VHDSizeGB           = 80
 $script:PROJETOVM_DynamicMemoryEnabled = $true
 
-# ISO Windows (sem verificação SHA-1): **en-US** (English United States) — mais nada é suportado para unattended.
+# ISO Windows (sem verificacao SHA-1): en-US (English United States) - mais nada e suportado para unattended.
 $script:PROJETOVM_WindowsIsoPath      = "D:\ISOs\Windows.iso"
 $script:PROJETOVM_AutoInstallWindows  = $true
 
@@ -33,9 +33,9 @@ if ($env:PROJETOVM_GuestPassword) {
     $script:PROJETOVM_GuestPassword = $env:PROJETOVM_GuestPassword
 } elseif ($env:PROJETOVM_ALLOW_INSECURE_DEFAULTS -eq '1') {
     $script:PROJETOVM_GuestPassword = "Analyst123!"
-    Write-Warning "[PROJETOVM] PROJETOVM_ALLOW_INSECURE_DEFAULTS=1 — password de exemplo em uso. Não use em produção."
+    Write-Warning "[PROJETOVM] PROJETOVM_ALLOW_INSECURE_DEFAULTS=1 - password de exemplo em uso. Nao use em producao."
 } else {
-    throw "[PROJETOVM] PROJETOVM_GuestPassword não definida. Defina a variável de ambiente ou, apenas em dev, PROJETOVM_ALLOW_INSECURE_DEFAULTS=1."
+    throw "[PROJETOVM] PROJETOVM_GuestPassword nao definida. Defina a variavel de ambiente ou, apenas em dev, PROJETOVM_ALLOW_INSECURE_DEFAULTS=1."
 }
 
 # Pastas derivadas (não editar)
@@ -49,6 +49,15 @@ $script:PROJETOVM_PipeName = "SandboxReportPipe"
 
 # Espera máxima por PowerShell Direct após arranque da VM (segundos)
 $script:PROJETOVM_PowerShellDirectTimeoutSeconds = 240
+
+# Guest Services (Copy-VMFile): desactivados por defeito — transferências via PowerShell Direct.
+$script:PROJETOVM_UseGuestServices = $false
+
+# Tamanho dos blocos host<->guest via PowerShell Direct (bytes). 2 MiB reduz round-trips vs 512 KiB.
+$script:PROJETOVM_PsDirectChunkSizeBytes = 2097152
+
+# COM1/pipe: segundos ociosos antes de religar o cliente (0 = desactivado). Deve exceder TimeoutSeconds da análise.
+$script:PROJETOVM_PipeIdleReconnectSec = 900
 
 function Get-ProjetoVMResourceDefaults {
     $cs          = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
@@ -82,5 +91,6 @@ function Get-ProjetoVMConfig {
         GuestPassword        = $script:PROJETOVM_GuestPassword
         PipeName             = $script:PROJETOVM_PipeName
         PowerShellDirectTimeoutSeconds = $script:PROJETOVM_PowerShellDirectTimeoutSeconds
+        UseGuestServices             = $script:PROJETOVM_UseGuestServices
     }
 }

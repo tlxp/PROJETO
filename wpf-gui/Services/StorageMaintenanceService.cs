@@ -5,10 +5,11 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using RatAnalyzer.Desktop.Infrastructure;
 
 namespace RatAnalyzer.Desktop.Services;
 
-/// <summary>Operações de estimativa/limpeza no backend e artefactos locais.</summary>
+/// <summary>Operações de estimativa/limpeza no backend e artefatos locais.</summary>
 public sealed class StorageMaintenanceService
 {
     private static readonly JsonSerializerOptions JsonInsensitive = new()

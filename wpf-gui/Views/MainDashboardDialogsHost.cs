@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Security.Principal;
 using System.Windows;
 using System.Windows.Controls;
+using RatAnalyzer.Desktop.Services;
 using RatAnalyzer.Desktop.ViewModels;
 
 namespace RatAnalyzer.Desktop.Views;
@@ -51,16 +52,41 @@ internal sealed class MainDashboardDialogsHost : IMainDashboardDialogs
 
     public void ShowAdministratorRequired() =>
         ShowWarning(
-            "A análise comportamental em VM requer direitos de administrador (Hyper-V e scripts PowerShell).\n\n" +
-            "Feche esta aplicação e execute-a como Administrador:\n" +
+            "Esta operação requer direitos de administrador.\n\n" +
+            "Feche a aplicação e execute-a como Administrador:\n" +
             "• Clique direito em RatAnalyzer.Desktop.exe → \"Executar como administrador\"\n" +
             "• Ou abra o PowerShell como Administrador e execute: dotnet run",
             "Elevação necessária");
 
-    public void OpenVmAnalysis(string samplePath, bool runFirstTimeSetup)
+    public void OpenVmAnalysis(string samplePath, bool runFirstTimeSetup, int sampleTimeoutSeconds, bool waitForSampleExit)
     {
-        var vmWindow = new VmAnalysisWindow(samplePath, runFirstTimeSetup) { Owner = Owner };
+        var credentials = ResolveGuestCredentials();
+        if (credentials == null)
+            return;
+
+        var vmWindow = new VmAnalysisWindow(samplePath, runFirstTimeSetup, sampleTimeoutSeconds, waitForSampleExit, credentials) { Owner = Owner };
         vmWindow.Show();
+    }
+
+    private VmGuestCredentials? ResolveGuestCredentials()
+    {
+        var fromEnv = VmGuestCredentialStore.TryFromEnvironment();
+        if (fromEnv != null)
+            return fromEnv;
+
+        var fromSession = VmGuestCredentialStore.TryGetSession();
+        if (fromSession != null)
+            return fromSession;
+
+        var dialog = new VmGuestCredentialsWindow("analyst") { Owner = Owner };
+        if (dialog.ShowDialog() != true)
+            return null;
+
+        var credentials = new VmGuestCredentials(dialog.GuestUser.Trim(), dialog.GuestPassword);
+        if (dialog.RememberForSession)
+            VmGuestCredentialStore.SetSession(credentials);
+
+        return credentials;
     }
 
     public void OpenStorageMaintenance()

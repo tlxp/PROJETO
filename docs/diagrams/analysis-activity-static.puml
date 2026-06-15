@@ -1,21 +1,26 @@
 @startuml
-title Analise Estatica - Diagrama de Atividade
+title Pipeline de análise estática — RAT Analyzer
 
 start
-:Utilizador carrega ficheiro;
-:Frontend valida tipo de ficheiro;
+:Upload ficheiro (.exe / .dll / .cs);
+:Validar tipo e tamanho;
 
-if (Ficheiro valido?) then (sim)
-  :Submeter para API;
-  :API inicia pipeline estatica;
-  :Extrair indicadores (imports, strings, evasao, YARA);
-  :Gerar codigo e relatorio;
-  :Calcular risco (score e nivel);
-  :Devolver resultado ao frontend;
-  :Frontend apresenta relatorio e funcoes suspeitas;
+if (Ficheiro válido?) then (sim)
+  :Extrair metadados PE;
+  if (Assembly .NET?) then (sim)
+    :Descompilar com ILSpy (C# / IL);
+  else (não)
+    :Descompilar com Ghidra (pseudo-C);
+  endif
+  :Análise estática\n(imports, strings C2, evasão, entropia);
+  :Deobfuscação (Base64, XOR);
+  :Scan YARA (yara_rules/);
+  :Calcular score de risco;
+  :Gerar relatório (JSON + texto);
+  :Apresentar resultados no frontend;
   stop
-else (nao)
-  :Frontend apresenta erro de validacao;
+else (não)
+  :Devolver erro de validação;
   stop
 endif
 

@@ -87,7 +87,7 @@ def estimate_storage(project_root: Path) -> StorageEstimate:
 
 def cleanup_job_artifacts(retention_days: int, max_count: int) -> dict:
     """
-    Retenção 'soft' para sandbox_jobs: apaga apenas artefactos pesados em disco
+    Retenção 'soft' para sandbox_jobs: apaga apenas artefatos pesados em disco
     de jobs antigos (COMPLETED/FAILED). Mantém DB.
     """
     retention_days = max(0, int(retention_days))
@@ -265,7 +265,7 @@ def purge_all_storage() -> dict:
 
 def read_text_artifact_from_job(job_id: str, relative_path: str) -> Optional[str]:
     """
-    Leitura transparente de artefactos texto dentro de sandbox_jobs/<job_id>:
+    Leitura transparente de artefatos texto dentro de sandbox_jobs/<job_id>:
       - se out/ existir: lê do ficheiro normal
       - se out.zip existir: lê do zip (caminho relativo a out/)
     """

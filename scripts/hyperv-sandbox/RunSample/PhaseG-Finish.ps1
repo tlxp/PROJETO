@@ -7,17 +7,20 @@ Write-LogHost "      VM restaurada ao estado limpo."
 
 Add-LogLine -Path $HostLogPath -Value "VM stopped and snapshot restored"
 
-# Desativar Guest Service Interface após a execução para reduzir superfície de ataque
-try {
-    Disable-SandboxGuestService -VMName $VMName
-    Add-LogLine -Path $HostLogPath -Value "Guest Service Interface disabled after run"
-} catch {
-    Add-LogLine -Path $HostLogPath -Value "Failed to disable Guest Service Interface: $_"
+if ($script:PROJETOVM_UseGuestServices) {
+    try {
+        Disable-SandboxGuestService -VMName $VMName
+        Add-LogLine -Path $HostLogPath -Value "Guest Service Interface disabled after run"
+    } catch {
+        Add-LogLine -Path $HostLogPath -Value "Failed to disable Guest Service Interface: $_"
+    }
 }
 
 # JSON estruturado do run
 $analysisEnd = Get-Date
-$status = if (Test-Path $ReportOutputPath) { "ok" } else { "failed" }
+$status = if (Test-ReportLooksComplete -Path $ReportOutputPath) { "ok" }
+          elseif ((Test-Path -LiteralPath $ReportOutputPath) -and ((Get-Item -LiteralPath $ReportOutputPath).Length -gt 0)) { "partial" }
+          else { "failed" }
 $jsonData = @{
     run_id         = $RunId
     sample_path    = $SamplePath

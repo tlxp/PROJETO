@@ -1,23 +1,27 @@
 # Instaladores offline (runtimes)
 
-Coloque aqui instaladores **offline** para que `05-FirstTimeVmSetup.ps1` os copie para a VM e instale (silenciosamente) **antes** de criar o snapshot `CleanState`.
+Coloque aqui instaladores **offline** para que `05-FirstTimeVmSetup.ps1` os copie para a VM guest e
+instale silenciosamente **antes** de criar o snapshot `CleanState`.
 
-## Ficheiros esperados (nomes)
+Sem estes pacotes, amostras .NET e binários nativos podem falhar na VM com erros de runtime/DLL em falta.
 
-- `VC_redist.x86.exe`
-- `VC_redist.x64.exe`
-- `ndp48-x86-x64-allos-enu.exe` (opcional, .NET Framework 4.8 offline)
-- `windowsdesktop-runtime-8.0.*-win-x86.exe`
-- `windowsdesktop-runtime-8.0.*-win-x64.exe`
+## Ficheiros esperados
 
-> Nota: para o .NET Desktop Runtime 8, o script aceita **qualquer patch** `8.0.xx` (wildcard).
+| Ficheiro | Pacote |
+|----------|--------|
+| `VC_redist.x86.exe` | Visual C++ Redistributable (x86) |
+| `VC_redist.x64.exe` | Visual C++ Redistributable (x64) |
+| `ndp48-x86-x64-allos-enu.exe` | .NET Framework 4.8 offline *(opcional)* |
+| `windowsdesktop-runtime-8.0.*-win-x86.exe` | .NET Desktop Runtime 8 (x86) |
+| `windowsdesktop-runtime-8.0.*-win-x64.exe` | .NET Desktop Runtime 8 (x64) |
+
+> Para o .NET Desktop Runtime 8, o script aceita **qualquer patch** `8.0.xx` (wildcard no nome).
 
 ## Resultado esperado
 
-Depois de correr `05-FirstTimeVmSetup.ps1`, o snapshot `CleanState` já deverá ter:
+Após `05-FirstTimeVmSetup.ps1`, o snapshot `CleanState` deve incluir:
 
-- VC++ Redistributables instalados
-- .NET Desktop Runtime instalado
+- VC++ Redistributables (x86 e x64)
+- .NET Desktop Runtime 8 (x86 e x64, conforme os instaladores fornecidos)
 
-Assim, samples .NET e muitos binários nativos deixam de falhar com erros do tipo DLL/runtime em falta.
-
+Documentação do pipeline: [`../../README.md`](../../README.md).

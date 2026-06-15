@@ -9,6 +9,10 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    // Evita flakiness no Windows/CI (arranque lento do jsdom com paralelismo)
+    fileParallelism: false,
+    testTimeout: 15_000,
+    hookTimeout: 15_000,
   },
   resolve: {
     alias: { "@": path.resolve(__dirname, "./src") },

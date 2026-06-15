@@ -56,6 +56,7 @@ type ExpandedViewProps = {
   rightColWidth: number;
   onLeftResizeStart: (e: React.MouseEvent) => void;
   onRightResizeStart: (e: React.MouseEvent) => void;
+  geminiAllowMock?: boolean;
 };
 
 /** Vista expandida: ecrã inteiro com navegação à esquerda, código no centro e referências à direita. */
@@ -89,6 +90,7 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({
   rightColWidth,
   onLeftResizeStart,
   onRightResizeStart,
+  geminiAllowMock = false,
 }) => (
   <motion.div
     initial={{ opacity: 0 }}
@@ -299,6 +301,8 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({
               : undefined
           }
           maxInitialLines={2000}
+          geminiAssist
+          geminiAllowMock={geminiAllowMock}
         />
       )}
       {expandedPanel === "il" && (

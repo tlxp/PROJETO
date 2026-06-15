@@ -1,5 +1,5 @@
 @startuml
-title RAT Analyzer - Sequencia integrada (resumida)
+title Sequência integrada — RAT Analyzer (resumida)
 
 autonumber
 skinparam responseMessageBelowArrow true
@@ -7,64 +7,48 @@ skinparam responseMessageBelowArrow true
 actor "Utilizador" as U
 participant "Frontend React" as FE
 participant "WPF Desktop" as WPF
-participant "API Backend (FastAPI)" as API
-participant "Jobs de Analise" as JOBS
+participant "API FastAPI" as API
+participant "Jobs" as JOBS
 participant "RAT Analyzer" as RAT
-participant "Orquestrador de VM" as VMO
-participant "Driver de VM\n(stub|hyperv|proxmox)" as DRV
-participant "Agente de VM" as AGENT
-database "Armazenamento de Jobs\n(SQLite + sandbox_jobs)" as DB
+participant "VM Orchestrator" as VMO
+participant "Driver VM" as DRV
+participant "vm-agent" as AGENT
+database "SQLite +\nsandbox_jobs" as DB
 
-group Web estatica por streaming
-U -> FE: Carregar ficheiro + modo estatica
-FE -> API: Submeter analise estatica
-API -> RAT: Executar analise estatica
-RAT --> API: Resultado estatico
-API --> FE: Progresso + resultado final
-end
-
-group Pipeline de jobs (estatica|dinamica|ambas)
-U -> FE: Carregar ficheiro + modo dinamica/ambas/estatica
-FE -> API: Criar job de analise
-API -> JOBS: Registar e arrancar job
-JOBS -> DB: Guardar estado do job
-API --> FE: Devolver jobId
-
-loop consulta periodica (polling)
-FE -> API: GET /api/analysis/{jobId}
-API -> DB: Ler estado e resultados
-API --> FE: Estado + resultados disponiveis
-end
+group Análise estática (streaming)
+  U -> FE : Carregar ficheiro
+  FE -> API : POST /api/analyze_stream
+  API -> RAT : Pipeline estática
+  RAT --> API : Resultado + logs NDJSON
+  API --> FE : Progresso e relatório final
 end
 
-group Execucao interna
-alt estatica
-JOBS -> RAT: Executar pipeline estatica
-RAT --> JOBS: staticResult
-else dinamica
-JOBS -> VMO: Executar pipeline dinamica
-VMO -> DRV: Correr driver configurado
-alt hyperv/proxmox
-DRV -> AGENT: Upload, execucao e relatorio
-AGENT --> DRV: Comportamento observado
-else stub
-DRV --> VMO: comportamento sintetico
-end
-VMO --> JOBS: dynamicResult
-end
-JOBS -> DB: Guardar resultados e fechar job
+group Job dinâmico ou combinado
+  U -> FE : Carregar + modo dynamic/both
+  FE -> API : POST /api/analysis
+  API -> JOBS : create_job
+  JOBS -> DB : estado queued/running
+  JOBS -> VMO : pipeline dinâmica
+  alt hyperv / proxmox
+    VMO -> DRV : driver real
+    DRV -> AGENT : upload, run, report
+    AGENT --> DRV : comportamento
+  else stub
+    DRV --> VMO : resultado sintético
+  end
+  JOBS -> DB : dynamicResult
+  loop polling
+    FE -> API : GET /api/analysis/{jobId}
+    API -> DB : ler estado
+    API --> FE : resultados
+  end
 end
 
-group WPF publicar resultado estatico
-U -> WPF: Arrastar e largar + Analise Estatica
-WPF -> API: Executar analise estatica
-API -> RAT: Correr pipeline estatica
-RAT --> API: Resultado estatico
-API --> WPF: resposta estatica
-WPF -> API: Publicar resultado estatico
-API -> DB: Guardar job concluido
-API --> WPF: {jobId}
-WPF -> FE: abrir /resultados?jobId=...
+group WPF → browser
+  U -> WPF : Drag-and-drop + análise
+  WPF -> API : análise + publicar job
+  API -> DB : guardar jobId
+  WPF -> FE : abrir /resultados?jobId=...
 end
 
 @enduml

@@ -1,5 +1,6 @@
 # Python
 __pycache__/
+.pytest_cache/
 *.py[cod]
 *$py.class
 *.so
@@ -26,9 +27,15 @@ wheels/
 .installed.cfg
 *.egg
 
-# Saídas do RAT Analyzer
+# Saídas do RAT Analyzer (legado na raiz — canónico: DATA_DIR/decompiled, ver backend/config.py)
 reports/
-decompiled/
+/decompiled/
+
+# Resíduos locais na raiz (não versionar)
+/err.txt
+/out.txt
+# Autounattend canónico: scripts/hyperv-sandbox/autounattend-malware-behavior-detection-user-gen1.xml
+/autounattend-malware-behavior-detection-user-gen1.xml
 
 # YARA rules compiladas
 *.yarac
@@ -45,6 +52,8 @@ scripts/hyperv-sandbox/tools/*.exe
 # .NET (genérico) – ajuda a evitar commits de build em qualquer projeto
 **/bin/
 **/obj/
+**/publish/
+**/*_wpftmp.csproj
 
 # Visual Studio / IDE files
 .vs/
@@ -58,7 +67,9 @@ scripts/hyperv-sandbox/tools/*.exe
 sandbox_jobs/
 data/
 
-# IDE
+# Frontend – build e dependências (redundante com frontend/.gitignore; reforço na raiz)
+frontend/dist/
+frontend/node_modules/
 .vscode/
 .idea/
 *.swp
@@ -78,3 +89,7 @@ secrets/
 .env.*.local
 backend/.env
 frontend/.env
+
+# Diagramas — fonte única docs/diagrams/; não versionar .puml derivados do relatório
+relatório/imagens/fig-4-*.puml
+relatório/imagens/plantuml.jar

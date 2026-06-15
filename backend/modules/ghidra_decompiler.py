@@ -335,7 +335,7 @@ def _build_decompile_options(program=None):
 
 
 def _cleanup_ghidra_project_artifacts(workspace: Path, project_name: str) -> None:
-    """Remove artefactos de projeto Ghidra que podem deixar locks entre execuções."""
+    """Remove artefatos de projeto Ghidra que podem deixar locks entre execuções."""
     candidates = [
         workspace / project_name,
         workspace / f"{project_name}.gpr",

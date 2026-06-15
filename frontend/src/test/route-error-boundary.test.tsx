@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 
@@ -44,7 +44,7 @@ describe("RouteErrorBoundary", () => {
     expect(screen.getByText("falha de teste")).toBeInTheDocument();
   });
 
-  it("permite tentar novamente após erro", () => {
+  it("permite tentar novamente após erro", async () => {
     let throwNext = true;
     function MaybeThrow() {
       if (throwNext) {
@@ -64,6 +64,8 @@ describe("RouteErrorBoundary", () => {
     expect(screen.getByText(/Erro ao carregar Retry/i)).toBeInTheDocument();
     throwNext = false;
     fireEvent.click(screen.getByRole("button", { name: /Tentar novamente/i }));
-    expect(screen.getByText("recuperado")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("recuperado")).toBeInTheDocument();
+    });
   });
 });

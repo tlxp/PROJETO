@@ -1,25 +1,27 @@
-# Backend — RAT Analyzer
+# Backend - RAT Analyzer
 
 API **FastAPI** e pipeline de análise de malware (estática + orquestração da análise dinâmica). Pode
 ser usado como **servidor** (web/desktop) ou via **CLI**. Para a visão geral do projeto, ver o
-[README principal](../README.md). Estado da auditoria: [`docs/AUDITORIA.md`](../docs/AUDITORIA.md).
+[README principal](../README.md).
 
 ## Requisitos
 
 - **Python 3.10+**
 - Dependências principais: [`requirements.lock`](requirements.lock) (`pip install --require-hashes -r requirements.lock`)
-- Fonte editável: [`requirements.txt`](requirements.txt) — regenerar locks com `scripts/ci/compile_python_locks.ps1`
+- Fonte editável: [`requirements.txt`](requirements.txt) - regenerar locks com `scripts/ci/compile_python_locks.ps1`
 - Extra Ghidra/pseudo-C: [`requirements-ghidra.lock`](requirements-ghidra.lock)
 - GUI Python opcional: [`requirements-gui.lock`](requirements-gui.lock) (`windnd` para drag-and-drop)
 - Desenvolvimento/testes: [`requirements-dev.lock`](requirements-dev.lock) (`pytest`, `httpx`)
 - Regenerar locks: [`scripts/ci/compile_python_locks.ps1`](../scripts/ci/compile_python_locks.ps1)
-- **YARA** instalado no sistema (para o scanner) — opcional, mas recomendado
-- **Ghidra 12+** + `GHIDRA_INSTALL_DIR` (pseudo-C de binários nativos) — opcional
-- **.NET SDK** (descompilação .NET via ILSpy CLI) — opcional
+- **YARA** instalado no sistema (para o scanner) - opcional, mas recomendado
+- **Ghidra 12+** + `GHIDRA_INSTALL_DIR` (pseudo-C de binários nativos) - opcional
+- **.NET SDK** (descompilação .NET via ILSpy CLI) - opcional
 
 ## Execução
 
 ### Servidor (API)
+
+Copie [`backend/.env.example`](.env.example) para `backend/.env` ou exporte variáveis no ambiente.
 
 ```bash
 cd backend
@@ -30,9 +32,9 @@ uvicorn api:app --reload --port 8000 --host 127.0.0.1
 
 > **Segurança:** recomenda-se fazer bind apenas a `127.0.0.1` (default acima). A API analisa
 > malware real e expõe endpoints de manutenção; não a exponha diretamente à rede. Defina
-> **Produção:** [`docs/production-secrets.md`](../docs/production-secrets.md) — `RATANALYZER_ENV=production` ou `RATANALYZER_REQUIRE_API_TOKEN=1` obriga `RATANALYZER_API_TOKEN` no arranque. Gere valores com `scripts/generate-production-secrets.ps1`.
+> **Produção:** [`docs/production-secrets.md`](../docs/production-secrets.md) - `RATANALYZER_ENV=production` ou `RATANALYZER_REQUIRE_API_TOKEN=1` obriga `RATANALYZER_API_TOKEN` no arranque. Gere valores com `scripts/generate-production-secrets.ps1`.
 >
-> `RATANALYZER_API_TOKEN` — com a variável activa, **todos** os uploads (`/api/analyze`, `/api/analysis`)
+> `RATANALYZER_API_TOKEN` - com a variável ativa, **todos** os uploads (`/api/analyze`, `/api/analysis`)
 > e endpoints de storage exigem o header `X-API-Token`.
 
 ### CLI
@@ -44,7 +46,7 @@ python rat_analyzer.py caminho/para/ficheiro.exe -o reports/ -v
 ### GUI Python (opcional, fluxos .NET)
 
 ```bash
-python rat_analyzer_gui.py     # arrastar .cs, compilar e analisar o .exe/.dll
+python rat_analyzer_gui.py     # GUI Tkinter opcional - ver gui/README.md
 ```
 
 ### Worker de fila (opcional)
@@ -64,7 +66,7 @@ python worker.py
 | `POST` | `/api/analyze_stream` | Análise estática em streaming (NDJSON: logs + resultado). |
 | `POST` | `/api/analysis?analysis_type=static\|dynamic\|both` | Cria um job na pipeline. |
 | `POST` | `/api/analysis/upload_static` | Publica resultado estático calculado noutro processo no mesmo `job_id`. |
-| `GET`  | `/api/analysis/{job_id}` | Estado e artefactos de um job. |
+| `GET`  | `/api/analysis/{job_id}` | Estado e artefatos de um job. |
 | `GET`  | `/api/analysis/{job_id}/artifacts/obfuscated_snippets` | Excertos ofuscados (texto). |
 | `GET`  | `/api/analyses` | Lista de jobs recentes. |
 | `GET`  | `/api/health` | Healthcheck. |
@@ -77,18 +79,19 @@ backend/
 ├── api.py                  # Endpoints FastAPI
 ├── analysis_jobs.py        # Jobs static | dynamic | both
 ├── rat_analyzer.py         # Entrada da análise estática (CLI e biblioteca)
-├── rat_analyzer_gui.py     # GUI Python (Tkinter + windnd)
+├── rat_analyzer_gui.py     # Entrada da GUI Tkinter opcional (ver gui/)
+├── gui/                    # GUI Tkinter - alternativa leve ao WPF (ver gui/README.md)
 ├── vm_orchestrator.py      # Orquestração da análise dinâmica (escolhe o driver)
 ├── config.py               # Configuração central (paths, DATA_DIR, limites)
 ├── job_store.py            # Persistência de jobs (SQLite)
 ├── task_queue.py           # Abstração de fila (RQ/Redis ou threads locais)
 ├── worker.py               # Worker RQ (modo fila)
-├── storage_maintenance.py  # Estimativa/limpeza/arquivo/purga de artefactos
-├── security_config.py      # Modo produção — exige RATANALYZER_API_TOKEN no arranque
+├── storage_maintenance.py  # Estimativa/limpeza/arquivo/purga de artefatos
+├── security_config.py      # Modo produção - exige RATANALYZER_API_TOKEN no arranque
 ├── upload_security.py      # Sanitização de filenames, validação de job_id, limites de upload
-├── artifact_naming.py      # Convenções de nomes de artefactos
+├── artifact_naming.py      # Convenções de nomes de artefatos
 ├── pipeline_version.py     # Versão da pipeline (cache/compatibilidade)
-├── clean.py                # Limpeza de caches e artefactos gerados
+├── clean.py                # Limpeza de caches e artefatos gerados
 ├── modules/                # Analisadores (ver abaixo)
 ├── vm_drivers/             # Drivers da análise dinâmica (base, stub, hyperv, proxmox)
 ├── scripts/                # Utilitários (ex.: check_job_snippets.py)
@@ -115,9 +118,11 @@ backend/
 Padrão de plugin: `base.py` define a interface e cada driver implementa-a. Selecionado por
 `SANDBOX_VM_DRIVER` (`stub` por defeito, seguro). Ver [`docs/sandbox-hyperv-setup.md`](../docs/sandbox-hyperv-setup.md).
 
+**Segurança:** [`docs/SEGURANCA.md`](../docs/SEGURANCA.md) · implementação: `security_config.py`, `upload_security.py`.
+
 ## Configuração e dados
 
-Os **artefactos de runtime não são versionados**. Por defeito ficam em `%LOCALAPPDATA%\RatAnalyzer`
+Os **artefatos de runtime não são versionados**. Por defeito ficam em `%LOCALAPPDATA%\RatAnalyzer`
 (`DATA_DIR`), com override via `RATANALYZER_DATA_DIR`. Inclui `reports/`, `decompiled/`, `sandbox_jobs/`
 e a base de dados SQLite `analysis.db`. Ver [`config.py`](config.py).
 
@@ -125,8 +130,8 @@ Variáveis de ambiente relevantes:
 
 | Variável | Efeito |
 |----------|--------|
-| `RATANALYZER_DATA_DIR` | Override do diretório base de dados/artefactos. |
-| `RATANALYZER_API_TOKEN` | **(segurança)** Se definido, **todos** os uploads (`/api/analyze`, `/api/analyze_stream`, `/api/analysis`) e endpoints de storage exigem o header `X-API-Token` (comparação em tempo constante; **401** se inválido). Com `RATANALYZER_ENV=production` ou `RATANALYZER_REQUIRE_API_TOKEN=1`, o arranque **falha** sem token — ver `security_config.py`. |
+| `RATANALYZER_DATA_DIR` | Override do diretório base de dados/artefatos. |
+| `RATANALYZER_API_TOKEN` | **(segurança)** Se definido, **todos** os uploads (`/api/analyze`, `/api/analyze_stream`, `/api/analysis`) e endpoints de storage exigem o header `X-API-Token` (comparação em tempo constante; **401** se inválido). Com `RATANALYZER_ENV=production` ou `RATANALYZER_REQUIRE_API_TOKEN=1`, o arranque **falha** sem token - ver `security_config.py`. |
 | `RATANALYZER_MAX_UPLOAD_MB` | Limite de tamanho de upload em MB (default **100**). Pedidos acima do limite devolvem **HTTP 413** (verificado via `Content-Length` quando disponível e novamente durante a leitura por chunks). Aplica-se a `/api/analyze`, `/api/analyze_stream` e `/api/analysis`. |
 | `RATANALYZER_MAX_WORKERS` | Nº máximo de jobs de análise concorrentes no modo local de threads (default **2**). |
 | `RATANALYZER_CORS_ORIGINS` | Lista de origens CORS separadas por vírgulas. Default: `http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173`. |
@@ -160,7 +165,7 @@ pip install --require-hashes -r requirements-dev.lock
 python -m pytest tests -q
 ```
 
-**61 testes** pytest — não dependem de YARA/Ghidra/ILSpy (o pipeline pesado é substituído por mocks) e usam
+**66 testes** pytest - não dependem de YARA/Ghidra/ILSpy (o pipeline pesado é substituído por mocks) e usam
 `RATANALYZER_DATA_DIR` apontado para um diretório temporário. Inclui: API, upload security, job reconstruction,
 pipeline logging, regras YARA (`test_yara_rules.py`).
 
@@ -170,5 +175,8 @@ pipeline logging, regras YARA (`test_yara_rules.py`).
 python clean.py              # use --dry-run para simular
 ```
 
-Remove `__pycache__/`, `.pytest_cache`, `*.pyc`/`*.pyo`, `bin/`, `obj/` e `decompiled/`. Não apaga código
-fonte nem relatórios.
+Remove `__pycache__/`, `.pytest_cache` (em todo o repo), `*.pyc`/`*.pyo`, `programa/**/bin` e `programa/**/obj`,
+decompilados em `DATA_DIR` e legado `decompiled/` na raiz. **Não** apaga código fonte nem relatórios em
+`DATA_DIR/reports/`.
+
+Índice: [`docs/README.md`](../docs/README.md).

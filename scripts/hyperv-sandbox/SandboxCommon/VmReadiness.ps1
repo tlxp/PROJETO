@@ -85,6 +85,28 @@ function New-SandboxCredentialCandidates {
     return @($final | ForEach-Object { [pscredential]::new($_, $secure) })
 }
 
+function Test-PowerShellDirectAuthError {
+    param([string] $Message)
+    if ([string]::IsNullOrWhiteSpace($Message)) { return $false }
+    $patterns = @(
+        'user name or password',
+        'password is incorrect',
+        'account is currently locked',
+        'referenced account is currently locked',
+        'logon failure',
+        'access is denied',
+        'authentication failed',
+        'nome de utilizador ou palavra-passe',
+        'palavra-passe.*incorrect',
+        'conta.*bloqueada',
+        'account.*locked'
+    )
+    foreach ($p in $patterns) {
+        if ($Message -match $p) { return $true }
+    }
+    return $false
+}
+
 function Wait-VMPowerShellDirectReady {
     param(
         [Parameter(Mandatory = $true)][string] $VMName,
@@ -95,7 +117,9 @@ function Wait-VMPowerShellDirectReady {
         # - <=0 : sem timeout (espera indefinidamente)
         [int] $TimeoutSeconds = 0,
         [string] $LogPath,
-        [int] $LogIntervalSeconds = 10
+        [int] $LogIntervalSeconds = 10,
+        # Após N ciclos seguidos só com erros de autenticação, parar (evita lockout infinito).
+        [int] $MaxAuthFailureAttempts = 15
     )
     if ($script:DryRun) { return $true }
 
@@ -115,8 +139,10 @@ function Wait-VMPowerShellDirectReady {
     Write-SandboxLog -Message "A aguardar PowerShell Direct na VM '$VMName' (timeout: $timeoutLabel, intervalo ${LogIntervalSeconds}s)..." -LogPath $LogPath -Level "INFO"
 
     $lastErr = $null
+    $authFailureStreak = 0
     while ($true) {
         if ($deadline -and (Get-Date) -ge $deadline) { break }
+        $loopHadAuthError = $false
         try {
             foreach ($cand in $candidates) {
                 try {
@@ -130,6 +156,13 @@ function Wait-VMPowerShellDirectReady {
                 } catch {
                     $msg = $($_.Exception.Message)
                     $lastErr = $msg
+                    if (Test-PowerShellDirectAuthError $msg) {
+                        $loopHadAuthError = $true
+                        if ($msg -match 'locked') {
+                            Write-SandboxLog -Message "Conta bloqueada na VM (user='$($cand.UserName)'): $msg. Parar tentativas — restaure snapshot CleanState ou aguarde o lockout expirar." -LogPath $LogPath -Level "ERROR"
+                            return $null
+                        }
+                    }
                 }
             }
         } catch {
@@ -139,6 +172,18 @@ function Wait-VMPowerShellDirectReady {
                 Write-SandboxLog -Message "PowerShell Direct ainda indisponível: $msg (elapsed=${elapsed}s)" -LogPath $LogPath -Level "INFO"
                 $lastErr = $msg
             }
+            if (Test-PowerShellDirectAuthError $msg) { $loopHadAuthError = $true }
+        }
+
+        if ($loopHadAuthError) {
+            $authFailureStreak++
+            if ($authFailureStreak -ge $MaxAuthFailureAttempts) {
+                $uList = ($candidates | ForEach-Object { $_.UserName }) -join ", "
+                Write-SandboxLog -Message "PowerShell Direct: $MaxAuthFailureAttempts tentativas seguidas com erro de autenticação (users: $uList). Último erro: $lastErr. Verifique se a password coincide com a conta na VM (autounattend / primeira instalação)." -LogPath $LogPath -Level "ERROR"
+                return $null
+            }
+        } else {
+            $authFailureStreak = 0
         }
 
         $elapsed = [int]((Get-Date) - $start).TotalSeconds
@@ -206,6 +251,15 @@ function Get-SandboxGuestServiceName {
         } | Select-Object -First 1
 
         if ($svc) { return $svc.Name }
+
+        # 3) Último recurso: qualquer serviço cujo Name/Id contenha "guest" (exclui Heartbeat/shutdown).
+        $svc = $services | Where-Object {
+            $n = _Normalize-Ascii $_.Name
+            $id = _Normalize-Ascii ([string]$_.Id)
+            ($n -like "*guest*" -or $id -like "*guest*") -and
+            ($n -notlike "*heartbeat*") -and ($n -notlike "*shutdown*") -and ($n -notlike "*time*sync*")
+        } | Select-Object -First 1
+        if ($svc) { return $svc.Name }
     } catch { }
     return $null
 }
@@ -213,6 +267,7 @@ function Get-SandboxGuestServiceName {
 function Enable-SandboxGuestService {
     param([string] $VMName)
     if ($script:DryRun) { return }
+    if (-not $script:PROJETOVM_UseGuestServices) { return }
     $name = Get-SandboxGuestServiceName -VMName $VMName
     if (-not $name) {
         Write-LogWarning "Guest Service (Integration Service) n-o encontrado/indispon-vel na VM '$VMName'."

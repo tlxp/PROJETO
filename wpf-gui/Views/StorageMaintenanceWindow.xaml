@@ -22,7 +22,7 @@
 
         <StackPanel Grid.Row="0" Margin="0,0,0,12">
             <TextBlock Text="Manutenção / Limpeza" Style="{StaticResource TitleTextBlock}" />
-            <TextBlock Text="Estimativa e limpeza segura de dados temporários e artefactos antigos."
+            <TextBlock Text="Estimativa e limpeza segura de dados temporários e artefatos antigos."
                        Style="{StaticResource SubtitleTextBlock}"
                        Margin="0,4,0,0"/>
         </StackPanel>
@@ -58,7 +58,7 @@
 
                     <StackPanel>
                         <TextBlock Text="Limpeza segura (soft) do histórico de jobs" FontWeight="SemiBold" />
-                        <TextBlock Text="Remove artefactos antigos em disco (sandbox_jobs) para jobs concluídos/falhados, mantendo a base de dados."
+                        <TextBlock Text="Remove artefatos antigos em disco (sandbox_jobs) para jobs concluídos/falhados, mantendo a base de dados."
                                    Foreground="{StaticResource TextSecondaryBrush}"
                                    FontSize="11"
                                    Margin="0,4,0,8"

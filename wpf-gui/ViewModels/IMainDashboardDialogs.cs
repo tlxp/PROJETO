@@ -15,7 +15,7 @@ public interface IMainDashboardDialogs
 
     void ShowAdministratorRequired();
 
-    void OpenVmAnalysis(string samplePath, bool runFirstTimeSetup);
+    void OpenVmAnalysis(string samplePath, bool runFirstTimeSetup, int sampleTimeoutSeconds, bool waitForSampleExit);
 
     void OpenStorageMaintenance();
 

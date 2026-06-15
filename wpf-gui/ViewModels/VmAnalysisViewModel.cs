@@ -8,6 +8,8 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
+using RatAnalyzer.Desktop.Bootstrap;
+using RatAnalyzer.Desktop.Infrastructure;
 using RatAnalyzer.Desktop.Services;
 
 namespace RatAnalyzer.Desktop.ViewModels;
@@ -18,6 +20,9 @@ public sealed class VmAnalysisViewModel : ViewModelBase
 
     private readonly string _samplePath;
     private readonly bool _runFirstTimeSetup;
+    private readonly int _sampleTimeoutSeconds;
+    private readonly bool _waitForSampleExit;
+    private readonly VmGuestCredentials _guestCredentials;
     private readonly IVmAnalysisDialogs _dialogs;
     private readonly CancellationTokenSource _cts = new();
     private readonly StringBuilder _logBuilder = new();
@@ -43,10 +48,19 @@ public sealed class VmAnalysisViewModel : ViewModelBase
     private DispatcherTimer? _statusTimer;
     private bool _completed;
 
-    public VmAnalysisViewModel(string samplePath, bool runFirstTimeSetup, IVmAnalysisDialogs dialogs)
+    public VmAnalysisViewModel(
+        string samplePath,
+        bool runFirstTimeSetup,
+        int sampleTimeoutSeconds,
+        bool waitForSampleExit,
+        VmGuestCredentials guestCredentials,
+        IVmAnalysisDialogs dialogs)
     {
         _samplePath = samplePath ?? throw new ArgumentNullException(nameof(samplePath));
         _runFirstTimeSetup = runFirstTimeSetup;
+        _sampleTimeoutSeconds = Math.Clamp(sampleTimeoutSeconds, 5, 7200);
+        _waitForSampleExit = waitForSampleExit;
+        _guestCredentials = guestCredentials ?? throw new ArgumentNullException(nameof(guestCredentials));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
 
@@ -192,16 +206,18 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         AppendLine($"[*] Pasta dos scripts: {scriptsPath}", withTimestamp: true);
         AppendLine($"[*] Amostra: {_samplePath}", withTimestamp: true);
         AppendLine($"[*] Primeira entrada (instalar software + snapshot): {_runFirstTimeSetup}", withTimestamp: true);
+        AppendLine($"[*] Execução da amostra: {(_waitForSampleExit ? "aguardar fim natural" : $"tempo ativo máximo {_sampleTimeoutSeconds}s")}", withTimestamp: true);
+        AppendLine($"[*] Conta na VM: {_guestCredentials.Username}", withTimestamp: true);
         if (!string.IsNullOrWhiteSpace(_runId))
             AppendLine($"[*] RunId: {_runId}", withTimestamp: true);
         if (!string.IsNullOrWhiteSpace(_runDir))
             AppendLine($"[*] Pasta de logs: {_runDir}", withTimestamp: true);
         AppendLine("", withTimestamp: true);
 
-        var runPreflight = await VmSandboxService.GetRunPreflightAsync(scriptsPath, _cts.Token).ConfigureAwait(true);
+        var runPreflight = await VmSandboxService.GetRunPreflightAsync(scriptsPath, _cts.Token, _guestCredentials).ConfigureAwait(true);
         if (runPreflight == null)
         {
-            AppendLine("[ERRO] Falha no preflight da VM. Não consegui validar VM/snapshot/ISO via PowerShell.", withTimestamp: true);
+            AppendLine("[ERRO] Falha no preflight da VM. Não consegui validar VM/snapshot/ISO via PowerShell (verifique credenciais da VM, Hyper-V e scripts).", withTimestamp: true);
             await PersistGuiLogAsync().ConfigureAwait(false);
             return;
         }
@@ -252,7 +268,7 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         var setupScript = Path.Combine(scriptsPath, "01-Setup-MalwareSandbox.ps1");
         if (_runFirstTimeSetup && File.Exists(setupScript))
         {
-            var preflight = await VmSandboxService.GetSetupPreflightAsync(scriptsPath, _cts.Token).ConfigureAwait(true);
+            var preflight = await VmSandboxService.GetSetupPreflightAsync(scriptsPath, _cts.Token, _guestCredentials).ConfigureAwait(true);
             IReadOnlyList<string>? setupArgs = null;
             if (preflight != null && (preflight.VmExists || preflight.VhdExists))
             {
@@ -271,7 +287,7 @@ public sealed class VmAnalysisViewModel : ViewModelBase
             AppendLine("[*] A executar setup da sandbox (01-Setup-MalwareSandbox.ps1)...", withTimestamp: true);
             StatusText = "Setup da sandbox Hyper-V...";
             var exitSetup = await VmSandboxService.RunScriptAsync(
-                setupScript, setupArgs, line => AppendLine(line), _cts.Token).ConfigureAwait(true);
+                setupScript, setupArgs, line => AppendLine(line), _cts.Token, _guestCredentials).ConfigureAwait(true);
             AppendLine("", withTimestamp: true);
             if (exitSetup != 0)
             {
@@ -293,7 +309,7 @@ public sealed class VmAnalysisViewModel : ViewModelBase
             }
 
             var exitCode1 = await VmSandboxService.RunScriptAsync(
-                firstTimeScript, null, line => AppendLine(line), _cts.Token).ConfigureAwait(true);
+                firstTimeScript, null, line => AppendLine(line), _cts.Token, _guestCredentials).ConfigureAwait(true);
             AppendLine("", withTimestamp: true);
             if (exitCode1 != 0)
             {
@@ -321,9 +337,12 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         var runArgs = new List<string> { "-SamplePath", _samplePath };
         if (!string.IsNullOrWhiteSpace(_runId))
             runArgs.AddRange(new[] { "-RunId", _runId });
+        runArgs.AddRange(new[] { "-TimeoutSeconds", _sampleTimeoutSeconds.ToString() });
+        if (!_waitForSampleExit)
+            runArgs.Add("-SampleTimeoutKill");
 
         var exitCode2 = await VmSandboxService.RunScriptAsync(
-            runSampleScript, runArgs, line => AppendLine(line), _cts.Token).ConfigureAwait(true);
+            runSampleScript, runArgs, line => AppendLine(line), _cts.Token, _guestCredentials).ConfigureAwait(true);
         AppendLine("", withTimestamp: true);
 
         var runJsonPath = !string.IsNullOrWhiteSpace(_runId) && !string.IsNullOrWhiteSpace(_runDir)

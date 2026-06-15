@@ -3,6 +3,7 @@
         [Parameter(Mandatory = $true)][string] $ComputerName,
         [Parameter(Mandatory = $true)][string] $UserName,
         [Parameter(Mandatory = $true)][string] $Password,
+        [string] $DisplayName = "Malware Analyst",
         [int] $VMGeneration = 1
     )
     # NOTA: chave genérica para instalar Windows 10 Pro (não ativa). Ajuda a seleção de edição.
@@ -105,6 +106,7 @@
         <LocalAccounts>
           <LocalAccount wcm:action="add" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
             <Name>$UserName</Name>
+            <DisplayName>$DisplayName</DisplayName>
             <Group>Administrators</Group>
             <Password><Value>$Password</Value><PlainText>true</PlainText></Password>
           </LocalAccount>

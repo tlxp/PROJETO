@@ -41,7 +41,8 @@ public static class VmSandboxService
         string scriptPath,
         IReadOnlyList<string>? extraArgs,
         Action<string> onLine,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        VmGuestCredentials? guestCredentials = null)
     {
         var psi = new ProcessStartInfo
         {
@@ -54,6 +55,7 @@ public static class VmSandboxService
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8
         };
+        ApplyGuestCredentials(psi, guestCredentials);
         psi.ArgumentList.Add("-NoLogo");
         psi.ArgumentList.Add("-NoProfile");
         psi.ArgumentList.Add("-NonInteractive");
@@ -123,16 +125,16 @@ public static class VmSandboxService
         return null;
     }
 
-    public static Task<RunPreflight?> GetRunPreflightAsync(string scriptsPath, CancellationToken ct)
+    public static Task<RunPreflight?> GetRunPreflightAsync(string scriptsPath, CancellationToken ct, VmGuestCredentials? guestCredentials = null)
     {
         var configPath = Path.Combine(scriptsPath, "_Config.ps1");
-        return RunPreflightQueryAsync<RunPreflight>(scriptsPath, BuildRunPreflightCommand(configPath), ct);
+        return RunPreflightQueryAsync<RunPreflight>(scriptsPath, BuildRunPreflightCommand(configPath), ct, guestCredentials);
     }
 
-    public static Task<SetupPreflight?> GetSetupPreflightAsync(string scriptsPath, CancellationToken ct)
+    public static Task<SetupPreflight?> GetSetupPreflightAsync(string scriptsPath, CancellationToken ct, VmGuestCredentials? guestCredentials = null)
     {
         var configPath = Path.Combine(scriptsPath, "_Config.ps1");
-        return RunPreflightQueryAsync<SetupPreflight>(scriptsPath, BuildSetupPreflightCommand(configPath), ct);
+        return RunPreflightQueryAsync<SetupPreflight>(scriptsPath, BuildSetupPreflightCommand(configPath), ct, guestCredentials);
     }
 
     private static string BuildRunPreflightCommand(string configPath) =>
@@ -157,10 +159,10 @@ public static class VmSandboxService
         "  $obj | ConvertTo-Json -Compress " +
         "} ";
 
-    private static Task<T?> RunPreflightQueryAsync<T>(string scriptsPath, string command, CancellationToken ct)
+    private static Task<T?> RunPreflightQueryAsync<T>(string scriptsPath, string command, CancellationToken ct, VmGuestCredentials? guestCredentials)
         where T : class
     {
-        return Task.Run(() =>
+        return Task.Run<T?>(() =>
         {
             try
             {
@@ -180,6 +182,7 @@ public static class VmSandboxService
                     StandardOutputEncoding = Encoding.UTF8,
                     StandardErrorEncoding = Encoding.UTF8
                 };
+                ApplyGuestCredentials(psi, guestCredentials);
 
                 using var process = new Process { StartInfo = psi };
                 process.Start();
@@ -208,5 +211,14 @@ public static class VmSandboxService
     {
         var bytes = Encoding.Unicode.GetBytes(command);
         return Convert.ToBase64String(bytes);
+    }
+
+    private static void ApplyGuestCredentials(ProcessStartInfo psi, VmGuestCredentials? guestCredentials)
+    {
+        if (guestCredentials == null)
+            return;
+
+        psi.Environment["PROJETOVM_GuestUser"] = guestCredentials.Username;
+        psi.Environment["PROJETOVM_GuestPassword"] = guestCredentials.Password;
     }
 }

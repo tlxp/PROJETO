@@ -18,3 +18,10 @@ if str(_BACKEND) not in sys.path:
 # Dados de teste isolados (sandbox_jobs, reports, DB SQLite, etc.)
 _TEST_DATA_DIR = tempfile.mkdtemp(prefix="ratanalyzer_tests_")
 os.environ["RATANALYZER_DATA_DIR"] = _TEST_DATA_DIR
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "integration: testes que exigem sandbox/VM real (RUN_VM_DRIVER_INTEGRATION=1)",
+    )

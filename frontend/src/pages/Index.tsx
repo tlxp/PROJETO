@@ -51,6 +51,7 @@ const Index = () => {
               stillRunningJob={session.stillRunningJob}
               onClear={session.handleClear}
               onResumeWaiting={session.handleResumeWaiting}
+              isMockDemo={session.isMockDemo}
               result={session.analysisResult}
               currentJobId={session.currentJobId}
               reportCategories={resultsVm.reportCategories}

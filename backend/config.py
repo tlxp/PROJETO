@@ -1,7 +1,7 @@
 """
 Configuração central do RAT Analyzer.
 
-Objetivo: manter o repositório "limpo" e colocar saídas/artefactos num diretório de dados
+Objetivo: manter o repositório "limpo" e colocar saídas/artefatos num diretório de dados
 do utilizador (por defeito em %LOCALAPPDATA%), com override por variável de ambiente.
 """
 
@@ -16,13 +16,13 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 # Dados do analisador (mantidos no repo)
 YARA_RULES_DIR = PROJECT_ROOT / "yara_rules"
 
-# Projeto de exemplo para testes (opcional)
+# Projeto de exemplo para testes manuais (GUI Tkinter — ver backend/gui/README.md)
 SAMPLE_PROJECT_DIR = PROJECT_ROOT / "programa"
 
 
 def _default_data_dir() -> Path:
     """
-    Diretório base de dados/artefactos.
+    Diretório base de dados/artefatos.
 
     Ordem:
       1) RATANALYZER_DATA_DIR (override explícito)

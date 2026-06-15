@@ -30,7 +30,7 @@ def compute_pipeline_version() -> str:
     Deve mudar quando:
       - regras YARA mudam
       - lógica de análise muda (APP_VERSION)
-      - flags que alteram artefactos mudam
+      - flags que alteram artefatos mudam
     """
     yara_dir = Path(config.YARA_RULES_DIR)
     yara_hashes: list[str] = []

@@ -1,50 +1,56 @@
-# Documentação — RAT Analyzer
+# Documentação - RAT Analyzer
 
-Índice da documentação do projeto. Para a visão geral e início rápido, ver o
-[README principal](../README.md).
+Índice técnico. Visão geral e início rápido: [README principal](../README.md).
 
-> **Auditoria (Jun 2026):** remediação concluída a **100%** — [`AUDITORIA.md`](AUDITORIA.md).
+## Análise dinâmica - qual caminho usar?
 
-## Dois caminhos de análise dinâmica
+| Quer… | Caminho | Orquestrador | Documentação |
+|-------|---------|--------------|--------------|
+| Webapp ou API com driver `hyperv` | **A** - VM Agent HTTP | `vm_orchestrator.py` → `vm-agent` | [`sandbox-hyperv-setup.md`](sandbox-hyperv-setup.md) · [`../vm-agent/README.md`](../vm-agent/README.md) |
+| Telemetria completa (ficheiros, registry, rede) via WPF ou scripts | **B** - PowerShell serial | WPF / `04-Run-Sample.ps1` | [`../scripts/hyperv-sandbox/README.md`](../scripts/hyperv-sandbox/README.md) |
+| Validar fluxo sem VM | `stub` | Backend (seguro) | [`../backend/README.md`](../backend/README.md) |
+| Smoke test na VM (sem telemetria) | **A** + benign-vm-test | vm-agent | [`../benign-vm-test/README.md`](../benign-vm-test/README.md) |
 
-| Caminho | Documentação | Orquestrador |
-|---------|--------------|--------------|
-| **A — VM Agent (HTTP)** | [`sandbox-hyperv-setup.md`](sandbox-hyperv-setup.md) | Backend Python → `vm_drivers/hyperv.py` → `vm-agent` |
-| **B — PowerShell serial** | [`../scripts/hyperv-sandbox/README.md`](../scripts/hyperv-sandbox/README.md) | WPF ou `04-Run-Sample.ps1` → COM1 / Copy-VMFile |
+Os caminhos A e B são **independentes** (HTTP vs COM1/Copy-VMFile). Caminho B exige VM **Gen1**; Caminho A pode usar Gen2 - ver avisos nos guias.
 
-## Guias e especificações
+> **Driver `proxmox` (experimental - não usar em produção):** skeleton em
+> `backend/vm_drivers/proxmox.py` (Caminho A via vm-agent HTTP). **Sem guia de configuração**, sem testes de
+> integração no CI e sem suporte operacional. Variáveis: ver seção Proxmox em
+> [`sandbox-hyperv-setup.md`](sandbox-hyperv-setup.md#variáveis-de-ambiente-para-ligar-um-hypervisor-real).
+> Para produção ou avaliação, use **Caminho A com `hyperv`** ou **Caminho B**.
+
+## Guias
 
 | Documento | Conteúdo |
 |-----------|----------|
-| [`AUDITORIA.md`](AUDITORIA.md) | **Auditoria concluída:** resumo por área, checklist de deploy, testes e manutenção contínua. |
-| [`production-secrets.md`](production-secrets.md) | **Produção:** gerar e configurar `RATANALYZER_API_TOKEN`, `VM_AGENT_TOKEN`, `PROJETOVM_GuestPassword` (sem `ALLOW_INSECURE`). |
-| [`ps1-scripts.md`](ps1-scripts.md) | **Scripts PowerShell:** UTF-8 BOM, CRLF e política de idioma (PT nas mensagens). |
-| [`sandbox-hyperv-setup.md`](sandbox-hyperv-setup.md) | **Caminho A:** VM Agent, variáveis de ambiente do backend, segurança (`VM_AGENT_TOKEN`), guia manual Hyper-V. |
-| [`../scripts/hyperv-sandbox/README.md`](../scripts/hyperv-sandbox/README.md) | **Caminho B:** pipeline PowerShell (`D:\PROJETOVM`, `MalwareSandbox`, snapshot `CleanState`). |
-| [`../scripts/hyperv-sandbox/SERIAL_REPORT_PROTOCOL.md`](../scripts/hyperv-sandbox/SERIAL_REPORT_PROTOCOL.md) | Protocolo serial implementado (`START_OF_REPORT` … linhas … `END_OF_REPORT`). |
-| [`ESPECIFICACOES-ARQUITETURA-VM-DOCKER.md`](ESPECIFICACOES-ARQUITETURA-VM-DOCKER.md) | Desenho **alternativo/futuro** (Linux + Docker) — não implementado. |
-| [`TODO_obfuscation_snippets.md`](TODO_obfuscation_snippets.md) | Notas sobre extração de excertos ofuscados. |
-| [`archive/PROJECT_ANALYSIS_DOCUMENT.md`](archive/PROJECT_ANALYSIS_DOCUMENT.md) | Documento histórico de desenho (grafos, IA, Redis/RQ) — referência, não manual operacional. |
+| [`SEGURANCA.md`](SEGURANCA.md) | **Arquitetura de segurança** - zonas, auth, uploads, sandbox, checklist |
+| [`production-secrets.md`](production-secrets.md) | Segredos, modo produção, checklist de deploy |
+| [`sandbox-hyperv-setup.md`](sandbox-hyperv-setup.md) | Caminho A - VM Agent, Hyper-V manual |
+| [`../scripts/hyperv-sandbox/README.md`](../scripts/hyperv-sandbox/README.md) | Caminho B - pipeline PowerShell |
+| [`../scripts/hyperv-sandbox/TROUBLESHOOTING.md`](../scripts/hyperv-sandbox/TROUBLESHOOTING.md) | Diagnóstico sandbox (Caminho B) |
+| [`../scripts/hyperv-sandbox/SERIAL_REPORT_PROTOCOL.md`](../scripts/hyperv-sandbox/SERIAL_REPORT_PROTOCOL.md) | Protocolo serial implementado |
+| [`faq.md`](faq.md) | Perguntas frequentes |
+| [`AUDITORIA.md`](AUDITORIA.md) | Auditoria de segurança (Jun 2026) |
+| [`ps1-scripts.md`](ps1-scripts.md) | UTF-8 BOM e idioma dos `.ps1` |
+| [`diagrams/README.md`](diagrams/README.md) | Diagramas PlantUML (fonte única) |
+| [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | Testes, convenções, contribuição |
+| [`../CHANGELOG.md`](../CHANGELOG.md) | Histórico de alterações |
 
-## Diagramas (PlantUML)
+Documentação obsoleta: mover para [`archive/`](archive/README.md) com aviso `⚠ Documento arquivado` no topo.
 
-Os diagramas estão em [`diagrams/`](diagrams/) e podem ser renderizados com qualquer ferramenta PlantUML.
-
-| Ficheiro | Diagrama |
-|----------|----------|
-| `analysis-sequence-overview.puml` | Sequência — visão integrada (estática + dinâmica) |
-| `analysis-sequence-dynamic.puml` | Sequência — análise dinâmica em VM |
-| `analysis-activity-static.puml` | Atividade — análise estática |
-| `analysis-activity-dynamic.puml` | Atividade — análise dinâmica em VM |
-
-Diagramas de engenharia de software (imagens) em [`engenharia-de-software/`](engenharia-de-software/):
-arquitetura do sistema, backend core, fluxo de análise, frontend e ciclo de vida de um job.
-
-## Documentação por componente
+## Componentes
 
 | Componente | README |
 |------------|--------|
-| Backend (API + pipeline) | [`../backend/README.md`](../backend/README.md) |
-| Frontend (web) | [`../frontend/README.md`](../frontend/README.md) |
-| VM Agent (.NET) | [`../vm-agent/`](../vm-agent/) (código + comentários em `Program.cs`) |
-| Teste benigno da VM | [`../benign-vm-test/README.md`](../benign-vm-test/README.md) |
+| Backend | [`../backend/README.md`](../backend/README.md) |
+| Frontend | [`../frontend/README.md`](../frontend/README.md) |
+| Desktop WPF | [`../wpf-gui/README.md`](../wpf-gui/README.md) |
+| GUI Tkinter *(opcional)* | [`../backend/gui/README.md`](../backend/gui/README.md) |
+| VM Agent | [`../vm-agent/README.md`](../vm-agent/README.md) |
+| Teste benigno | [`../benign-vm-test/README.md`](../benign-vm-test/README.md) |
+| Exemplos .NET *(opcional)* | [`../programa/README.md`](../programa/README.md) |
+| Regras YARA | [`../yara_rules/README.md`](../yara_rules/README.md) |
+
+Relatório académico: [`../relatório/README.md`](../relatório/README.md) · [`../relatório/main.tex`](../relatório/main.tex) · imagens [`../relatório/imagens/README.md`](../relatório/imagens/README.md).
+
+Documentação obsoleta: registo em [`archive/README.md`](archive/README.md).

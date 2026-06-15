@@ -1,5 +1,5 @@
 """
-Naming curto e seguro para artefactos/pastas gerados pelo projeto.
+Naming curto e seguro para artefatos/pastas gerados pelo projeto.
 
 Problema: símbolos/nomes de funções/ficheiros podem ser enormes e rebentar limites do Windows.
 Solução: slug + hash curto (estável) para evitar colisões e manter significado mínimo.

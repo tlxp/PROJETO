@@ -16,6 +16,7 @@ export type AnalysisResultsViewProps = {
   stillRunningJob: StillRunningJob | null;
   onClear: () => void;
   onResumeWaiting: () => void;
+  isMockDemo: boolean;
   result: AnalysisResult | null;
   currentJobId: string | null;
   reportCategories: ReportCategory[];
@@ -32,6 +33,7 @@ const AnalysisResultsView = ({
   stillRunningJob,
   onClear,
   onResumeWaiting,
+  isMockDemo,
   result,
   currentJobId,
   reportCategories,
@@ -87,6 +89,7 @@ const AnalysisResultsView = ({
       highlightedLineRange={vm.highlightedLineRange}
       cFunctionHighlights={vm.cFunctionHighlights}
       baseDownloadName={vm.baseDownloadName}
+      geminiAllowMock={isMockDemo}
       onExpand={vm.handleExpandPanel}
     />
 
@@ -122,6 +125,7 @@ const AnalysisResultsView = ({
           rightColWidth={vm.rightColWidth}
           onLeftResizeStart={vm.handleLeftResizeStart}
           onRightResizeStart={vm.handleRightResizeStart}
+          geminiAllowMock={isMockDemo}
         />
       )}
     </AnimatePresence>

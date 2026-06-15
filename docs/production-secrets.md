@@ -1,8 +1,10 @@
 # Segredos em produção
 
-O RAT Analyzer usa três segredos principais. **Nunca** active `ALLOW_INSECURE` em produção.
+O RAT Analyzer usa três segredos principais. **Nunca** ative `ALLOW_INSECURE` em produção.
 
-> Checklist completo de deploy: [`AUDITORIA.md`](AUDITORIA.md).
+> Contexto da auditoria: [`AUDITORIA.md`](AUDITORIA.md).
+> Arquitetura de segurança (zonas, auth, uploads): [`SEGURANCA.md`](SEGURANCA.md).
+> Checklist abaixo.
 
 | Segredo | Variável | Componentes |
 |---------|----------|-------------|
@@ -26,7 +28,7 @@ Com qualquer uma destas variáveis, o backend **recusa arrancar** sem `RATANALYZ
 - `RATANALYZER_REQUIRE_SECRETS=1`
 - `RATANALYZER_REQUIRE_API_TOKEN=1`
 
-Sem essas flags (dev local em `127.0.0.1`), a API funciona sem token — apenas para desenvolvimento.
+Sem essas flags (dev local em `127.0.0.1`), a API funciona sem token - apenas para desenvolvimento.
 
 ## Por componente
 
@@ -77,10 +79,10 @@ O arranque do WPF pode instalar ou validar ferramentas externas. Em produção, 
 |------------|-----------|-------------------|
 | Ghidra | `.sha256` do release GitHub | (automático) |
 | ADK (sandbox) | hash do instalador transferido | `RATANALYZER_ADK_SETUP_SHA256` |
-| ILSpy (`ilspycmd`) | versão NuGet pinada + hash do shim | `RATANALYZER_ILSPY_SHA256` |
+| ILSpy (`ilspycmd`) | versão NuGet fixada + hash do shim | `RATANALYZER_ILSPY_SHA256` |
 | Java (`java.exe`) | winget Temurin 21 + hash do executável | `RATANALYZER_JAVA_EXE_SHA256` |
 
-O WPF regista sempre o SHA-256 calculado no log de arranque. Se a variável estiver definida, a verificação é **obrigatória** — falha o arranque se não coincidir.
+O WPF regista sempre o SHA-256 calculado no log de arranque. Se a variável estiver definida, a verificação é **obrigatória** - falha o arranque se não coincidir.
 
 Para obter o hash após uma instalação limpa:
 

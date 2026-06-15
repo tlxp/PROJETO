@@ -6,5 +6,15 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="VmAgent.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="VmAgent.Tests\**" />
+    <Content Remove="VmAgent.Tests\**" />
+    <None Remove="VmAgent.Tests\**" />
+    <EmbeddedResource Remove="VmAgent.Tests\**" />
+  </ItemGroup>
 </Project>
 

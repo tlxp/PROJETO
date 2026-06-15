@@ -19,9 +19,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
-# Garantir que o projeto está no path
-PROJECT_ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(PROJECT_ROOT))
+# Garantir que o backend está no path (raiz do repo: config.PROJECT_ROOT)
+_BACKEND_DIR = Path(__file__).resolve().parent
+if str(_BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_DIR))
 
 import config
 from security_config import api_token_configured, require_api_token_enforced, validate_startup_secrets
@@ -74,7 +75,7 @@ async def _lifespan(app: FastAPI):
     try:
         cleanup_job_artifacts(config.JOBS_RETENTION_DAYS, config.JOBS_MAX_COUNT)
     except Exception:
-        logger.exception("Falha na limpeza de artefactos no startup (continua o arranque).")
+        logger.exception("Falha na limpeza de artefatos no startup (continua o arranque).")
     try:
         archive_cold_jobs(config.COLD_ARCHIVE_DAYS)
     except Exception:
@@ -218,7 +219,7 @@ def _read_file_safe(path: str | None, encoding: str = "utf-8", errors: str = "re
         return ""
     p = Path(path)
     if not p.exists():
-        # Transparência: se o path aponta para um artefacto dentro de sandbox_jobs/<job_id>/out/
+        # Transparência: se o path aponta para um artefato dentro de sandbox_jobs/<job_id>/out/
         # mas out/ foi arquivado em out.zip, tentar ler do zip.
         try:
             base = Path(config.SANDBOX_JOBS_DIR).resolve()
@@ -902,7 +903,7 @@ class StorageCleanupRequest(BaseModel):
 @app.post("/api/storage/cleanup", dependencies=[Depends(require_api_token)])
 async def storage_cleanup(req: StorageCleanupRequest) -> dict:
     """
-    Limpeza segura (soft) de artefactos antigos: remove apenas conteúdo de disco
+    Limpeza segura (soft) de artefatos antigos: remove apenas conteúdo de disco
     em sandbox_jobs/<job_id> para jobs COMPLETED/FAILED, mantendo DB.
     """
     result = cleanup_job_artifacts(req.retentionDays, req.keepMostRecent)
@@ -922,7 +923,7 @@ async def storage_archive(req: StorageArchiveRequest) -> dict:
 
 @app.post("/api/storage/purge", dependencies=[Depends(require_api_token)])
 async def storage_purge() -> dict:
-    """Limpeza completa: apaga todo o histórico e artefactos persistidos em DATA_DIR.
+    """Limpeza completa: apaga todo o histórico e artefatos persistidos em DATA_DIR.
 
     Bloqueado (409) enquanto existirem jobs em execução, para não apagar
     diretórios/DB em uso pela pipeline.

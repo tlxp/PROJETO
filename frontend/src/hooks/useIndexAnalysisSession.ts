@@ -9,6 +9,7 @@ import {
 } from "@/lib/analysis";
 import { useAnalysisJob } from "@/hooks/useAnalysisJob";
 import { useAnalysisStream } from "@/hooks/useAnalysisStream";
+import { ROUTES } from "@/routes";
 import type { StillRunningJob } from "@/pages/Index/UploadView";
 import { MOCK_DEMO_RESULT } from "@/pages/Index/mockDemo";
 
@@ -30,9 +31,10 @@ export function useIndexAnalysisSession() {
   const [analysisMode, setAnalysisMode] = useState<AnalysisMode>("static");
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [stillRunningJob, setStillRunningJob] = useState<StillRunningJob | null>(null);
+  const [isMockDemo, setIsMockDemo] = useState(false);
 
   const stream = useAnalysisStream();
-  const jobApi = useAnalysisJob();
+  const { beginSession, submitJob, pollJob, cancel: cancelJob } = useAnalysisJob();
   const analyzeRunRef = useRef(0);
 
   const handleFileLoaded = useCallback((f: File) => {
@@ -43,12 +45,13 @@ export function useIndexAnalysisSession() {
     setAnalysisLogs([]);
     setGhidraProgress(null);
     setStillRunningJob(null);
+    setIsMockDemo(false);
   }, []);
 
   const handleClear = useCallback(() => {
     analyzeRunRef.current += 1;
     stream.cancel();
-    jobApi.cancel();
+    cancelJob();
     setFile(null);
     setShowResults(false);
     setAnalysisResult(null);
@@ -58,8 +61,9 @@ export function useIndexAnalysisSession() {
     setIsAnalyzing(false);
     setStillRunningJob(null);
     setCurrentJobId(null);
-    navigate("/", { replace: true });
-  }, [navigate, stream, jobApi]);
+    setIsMockDemo(false);
+    navigate(ROUTES.home, { replace: true });
+  }, [navigate, stream, cancelJob]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search ?? "");
@@ -69,7 +73,7 @@ export function useIndexAnalysisSession() {
     if (jobId === currentJobId) return;
 
     let cancelled = false;
-    const signal = jobApi.beginSession();
+    const signal = beginSession();
     const runId = ++analyzeRunRef.current;
 
     const loadExternalJob = async () => {
@@ -77,14 +81,15 @@ export function useIndexAnalysisSession() {
       setIsAnalyzing(true);
       setError(null);
       setStillRunningJob(null);
+      setIsMockDemo(false);
       setAnalysisLogs([`A carregar resultados externos para jobId=${jobId}...`]);
 
       try {
         if (!cancelled && !jobIdFromPath && jobIdFromQuery) {
-          navigate(`/analysis/${encodeURIComponent(jobId)}`, { replace: true });
+          navigate(ROUTES.analysis(jobId), { replace: true });
         }
 
-        const outcome = await jobApi.pollJob(jobId, signal, (status, attempt) => {
+        const outcome = await pollJob(jobId, signal, (status, attempt) => {
           if (!cancelled && (attempt === 1 || attempt % 10 === 0)) {
             setAnalysisLogs((prev) => [
               ...prev,
@@ -130,13 +135,14 @@ export function useIndexAnalysisSession() {
     return () => {
       cancelled = true;
     };
-  }, [location.search, currentJobId, jobIdFromPath, navigate, jobApi]);
+  }, [location.search, currentJobId, jobIdFromPath, navigate, beginSession, pollJob]);
 
   const loadMockDemo = useCallback(() => {
     setFile(null);
     setAnalysisResult(MOCK_DEMO_RESULT);
     setShowResults(true);
     setError(null);
+    setIsMockDemo(true);
   }, []);
 
   const finishJobOutcome = useCallback(
@@ -146,7 +152,7 @@ export function useIndexAnalysisSession() {
         throw new Error("Nenhum resultado disponível na análise.");
       }
       setCurrentJobId(jobId);
-      navigate(`/analysis/${encodeURIComponent(jobId)}`, { replace: false });
+      navigate(ROUTES.analysis(jobId), { replace: false });
       setAnalysisResult(chosen);
       setShowResults(true);
     },
@@ -157,6 +163,7 @@ export function useIndexAnalysisSession() {
     if (!file) return;
     const runId = ++analyzeRunRef.current;
     const isCurrent = () => analyzeRunRef.current === runId;
+    setIsMockDemo(false);
     setIsAnalyzing(true);
     setError(null);
     setAnalysisLogs([]);
@@ -180,7 +187,7 @@ export function useIndexAnalysisSession() {
             const jobId = await publishStaticAnalysisResult(streamResult);
             if (!isCurrent()) return;
             setCurrentJobId(jobId);
-            navigate(`/analysis/${encodeURIComponent(jobId)}`, { replace: false });
+            navigate(ROUTES.analysis(jobId), { replace: false });
             setAnalysisLogs((prev) => [...prev, `Resultado registado no backend: ${jobId}`]);
           } catch (e) {
             if (isAbortError(e)) return;
@@ -192,12 +199,12 @@ export function useIndexAnalysisSession() {
         return;
       }
 
-      const signal = jobApi.beginSession();
-      const submitData = await jobApi.submitJob(file, analysisMode, signal);
+      const signal = beginSession();
+      const submitData = await submitJob(file, analysisMode, signal);
       if (!isCurrent()) return;
       setAnalysisLogs((prev) => [...prev, `Job criado: ${submitData.jobId}`]);
 
-      const outcome = await jobApi.pollJob(submitData.jobId, signal, (status, attempt) => {
+      const outcome = await pollJob(submitData.jobId, signal, (status, attempt) => {
         if (isCurrent() && (attempt === 1 || attempt % 10 === 0)) {
           setAnalysisLogs((prev) => [...prev, `Estado do job: ${status}`]);
         }
@@ -225,7 +232,7 @@ export function useIndexAnalysisSession() {
         setIsAnalyzing(false);
       }
     }
-  }, [file, analysisMode, stream, jobApi, navigate, finishJobOutcome]);
+  }, [file, analysisMode, stream, beginSession, submitJob, pollJob, navigate, finishJobOutcome]);
 
   const handleResumeWaiting = useCallback(async () => {
     const pending = stillRunningJob;
@@ -236,8 +243,8 @@ export function useIndexAnalysisSession() {
     setError(null);
 
     try {
-      const signal = jobApi.beginSession();
-      const outcome = await jobApi.pollJob(pending.jobId, signal, (status, attempt) => {
+      const signal = beginSession();
+      const outcome = await pollJob(pending.jobId, signal, (status, attempt) => {
         if (isCurrent() && (attempt === 1 || attempt % 10 === 0)) {
           setAnalysisLogs((prev) => [...prev, `Estado do job: ${status}`]);
         }
@@ -263,7 +270,7 @@ export function useIndexAnalysisSession() {
         setIsAnalyzing(false);
       }
     }
-  }, [stillRunningJob, jobApi, file?.name, finishJobOutcome]);
+  }, [stillRunningJob, beginSession, pollJob, file?.name, finishJobOutcome]);
 
   return {
     file,
@@ -277,6 +284,7 @@ export function useIndexAnalysisSession() {
     setAnalysisMode,
     currentJobId,
     stillRunningJob,
+    isMockDemo,
     handleFileLoaded,
     handleClear,
     handleAnalyze,

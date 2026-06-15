@@ -5,6 +5,7 @@ Write-LogHost "=== Primeira entrada concluida com sucesso. ==="
 Write-LogHost "=========================================================="
 Write-LogHost ""
 Write-LogHost '    Internet:             REMOVIDA (sem adaptadores externos na VM)'
+Write-LogHost '    Sysmon:               INSTALADO (telemetria primária no guest)'
 Write-LogHost ('    Snapshot {0}: CRIADO (VM desligada, isolamento confirmado)' -f $SnapshotName)
 Write-LogHost ""
 # Exemplo abaixo entre aspas simples (evita quebra do parser com maior ou menor nas mensagens).

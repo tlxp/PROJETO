@@ -114,7 +114,7 @@ public sealed class StorageMaintenanceViewModel : ViewModelBase
         }
 
         if (!_dialogs.Confirm(
-                "Isto remove artefactos antigos em disco para jobs concluídos/falhados (mantém a base de dados), " +
+                "Isto remove artefatos antigos em disco para jobs concluídos/falhados (mantém a base de dados), " +
                 "apaga pastas temporárias de análise em %TEMP% e remove amostras .exe/.dll guardadas em sandbox_jobs.\n\nContinuar?",
                 "Confirmar limpeza"))
             return;

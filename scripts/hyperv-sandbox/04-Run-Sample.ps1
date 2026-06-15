@@ -2,7 +2,7 @@
 .SYNOPSIS
     Orquestração no host: restaura VM, copia amostra, executa análise, recebe relatório via pipe, restaura snapshot.
 .DESCRIPTION
-    Fluxo: Restore snapshot -> Start VM -> (opcional) Guest Service para Copy-VMFile ->
+    Fluxo: Restore snapshot -> Start VM -> transferência via PowerShell Direct ->
     Copiar sample e scripts para VM -> Iniciar listener do pipe em background ->
     Executar análise na VM (Invoke-Command ou manual) -> Esperar relatório ->
     Stop VM -> Restore snapshot -> Relatório em D:\PROJETOVM\Reports\.
@@ -10,7 +10,10 @@
     Caminho no HOST do ficheiro .exe ou .dll a analisar.
     Se omitido, o script escolhe automaticamente o ficheiro mais recente em D:\PROJETOVM\Samples\.
 .PARAMETER TimeoutSeconds
-    Tempo máximo de execução do sample dentro da VM.
+    Tempo máximo de execução do sample dentro da VM (usado com -SampleTimeoutKill).
+.PARAMETER SampleTimeoutKill
+    Se presente, mantém a amostra ativa até TimeoutSeconds e mata se ainda estiver a correr.
+    Por omissão (switch ausente), aguarda a amostra terminar naturalmente (limite de segurança 7200s na VM).
 .PARAMETER BootWaitSeconds
     Reservado (o arranque usa espera por PowerShell Direct com credenciais do _Config.ps1, sem sleep fixo).
 #>
@@ -20,10 +23,13 @@ param(
     [string]$SamplePath = "",
     [string]$RunId,
     [int]$TimeoutSeconds = 120,
+    [switch]$SampleTimeoutKill,
     [int]$BootWaitSeconds = 60,
-    [int]$GlobalTimeoutSeconds = 600,
+    [int]$GlobalTimeoutSeconds = 900,
     [switch]$AllowAutoSample
 )
+
+$WaitForSampleExit = -not $SampleTimeoutKill
 
 try { Remove-Module SandboxCommon -ErrorAction SilentlyContinue } catch {}
 Import-Module (Join-Path $PSScriptRoot "SandboxCommon.psm1") -Force -DisableNameChecking -ErrorAction Stop
@@ -50,6 +56,14 @@ $PsDirectTimeoutSeconds = if ($script:PROJETOVM_PowerShellDirectTimeoutSeconds -
     $script:PROJETOVM_PowerShellDirectTimeoutSeconds
 } else { 240 }
 
+# Estender deadline global quando a amostra pode correr muito tempo.
+if ($WaitForSampleExit) {
+    $minGlobal = 8100
+    if ($GlobalTimeoutSeconds -lt $minGlobal) { $GlobalTimeoutSeconds = $minGlobal }
+} else {
+    $minGlobal = $TimeoutSeconds + 900
+    if ($GlobalTimeoutSeconds -lt $minGlobal) { $GlobalTimeoutSeconds = $minGlobal }
+}
 
 # Funções auxiliares (host)
 # Extraídas para .\RunSample\ e carregadas via dot-sourcing (mesmo scope deste
@@ -68,7 +82,7 @@ function Invoke-SandboxRunEmergencyCleanup {
     Write-Warning "[CLEANUP] A executar limpeza de emergência do run sandbox..."
     try {
         if ($pipeJob -and ($pipeJob.State -eq 'Running' -or $pipeJob.HasMoreData)) {
-            Stop-Job -Job $pipeJob -Force -ErrorAction SilentlyContinue
+            Stop-Job -Job $pipeJob -ErrorAction SilentlyContinue
             Remove-Job -Job $pipeJob -Force -ErrorAction SilentlyContinue
         }
     } catch {
@@ -87,14 +101,21 @@ function Invoke-SandboxRunEmergencyCleanup {
         Write-Warning "[CLEANUP] Falha ao restaurar snapshot: $_"
     }
     try {
-        if ($VMName) { Disable-SandboxGuestService -VMName $VMName -ErrorAction SilentlyContinue }
+        if ($VMName -and $script:PROJETOVM_UseGuestServices) {
+            Disable-SandboxGuestService -VMName $VMName -ErrorAction SilentlyContinue
+        }
     } catch {
         Write-Warning "[CLEANUP] Falha ao desativar Guest Service: $_"
     }
 }
 
 try {
-    $globalDeadline = if ($GlobalTimeoutSeconds -gt 0) { (Get-Date).AddSeconds($GlobalTimeoutSeconds) } else { $null }
+    $globalDeadline = if ($GlobalTimeoutSeconds -gt 0) { $analysisStart.AddSeconds($GlobalTimeoutSeconds) } else { $null }
+    $phasesSkipGlobalDeadline = @(
+        'PhaseE-WaitReport.ps1',
+        'PhaseF-CollectResult.ps1',
+        'PhaseG-Finish.ps1'
+    )
     foreach ($phase in @(
         'PhaseA-Setup.ps1',
         'PhaseB-VmBoot.ps1',
@@ -104,7 +125,7 @@ try {
         'PhaseF-CollectResult.ps1',
         'PhaseG-Finish.ps1'
     )) {
-        if ($globalDeadline -and (Get-Date) -gt $globalDeadline) {
+        if ($globalDeadline -and (Get-Date) -gt $globalDeadline -and ($phasesSkipGlobalDeadline -notcontains $phase)) {
             throw "Timeout global do run ($GlobalTimeoutSeconds s) excedido antes de $phase"
         }
         . (Join-Path $RunSampleLibDir $phase)

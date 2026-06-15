@@ -123,6 +123,28 @@
                               HorizontalAlignment="Center"
                               IsChecked="{Binding RunFirstTimeVmSetup}"
                               ToolTip="Marque se for a primeira vez: instala Chrome, 7zip, VSCode, etc. na VM e cria o snapshot limpo antes de correr a amostra." />
+                    <CheckBox Content="Aguardar fim natural da amostra (sem matar por timeout)"
+                              Foreground="{StaticResource TextSecondaryBrush}"
+                              FontSize="11"
+                              Margin="0,8,0,0"
+                              HorizontalAlignment="Center"
+                              IsChecked="{Binding VmWaitForSampleExit}"
+                              ToolTip="Se activo, a sandbox espera a amostra terminar sozinha (limite de segurança 2h). Desactive para limitar o tempo activo abaixo." />
+                    <StackPanel Orientation="Horizontal"
+                                HorizontalAlignment="Center"
+                                Margin="0,6,0,0"
+                                IsEnabled="{Binding VmWaitForSampleExit, Converter={StaticResource InverseBool}}">
+                        <TextBlock Text="Tempo activo máximo (s):"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   FontSize="11"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,8,0" />
+                        <TextBox Text="{Binding VmSampleTimeoutSeconds, UpdateSourceTrigger=PropertyChanged}"
+                                 Width="72"
+                                 Padding="6,4"
+                                 FontSize="11"
+                                 ToolTip="Usado quando a opção acima está desactivada. A amostra é terminada após este tempo se ainda estiver a correr." />
+                    </StackPanel>
                     <StackPanel Orientation="Vertical"
                                 Margin="0,12,0,0"
                                 HorizontalAlignment="Center"

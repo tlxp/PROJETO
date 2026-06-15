@@ -23,7 +23,7 @@ jobs:
         run: |
           pip install --require-hashes -r requirements.lock
           pip install --require-hashes -r requirements-dev.lock
-      - name: Validar locks Python actualizados
+      - name: Validar locks Python atualizados
         working-directory: backend
         run: |
           pip install pip-tools
@@ -69,8 +69,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-      - name: Build solução
-        run: dotnet build RatAnalyzer.sln -c Release
+      - name: Build e testes unitários
+        run: dotnet test RatAnalyzer.sln -c Release
 
   ps1-encoding:
     name: Scripts PowerShell (UTF-8)
@@ -82,6 +82,28 @@ jobs:
           python-version: "3.11"
       - name: Validar encoding UTF-8
         run: python scripts/ci/check_ps1_utf8.py
+
+  md-docs:
+    name: Documentação (Markdown)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validar links e ortografia em .md
+        run: python scripts/ci/check_md_links.py
+
+  diagrams:
+    name: Diagramas (PlantUML)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validar PNG do relatório vs docs/diagrams/
+        run: python scripts/ci/sync_diagrams_to_report.py --check
 
   powershell:
     name: Scripts PowerShell (sintaxe)

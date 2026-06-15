@@ -1,6 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { withRouteBoundary } from "@/components/RouteErrorBoundary";
+import { ROUTE_PATTERNS } from "@/routes";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import ResultadosRedirect from "./pages/ResultadosPage";
@@ -12,22 +13,21 @@ const App = () => (
     <Toaster />
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={withRouteBoundary("Início", <Index />)} />
-        {/* Rota canónica com jobId (permalinks) */}
-        <Route path="/analysis/:jobId" element={withRouteBoundary("Análise", <Index />)} />
+        <Route path={ROUTE_PATTERNS.home} element={withRouteBoundary("Início", <Index />)} />
+        <Route path={ROUTE_PATTERNS.analysis} element={withRouteBoundary("Análise", <Index />)} />
         <Route
-          path="/analysis/:jobId/xref"
+          path={ROUTE_PATTERNS.analysisXref}
           element={withRouteBoundary("Explorador Xref", <XrefExplorerPage />)}
         />
-
-        {/* Back-compat: /resultados?jobId=... redireciona para /analysis/:jobId */}
         <Route
-          path="/resultados"
+          path={ROUTE_PATTERNS.resultadosLegacy}
           element={withRouteBoundary("Resultados", <ResultadosRedirect />)}
         />
-        <Route path="/xref" element={withRouteBoundary("Explorador Xref", <XrefExplorerPage />)} />
-        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-        <Route path="*" element={withRouteBoundary("Página", <NotFound />)} />
+        <Route
+          path={ROUTE_PATTERNS.xrefLegacy}
+          element={withRouteBoundary("Explorador Xref", <XrefExplorerPage />)}
+        />
+        <Route path={ROUTE_PATTERNS.notFound} element={withRouteBoundary("Página", <NotFound />)} />
       </Routes>
     </BrowserRouter>
   </TooltipProvider>

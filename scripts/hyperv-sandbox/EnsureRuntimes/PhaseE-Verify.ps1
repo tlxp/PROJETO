@@ -12,4 +12,4 @@ try {
 } catch { }
 
 Write-LogHost ""
-Write-LogHost "Concluído. (Se quiseres persistir isto no snapshot limpo, corre agora o 05-FirstTimeVmSetup.ps1 para criar novo CleanState.)"
+Write-LogHost "Concluído. (Para persistir Sysmon + runtimes no snapshot limpo, execute 05-FirstTimeVmSetup.ps1 ou 03-Install-SysmonInGuest.ps1.)"

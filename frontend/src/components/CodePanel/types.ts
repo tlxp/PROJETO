@@ -72,4 +72,8 @@ export interface CodePanelProps {
   onWindowRangeChange?: (range: { start: number; end: number; totalLines: number }) => void;
   /** Quando true, remove scrolling (painel fica estático). */
   disableScroll?: boolean;
+  /** Mostra botão Gemini para explicar o excerto de código C visível. */
+  geminiAssist?: boolean;
+  /** Permite respostas simuladas (apenas no layout de demonstração mock). */
+  geminiAllowMock?: boolean;
 }

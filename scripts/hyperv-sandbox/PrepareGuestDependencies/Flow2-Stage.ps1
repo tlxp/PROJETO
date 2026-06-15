@@ -45,7 +45,7 @@
 
         if ($DoVmOps) {
             try {
-                Copy-SandboxVMFile -VMName $VMName -SourcePath $HostWinutilPath -DestinationPath (Join-Path $VmDepsDir "winutil.ps1")
+                Copy-SandboxVMFile -VMName $VMName -Credential $cred -SourcePath $HostWinutilPath -DestinationPath (Join-Path $VmDepsDir "winutil.ps1")
                 Write-LogHost "      WinUtil staged em: $VmDepsDir\\winutil.ps1"
             } catch {
                 Write-LogWarning "      Falha ao copiar winutil.ps1 para a VM (ignorado): $($_.Exception.Message)"
@@ -60,7 +60,7 @@
                 $hostPath = Join-Path $HostToolsDir $u.name
                 if (-not (Test-Path -LiteralPath $hostPath)) { continue }
                 try {
-                    Copy-SandboxVMFile -VMName $VMName -SourcePath $hostPath -DestinationPath (Join-Path $VmDepsDir $u.name)
+                    Copy-SandboxVMFile -VMName $VMName -Credential $cred -SourcePath $hostPath -DestinationPath (Join-Path $VmDepsDir $u.name)
                 } catch {
                     Write-LogWarning "      Falha ao copiar '$($u.name)' para a VM (ignorado): $($_.Exception.Message)"
                 }

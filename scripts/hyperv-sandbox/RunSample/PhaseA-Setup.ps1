@@ -50,6 +50,18 @@ if ([string]::IsNullOrWhiteSpace($expectedSwitch)) {
 }
 Assert-SandboxVmNetworkIsolation -VMName $VMName -ExpectedSwitchName $expectedSwitch
 
+# Amostras grandes via PS Direct consomem muito tempo de cópia; estender o deadline global.
+if ($globalDeadline) {
+    try {
+        $sampleLen = (Get-Item -LiteralPath $SamplePath -ErrorAction Stop).Length
+        $chunkSize = Get-SandboxPsDirectChunkSize
+        $chunks = [math]::Ceiling($sampleLen / [double]$chunkSize)
+        $copyExtraSeconds = [int][math]::Max(0, ($chunks * 4) + 180)
+        $globalDeadline = $globalDeadline.AddSeconds($copyExtraSeconds)
+        Add-LogLine -Path $HostLogPath -Value "Global deadline +${copyExtraSeconds}s for PS Direct copy ($sampleLen bytes, ~$chunks chunks of $chunkSize B)"
+    } catch { }
+}
+
 Add-LogLine -Path $HostLogPath -Value "==== Sandbox Run $RunId ===="
 Add-LogLine -Path $HostLogPath -Value "Sample: $SamplePath"
 Add-LogLine -Path $HostLogPath -Value "Sample SHA256: $sampleSha256"
@@ -57,6 +69,11 @@ Add-LogLine -Path $HostLogPath -Value "VM: $VMName  Snapshot: $SnapshotName"
 Add-LogLine -Path $HostLogPath -Value "Report: $ReportOutputPath"
 Add-LogLine -Path $HostLogPath -Value "RunDir: $RunDir"
 Add-LogLine -Path $HostLogPath -Value "Network preflight OK: VM adapters only on Internal switch '$expectedSwitch'"
+
+# Limpar jobs de pipe orfaos, VM ligada e COM1 residual antes de preparar este run
+Clear-SandboxPipeEnvironment -VMName $VMName -LogPath $HostLogPath
+Write-LogHost "[1/7] Ambiente de pipes limpo (jobs orfaos / VM / COM1)"
+
 if ($vmObj.Generation -ge 2) {
     Write-LogWarning "      VM '$VMName' e Gen$($vmObj.Generation): COM1->Named Pipe costuma não funcionar (use VM Gen1 / PROJETOVM_VMGeneration=1, ou relatório so por Guest Service)."
     Add-LogLine -Path $HostLogPath -Value "WARNING: Gen$($vmObj.Generation) VM -- serial pipe transport often unavailable"
@@ -76,25 +93,15 @@ $cred = $credCandidates | Select-Object -First 1
 $RunPipeName = ($PipeName + "_" + $RunId) -replace "[^A-Za-z0-9_\-\.]", "_"
 Add-LogLine -Path $HostLogPath -Value "Pipe name: $RunPipeName"
 
-# 2) Iniciar receptor do pipe EM PARALELO com a restauração do snapshot
-# O servidor do pipe é criado pelo vmwp.exe quando a VM arranca; o receptor
-# liga-se como CLIENTE (com retry até a VM subir). Tem de estar ligado antes
-# do guest escrever no COM1 — bytes enviados sem cliente ligado são descartados.
-Write-LogHost "[2/7] A iniciar receptor do relatório (Named Pipe) em background..."
+# 2) Preparar pipe do run (o job receptor arranca em PhaseD, quando a VM já está pronta)
 $modulePath = Join-Path $SandboxRoot "SandboxCommon.psm1"
-# Com o envio simplificado (linha-a-linha) a transmissão pode demorar bastante.
-# Dar margem generosa para evitar timeouts prematuros.
-$pipeTimeoutSeconds = $TimeoutSeconds + 900
-
-$pipeJob = Start-Job -ScriptBlock {
-    param($PipeName, $OutputPath, $TimeoutSecondsLocal, $ModulePath)
-    Write-Host "[PIPE] Job worker arrancou pid=$PID utc=$([DateTime]::UtcNow.ToString('o'))"
-    Import-Module $ModulePath -DisableNameChecking -ErrorAction Stop
-    return (Receive-SandboxReportFromPipe -PipeName $PipeName -OutputPath $OutputPath -TimeoutSeconds $TimeoutSecondsLocal)
-} -ArgumentList $RunPipeName, $ReportOutputPath, $pipeTimeoutSeconds, $modulePath
-
-Add-LogLine -Path $HostLogPath -Value "Pipe job started: Id=$($pipeJob.Id) Name=$($pipeJob.Name) path=\\.\pipe\$RunPipeName timeout=${pipeTimeoutSeconds}s"
-Write-LogHost "      [PIPE-HOST] Job receptor id=$($pipeJob.Id) pipe=\\.\pipe\$RunPipeName (logs [PIPE] vêm do job)"
-# Margem para o job arrancar e o pipe ficar genuinamente em escuta antes do restore/arranque da VM.
-Start-Sleep -Seconds 2
-Write-LogHost "      Receptor do relatório iniciado (background)."
+# Teto do pipe: tempo da amostra + ~25 min de overhead (baseline/after/diff/COM1).
+$analysisOverheadSeconds = 1500
+$sampleWindowSeconds = if ($WaitForSampleExit) { 7200 } else { $TimeoutSeconds }
+$pipeTimeoutSeconds = $sampleWindowSeconds + $analysisOverheadSeconds
+$pipeIdleReconnectSeconds = if ($script:PROJETOVM_PipeIdleReconnectSec -gt 0) {
+    [int]$script:PROJETOVM_PipeIdleReconnectSec
+} else { 900 }
+$pipeJob = $null
+$detachedAnalysisPid = 0
+Write-LogHost "[2/7] Pipe do relatório: \\.\pipe\$RunPipeName (receptor arranca antes do lançamento da análise)"

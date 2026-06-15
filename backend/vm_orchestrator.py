@@ -7,8 +7,11 @@ permitindo evoluir para uma sandbox real sem alterar o resto do sistema.
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any, Dict, TYPE_CHECKING
+
+logger = logging.getLogger(__name__)
 
 from vm_drivers.base import DynamicAnalysisOutput
 from vm_drivers.proxmox import ProxmoxConfig, ProxmoxVMDriver
@@ -29,6 +32,10 @@ def _build_driver():
         return StubVMDriver()
 
     if name == "proxmox":
+        logger.warning(
+            "SANDBOX_VM_DRIVER=proxmox é experimental (sem guia nem testes de integração). "
+            "Para produção use hyperv (Caminho A) ou o pipeline PowerShell (Caminho B)."
+        )
         # Config via env para evitar hardcode e facilitar deploy.
         api_url = os.getenv("PROXMOX_API_URL") or ""
         token_id = os.getenv("PROXMOX_TOKEN_ID") or ""

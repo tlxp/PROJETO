@@ -9,7 +9,7 @@ export const API_BASE: string = import.meta.env.VITE_API_URL || "http://localhos
 /** Token opcional (env VITE_API_TOKEN) quando o backend exige RATANALYZER_API_TOKEN. */
 export const API_TOKEN: string | undefined = import.meta.env.VITE_API_TOKEN || undefined;
 
-/** Timeout por defeito para pedidos "curtos" (status, artefactos, etc.). */
+/** Timeout por defeito para pedidos "curtos" (status, artefatos, etc.). */
 export const DEFAULT_TIMEOUT_MS = 30_000;
 
 export type ErrorResponse = { detail?: unknown };

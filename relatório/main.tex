@@ -1,0 +1,928 @@
+% RAT Analyzer — Relatório de Projeto Final (2025/2026)
+% Formato alinhado ao template UBI (Learning Analytics Report)
+% Compilar no Overleaf com pdfLaTeX (Main document: main.tex)
+\documentclass[12pt,a4paper,twoside,openright]{report}
+
+% --- Pacotes ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[portuguese]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{geometry}
+\geometry{a4paper, margin=2.5cm, bindingoffset=0.5cm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\graphicspath{{imagens/}}
+\usepackage{fancyhdr}
+\usepackage{tocloft}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    citecolor=blue!60!black,
+    urlcolor=blue!70!black,
+    pdftitle={RAT Analyzer — Relatório de Projeto Final},
+    pdfauthor={José Miguel Gonçalves de Amoreira}
+}
+
+% --- Estilo de capítulos (tipo "Chapter / 1 / Introduction") ---
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries}
+  {\chaptername}
+  {20pt}
+  {\Huge}
+\titlespacing*{\chapter}{0pt}{-10pt}{25pt}
+
+% --- Cabeçalhos e rodapés ---
+\fancypagestyle{plain}{%
+    \fancyhf{}
+    \fancyfoot[C]{\thepage}
+    \renewcommand{\headrulewidth}{0pt}
+}
+\fancypagestyle{frontmatter}{%
+    \fancyhf{}
+    \fancyhead[L]{\textsc{\leftmark}}
+    \fancyfoot[C]{\thepage}
+    \renewcommand{\headrulewidth}{0pt}
+}
+\fancypagestyle{main}{%
+    \fancyhf{}
+    \fancyhead[L]{\textsc{\leftmark}}
+    \fancyfoot[C]{\thepage}
+    \renewcommand{\headrulewidth}{0pt}
+}
+\pagestyle{main}
+
+% --- Listagens de código ---
+\definecolor{codebg}{RGB}{245,245,245}
+\definecolor{codeframe}{RGB}{200,200,200}
+\renewcommand{\lstlistingname}{Excerto de código}
+\renewcommand{\lstlistlistingname}{Lista de excertos de código}
+\lstset{
+    basicstyle=\ttfamily\small,
+    backgroundcolor=\color{codebg},
+    frame=single,
+    rulecolor=\color{codeframe},
+    breaklines=true,
+    showstringspaces=false,
+    tabsize=2,
+    captionpos=b,
+    numbers=left,
+    numberstyle=\tiny\color{gray}
+}
+\lstdefinestyle{python}{language=Python, morekeywords={async,await,True,False,None}}
+
+\setlength{\parskip}{0.5em}
+\setlength{\parindent}{0pt}
+
+\newcommand{\rat}{\textsc{RAT Analyzer}}
+\newcommand{\ubi}{Universidade da Beira Interior}
+\newcommand{\fr}[1]{\textbf{FR~#1}}
+\newcommand{\nfr}[1]{\textbf{NFR~#1}}
+
+% ============================================================
+\begin{document}
+% ============================================================
+
+% --- Capa (formato UBI) ---
+\begin{titlepage}
+    \thispagestyle{empty}
+    \centering
+    \vspace*{2.5cm}
+    {\Large \ubi\par}
+    \vspace{0.5cm}
+    {\large Departamento de Informática\par}
+    \vspace{3.5cm}
+    {\large Nº 1 - 2025/2026: RAT Analyzer --- Plataforma Integrada de Análise\\Estática e Dinâmica para Deteção de Remote Access Trojans\par}
+    \vspace{1.8cm}
+    \includegraphics[width=0.42\textwidth]{logo.png}
+    \vspace{2.2cm}
+    {\large Desenvolvido por:\par}
+    \vspace{0.4cm}
+    {\large José Miguel Gonçalves de Amoreira --- 51712\par}
+    \vspace{1.8cm}
+    {\large Orientador:\par}
+    \vspace{0.4cm}
+    {\large Professor João Bernardo Ferreira Sequeiros\par}
+    \vfill
+    {\large 15 de Junho de 2026\par}
+    \vspace*{1.5cm}
+\end{titlepage}
+\cleardoublepage
+
+% --- Pré-textual (numeração romana) ---
+\frontmatter
+\pagestyle{frontmatter}
+
+% --- Agradecimentos ---
+\chapter*{Agradecimentos}
+\addcontentsline{toc}{chapter}{Agradecimentos}
+\markboth{Agradecimentos}{Agradecimentos}
+
+Gostaria de expressar a minha sincera gratidão a todas as pessoas que contribuíram para a conclusão
+deste projeto final de licenciatura em Engenharia Informática.
+
+Em primeiro lugar, quero agradecer à minha familia e amigos por me acompanharem por este percurso, com a presença deles senti-me motivado para dar o meu máximo para neste projeto, o acompanhamento dos mesmos na minha vida encaminhou-me à entrega e apresentação deste projeto e da conclusão da minha Licenciatura na Beira Interior.
+
+Agradeço igualmente ao meu orientador, \textbf{Professor João Bernardo Ferreira Sequeiros},
+pela orientação, disponibilidade e feedback ao longo de todo o desenvolvimento. O seu acompanhamento
+foi determinante para orientar decisões técnicas, validar abordagens de análise de malware e manter o
+projeto alinhado com objectivos académicos e práticos.
+
+Reconheço ainda o valor da comunidade \textbf{open-source} cujas ferramentas - YARA, Ghidra, ILSpy,
+FastAPI, React e muitas outras - tornaram viável a construção de uma plataforma integrada de análise
+de malware num contexto académico.
+
+Por fim, agradeço ao leitor por dar um tempo de vida a ler este relatório.
+
+\cleardoublepage
+\tableofcontents
+\cleardoublepage
+\listoffigures
+\cleardoublepage
+\listoftables
+\cleardoublepage
+\lstlistoflistings
+\cleardoublepage
+
+% --- Acrónimos ---
+\chapter*{Acrónimos}
+\addcontentsline{toc}{chapter}{Acrónimos}
+\markboth{Acrónimos}{Acrónimos}
+\begin{tabular}{@{}p{2.2cm}p{10.5cm}@{}}
+    API & Application Programming Interface \\
+    C2 & Command and Control (servidor de comando e controlo) \\
+    CLI & Command Line Interface \\
+    DLL & Dynamic Link Library \\
+    ETW & Event Tracing for Windows \\
+    FR & Functional Requirement (Requisito Funcional) \\
+    GUI & Graphical User Interface \\
+    HTTP & Hypertext Transfer Protocol \\
+    IL & Intermediate Language (.NET) \\
+    JSON & JavaScript Object Notation \\
+    LLM & Large Language Model (modelo de linguagem de grande dimensão) \\
+    NFR & Non-Functional Requirement (Requisito Não-Funcional) \\
+    PE & Portable Executable \\
+    RAT & Remote Access Trojan \\
+    REST & Representational State Transfer \\
+    RQ & Redis Queue \\
+    SQL & Structured Query Language \\
+    UBI & Universidade da Beira Interior \\
+    UUID & Universally Unique Identifier \\
+    VM & Virtual Machine (Máquina Virtual) \\
+    WPF & Windows Presentation Foundation \\
+    YARA & Yet Another Recursive Acronym (linguagem de regras de deteção) \\
+\end{tabular}
+
+% ============================================================
+% CORPO DO DOCUMENTO (numeração arábica)
+% ============================================================
+\mainmatter
+\pagestyle{main}
+
+% ============================================================
+% CAPÍTULO 1 — INTRODUÇÃO
+% ============================================================
+\chapter{Introdução}
+
+\section{Contexto}
+
+Este relatório apresenta o projecto final de licenciatura em Engenharia Informática da \ubi,
+consagrado ao desenvolvimento do \rat: uma plataforma integrada de análise estática e dinâmica
+para deteção de \emph{Remote Access Trojans} (RATs) em executáveis Windows (`.exe`, `.dll`) e
+ficheiros de código fonte C\# (`.cs`).
+
+Os RATs constituem uma das classes de malware mais preocupantes na actualidade: permitem a um
+atacante controlar remotamente um sistema comprometido, recolher credenciais, exfiltrar dados e
+executar comandos arbitrários. A sua deteção exige frequentemente a combinação de técnicas
+\emph{offline} (análise estática do binário) e \emph{online} (observação do comportamento em
+ambiente controlado), complementadas por regras de assinatura e heurísticas de scoring.
+
+O \rat\ foi concebido no âmbito académico como ferramenta \textbf{educativa e de triagem}:
+além de sinalizar indicadores de risco, expõe código descompilado, relatórios estruturados e
+explicações sobre funções suspeitas, permitindo que estudantes e analistas junior compreendam
+\emph{porquê} um ficheiro é considerado malicioso. Complementarmente, a interface web integra
+um assistente baseado no \textbf{Google Gemini}, que permite questionar, em linguagem natural,
+o significado do excerto de pseudo-C visível no painel de resultados.
+
+\section{Motivação}
+
+A proliferação de malware com capacidades de acesso remoto exige ferramentas acessíveis que
+integrem múltiplas camadas de análise num único fluxo de trabalho. Soluções comerciais como
+sandboxes na nuvem (VirusTotal, Any.Run, Hybrid Analysis) são poderosas, mas muitas vezes
+inadequadas para contextos de ensino ou laboratório local, quer por custo, quer por
+confidencialidade das amostras.
+
+A motivação deste projecto assenta em quatro pilares:
+
+\begin{itemize}
+    \item \textbf{Integração} — Unificar análise estática, regras YARA, descompilação e sandbox
+          num ecossistema coerente (API, interface web, aplicação desktop).
+    \item \textbf{Isolamento} — Executar amostras potencialmente maliciosas numa VM Hyper-V
+          sem ligação à Internet, com restauro automático a snapshot limpo.
+    \item \textbf{Transparência} — Produzir relatórios detalhados (imports, strings C2, evasão,
+          score de risco, pseudo-C/IL) em vez de uma simples classificação binária; opcionalmente,
+          apoiar a interpretação do pseudo-C com um assistente LLM no frontend.
+    \item \textbf{Reprodutibilidade académica} — Código aberto, documentação extensa, testes
+          automatizados (pytest, Vitest, CI GitHub Actions) e auditoria de segurança concluída.
+\end{itemize}
+
+\section{Objectivos}
+
+Os objectivos principais do projecto são:
+
+\begin{enumerate}
+    \item Desenvolver um \textbf{backend} em Python (FastAPI) capaz de receber amostras,
+          executar um pipeline de análise estática completo e orquestrar jobs de análise
+          dinâmica (\texttt{static}, \texttt{dynamic} ou \texttt{both}).
+    \item Implementar uma \textbf{interface web} (React + Vite + TypeScript) com zona de
+          \emph{drag-and-drop}, streaming de progresso, visualização de relatórios, pseudo-C
+          (Ghidra) e IL (.NET), e assistente Gemini para explicar excertos de código C.
+    \item Disponibilizar uma \textbf{aplicação desktop WPF} (.NET~8) como ponto de entrada
+          alternativo, incluindo bootstrap de dependências e integração com a sandbox Hyper-V.
+    \item Construir um \textbf{agente VM} (Minimal API .NET) e scripts PowerShell para execução
+          isolada de amostras e recolha de telemetria comportamental.
+    \item Definir um \textbf{modelo de scoring} (0--100) que agregue múltiplos indicadores
+          (YARA, C2, evasão, packers, ofuscação, persistência).
+    \item Validar o sistema com testes automatizados, amostras benignas (\texttt{benign-vm-test})
+          e documentação operacional para deploy local.
+\end{enumerate}
+
+\section{Organização do Documento}
+
+Para demonstrar as etapas do processo realizado, este relatório está organizado da seguinte forma:
+
+\begin{enumerate}
+    \item O primeiro capítulo --- \emph{Introdução} --- apresenta o projecto, a motivação, o contexto,
+          os objectivos e a estrutura do documento.
+    \item O segundo capítulo --- \emph{Estado da Arte} --- analisa abordagens de análise de malware
+          e compara soluções existentes com a plataforma desenvolvida.
+    \item O terceiro capítulo --- \emph{Tecnologias e Ferramentas Utilizadas} --- descreve o stack
+          tecnológico adoptado ao longo do ciclo de desenvolvimento.
+    \item O quarto capítulo --- \emph{Engenharia de Software} --- apresenta requisitos, diagramas
+          de casos de uso, diagramas de actividade e arquitectura do sistema.
+    \item O quinto capítulo --- \emph{Implementação} --- detalha os componentes implementados,
+          o manual de utilização e os testes efectuados.
+    \item O sexto capítulo --- \emph{Conclusões e Trabalho Futuro} --- sintetiza os resultados
+          obtidos e propõe evoluções futuras.
+    \item O \emph{Apêndice} inclui exemplos de código relevantes.
+    \item A \emph{Bibliografia} reúne as referências citadas ao longo do documento.
+\end{enumerate}
+
+% ============================================================
+% CAPÍTULO 2 — ESTADO DA ARTE
+% ============================================================
+\chapter{Estado da Arte}
+\label{ch:estado-arte}
+
+\section{Introdução}
+
+Este capítulo contextualiza o domínio da análise de malware, com foco na deteção de RATs, e
+analisa soluções existentes — estáticas, dinâmicas e híbridas — comparando-as com a abordagem
+adoptada no \rat.
+
+\section{Análise de Malware: Visão Geral}
+
+A análise de malware divide-se tradicionalmente em duas vertentes complementares
+\cite{skoudis2004,cipriano2019}:
+
+\begin{itemize}
+    \item \textbf{Análise estática} — Examina o ficheiro sem o executar: estrutura PE, secções,
+          imports/exports, strings, entropia, assinaturas YARA, descompilação e deteção de
+          técnicas de evasão (anti-debug, anti-VM).
+    \item \textbf{Análise dinâmica} — Executa a amostra num sandbox isolado e monitoriza
+          comportamento: criação de processos, alterações ao registo, ficheiros, rede e
+          persistência.
+\end{itemize}
+
+\section{Tendências na Deteção de RATs e Malware}
+
+\subsection{Sandboxes comerciais e na nuvem}
+
+Plataformas como \emph{Any.Run} \cite{anyrun2024}, \emph{Hybrid Analysis} \cite{hybrid2019} e
+\emph{Joe Sandbox} \cite{joe2020} oferecem análise dinâmica completa com relatórios interactivos.
+VirusTotal \cite{virustotal2023} agrega múltiplos motores antivirus e metadados estáticos.
+
+\subsection{Frameworks open-source}
+
+\begin{itemize}
+    \item \textbf{Cuckoo Sandbox} \cite{cuckoo2012} — Sandbox auto-alojável extensível via Python.
+    \item \textbf{CAPE Sandbox} \cite{cape2021} — Orientada a configuração de famílias e C2.
+    \item \textbf{YARA} \cite{yara2023} — Linguagem de regras para deteção por padrões.
+    \item \textbf{Ghidra / ILSpy} \cite{ghidra2019,ilspy2024} — Descompiladores nativos e .NET.
+\end{itemize}
+
+\subsection{Deteção baseada em machine learning}
+
+Trabalhos recentes aplicam \emph{deep learning} a features estáticas para classificação de
+malware \cite{raff2018,ucar2020}. O \rat\ privilegia explicabilidade via indicadores explícitos
+e código descompilado.
+
+\section{Vantagens da Solução Proposta}
+
+\begin{table}[H]
+    \centering
+    \caption{Comparação da solução \rat\ com alternativas existentes}
+    \label{tab:comparacao}
+    \small
+    \begin{tabular}{@{}p{2.2cm}p{4.5cm}p{5.5cm}@{}}
+        \toprule
+        \textbf{Referência} & \textbf{Tecnologia} & \textbf{Solução \rat} \\
+        \midrule
+        VirusTotal & Multi-AV na nuvem & Local; YARA + heurísticas + sandbox Hyper-V \\
+        Cuckoo/CAPE & Sandbox auto-alojável & Sandbox Windows nativa (Hyper-V) \\
+        Any.Run / Hybrid & Sandbox comercial & Gratuito; foco educativo; pseudo-C/IL \\
+        YARA standalone & Regras de assinatura & YARA + scoring + descompilação \\
+        Ghidra/ILSpy CLI & Descompilação offline & Descompilação orquestrada + UI web \\
+        ML classifiers & Modelos opacos & Indicadores explicáveis + relatório + assistente LLM opcional \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\section{Conclusões}
+
+O estado da arte confirma que a deteção efectiva de RATs beneficia de análise multi-camada.
+O \rat\ posiciona-se como plataforma local, integrada e explicável, adequada a laboratórios
+universitários e triagem inicial.
+
+% ============================================================
+% CAPÍTULO 3 — TECNOLOGIAS
+% ============================================================
+\chapter{Tecnologias e Ferramentas Utilizadas}
+\label{ch:tecnologias}
+
+\section{Python e FastAPI}
+
+\textbf{Python~3.10+} foi adoptado para o backend. \textbf{FastAPI} \cite{fastapi2024} fornece
+validação automática, documentação OpenAPI e streaming NDJSON (\texttt{/api/analyze\_stream}).
+
+\section{React, Vite e TypeScript}
+
+A interface web utiliza \textbf{React~18}, \textbf{TypeScript}, \textbf{Vite}, \textbf{Tailwind CSS},
+\textbf{shadcn/ui}, \textbf{Framer Motion} e \textbf{Vitest} (34+ testes unitários). A integração
+com o \textbf{Google Gemini} (\texttt{gemini-2.0-flash}) é feita directamente no browser: a API key
+do utilizador é guardada em \texttt{localStorage} e nunca transita pelo backend FastAPI.
+
+\section{.NET~8, WPF e Minimal API}
+
+Três projectos .NET partilham \texttt{RatAnalyzer.sln}: \textbf{RatAnalyzer.Desktop} (WPF),
+\textbf{VmAgent} (Minimal API na VM) e \textbf{BenignVmTest} (amostra inofensiva).
+
+\section{YARA, Ghidra e ILSpy}
+
+\textbf{YARA} aplica regras em \texttt{yara\_rules/}. \textbf{ILSpy CLI} descompila .NET;
+\textbf{Ghidra~12+} produz pseudo-C para binários nativos PE.
+
+\section{Hyper-V, PowerShell, SQLite}
+
+Sandbox em \textbf{Hyper-V} (VM \texttt{MalwareSandbox}, snapshot \texttt{CleanState}).
+\textbf{PowerShell} automatiza setup e execução. \textbf{SQLite} persiste jobs em
+\texttt{analysis.db}; \textbf{Redis + RQ} é opcional para fila distribuída.
+
+\section{Conclusão}
+
+A stack multi-linguagem reflecte a natureza heterogénea da análise de malware: Python para
+pipeline e API, TypeScript para UX, C\# para Windows/Hyper-V, PowerShell para infraestrutura.
+
+% ============================================================
+% CAPÍTULO 4 — ENGENHARIA DE SOFTWARE
+% ============================================================
+\chapter{Engenharia de Software}
+\label{ch:engenharia}
+
+\section{Introdução}
+
+Este capítulo detalha requisitos funcionais e não-funcionais, diagramas de casos de uso e
+actividade, e a arquitectura global do \rat.
+
+\section{Análise de Requisitos}
+
+\subsection{Requisitos Funcionais}
+
+\begin{longtable}{@{}p{1.2cm}p{12.5cm}@{}}
+\caption{Requisitos funcionais do \rat} \label{tab:fr} \\
+\toprule
+\textbf{ID} & \textbf{Descrição} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{ID} & \textbf{Descrição} \\
+\midrule
+\endhead
+\fr{01} &
+\textbf{Upload e validação de amostras.} O sistema deve aceitar ficheiros \texttt{.exe}, \texttt{.dll}
+e \texttt{.cs} via interface web, desktop WPF ou API REST. Valida extensão, tamanho máximo
+(\texttt{RATANALYZER\_MAX\_UPLOAD\_MB}, default 100~MB) e sanitiza nomes de ficheiro. \\
+\fr{02} &
+\textbf{Análise estática completa.} Pipeline em 7 fases: metadados PE, descompilação (.NET/nativo),
+análise estática (imports, strings C2, evasão), deobfuscação, scan YARA, scoring e relatório. \\
+\fr{03} &
+\textbf{Análise dinâmica em sandbox.} Executar amostra numa VM Hyper-V isolada (sem Internet),
+monitorizar comportamento e devolver relatório comportamental. Suporta modos \texttt{static},
+\texttt{dynamic} e \texttt{both}. \\
+\fr{04} &
+\textbf{Gestão de jobs.} Criar, consultar e listar jobs (\texttt{POST/GET /api/analysis}).
+Persistência em SQLite com UUID v4; artefatos em \texttt{sandbox\_jobs/}. \\
+\fr{05} &
+\textbf{Visualização de resultados.} Interface web com três painéis: relatório, pseudo-C (Ghidra)
+e IL (.NET); navegação contextual entre indicadores e código. \\
+\fr{06} &
+\textbf{Scoring de risco.} Calcular score 0--100 agregando YARA, C2, evasão, packers, ofuscação,
+persistência e entropia; classificar em CRÍTICO/ALTO/MÉDIO/BAIXO/MUITO BAIXO. \\
+\fr{07} &
+\textbf{Streaming de progresso.} Endpoint \texttt{/api/analyze\_stream} em NDJSON com logs
+incrementais durante a análise estática. \\
+\fr{08} &
+\textbf{Orquestração VM.} Dois caminhos dinâmicos: (A) backend Python + vm-agent HTTP;
+(B) scripts PowerShell + COM1/Named Pipe (WPF). \\
+\fr{09} &
+\textbf{Assistente Gemini no pseudo-C.} No painel de código C descompilado, o utilizador pode
+configurar uma API key do Google AI Studio (armazenamento local) e perguntar, via chat, o que faz
+o excerto visível. O envio respeita limites de texto (código e pergunta); existe modo
+demonstração com resposta simulada, sem chamada à API. \\
+\bottomrule
+\end{longtable}
+
+\subsection{Requisitos Não-Funcionais}
+
+\begin{description}[style=nextline, leftmargin=0cm]
+    \item[\nfr{01} — Segurança] API bind local (\texttt{127.0.0.1}); tokens obrigatórios em
+          produção (\texttt{RATANALYZER\_API\_TOKEN}, \texttt{VM\_AGENT\_TOKEN}).
+    \item[\nfr{02} — Isolamento] VM em switch Internal; preflight de rede em cada run; restore
+          automático a snapshot \texttt{CleanState}.
+    \item[\nfr{03} — Usabilidade] Drag-and-drop; feedback em tempo real; interface responsiva.
+    \item[\nfr{04} — Desempenho] Máximo 2 workers concorrentes (default); timeout configurável
+          na sandbox (default 120~s).
+    \item[\nfr{05} — Manutenibilidade] Testes CI (pytest, Vitest, dotnet build); locks de
+          dependências; documentação extensa.
+    \item[\nfr{06} — Disponibilidade] Modo fila Redis opcional; fallback threads locais sem Redis.
+\end{description}
+
+\section{Diagramas}
+
+\subsection{Diagrama de Casos de Uso}
+
+A Figura~\ref{fig:usecase} ilustra as interacções entre o analista e o sistema.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.92\textwidth]{fig-4-1-usecase.png}
+    \caption{Diagrama de casos de uso — \rat}
+    \label{fig:usecase}
+\end{figure}
+
+\subsection{Diagrama de Actividade — Análise Estática}
+
+A Figura~\ref{fig:activity-static} resume o pipeline de análise estática, desde o upload até à
+apresentação dos resultados.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.88\textwidth]{fig-4-2-activity-static.png}
+    \caption{Diagrama de actividade — pipeline de análise estática}
+    \label{fig:activity-static}
+\end{figure}
+
+\subsection{Diagrama de Actividade — Análise Dinâmica}
+
+A Figura~\ref{fig:activity-dynamic} descreve o fluxo de execução em sandbox, incluindo os dois
+caminhos de orquestração (vm-agent HTTP e scripts PowerShell).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{fig-4-3-activity-dynamic.png}
+    \caption{Diagrama de actividade — pipeline de análise dinâmica}
+    \label{fig:activity-dynamic}
+\end{figure}
+
+\subsection{Arquitectura do Sistema}
+
+A Figura~\ref{fig:architecture} apresenta a arquitectura multi-camada. A Figura~\ref{fig:sequence}
+detalha a sequência integrada entre frontend, WPF, API e sandbox.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{fig-4-4-architecture.png}
+    \caption{Arquitectura conceptual do \rat}
+    \label{fig:architecture}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.98\textwidth]{fig-4-5-sequence-overview.png}
+    \caption{Diagrama de sequência integrado — fluxos estático, dinâmico e WPF}
+    \label{fig:sequence}
+\end{figure}
+
+\section{Modelo de Dados}
+
+A persistência assenta em \textbf{SQLite} (\texttt{analysis.db}) sob \texttt{DATA\_DIR}. Cada job
+regista: \texttt{job\_id} (UUID v4), \texttt{analysis\_type}, estado, timestamps, caminhos para
+artefatos (\texttt{last\_analysis.json}, relatório dinâmico, excertos ofuscados). A Tabela~\ref{tab:scoring}
+resume os pesos do scoring.
+
+\begin{table}[H]
+    \centering
+    \caption{Factores do score de risco (0--100)}
+    \label{tab:scoring}
+    \begin{tabular}{@{}lr@{\hspace{2cm}}lr@{}}
+        \toprule
+        \textbf{Factor} & \textbf{Peso} & \textbf{Factor} & \textbf{Peso} \\
+        \midrule
+        Strings C2 & 20 & Persistência & 10 \\
+        Matches YARA & 20 & Packer & 10 \\
+        Funções suspeitas & 18 & Ofuscação & 10 \\
+        Imports suspeitos & 15 & Entropia alta & 5 \\
+        Indicadores stealer & 15 & & \\
+        Técnicas de evasão & 15 & & \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\textbf{Níveis:} 80--100 CRÍTICO · 60--79 ALTO · 40--59 MÉDIO · 20--39 BAIXO · 0--19 MUITO BAIXO.
+
+\section{Conclusões}
+
+A modelação garante rastreabilidade desde o upload até ao relatório final, com separação clara
+entre camadas de apresentação, API, análise e infraestrutura sandbox.
+
+% ============================================================
+% CAPÍTULO 5 — IMPLEMENTAÇÃO
+% ============================================================
+\chapter{Implementação}
+\label{ch:implementacao}
+
+\section{Introdução}
+
+Este capítulo descreve a implementação dos componentes principais, o manual de utilização e os
+testes efectuados.
+
+\section{Backend — Pipeline de Análise Estática}
+
+A classe \texttt{RATAnalyzer} (\texttt{backend/rat\_analyzer.py}) orquestra o pipeline em 7 fases:
+
+\begin{enumerate}
+    \item Extração de metadados PE (\texttt{file\_info}).
+    \item Descompilação .NET via ILSpy (se aplicável).
+    \item Análise estática — imports suspeitos, strings C2, anti-debug/anti-VM, entropia.
+    \item Deobfuscação — Base64, XOR, indicadores de ofuscação.
+    \item Scan YARA sobre \texttt{yara\_rules/}.
+    \item Cálculo do score via \texttt{risk\_scorer.py}.
+    \item Geração do relatório (\texttt{report\_generator.py}).
+\end{enumerate}
+
+A API FastAPI (\texttt{backend/api.py}) expõe endpoints REST documentados em OpenAPI
+(\texttt{/docs}). Exemplo de criação de job:
+
+\begin{lstlisting}[style=python,caption={Endpoint de criação de job — \texttt{analysis\_jobs.py}},label={lst:create-job}]
+@app.post("/api/analysis")
+async def create_analysis(
+    file: UploadFile,
+    analysis_type: str = "static",  # static | dynamic | both
+):
+    job_id = str(uuid.uuid4())
+    # Gravar amostra, criar registo SQLite, enfileirar worker
+    return {"job_id": job_id, "status": "queued"}
+\end{lstlisting}
+
+\section{Frontend Web}
+
+A página \texttt{Index.tsx} orquestra upload (\texttt{FileDropZone}), streaming
+(\texttt{useAnalysisStream}) e visualização (\texttt{AnalysisResultsView}) com três painéis:
+relatório, pseudo-C e IL. Hooks com \texttt{AbortController} cancelam pedidos pendentes ao
+navegar ou re-analisar. Quando disponíveis, as Figuras~\ref{fig:web-upload} e~\ref{fig:web-results}
+ilustram a zona de upload e os resultados com score e painéis de código.
+
+\IfFileExists{imagens/fig-5-1-web-upload.png}{%
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.88\textwidth]{fig-5-1-web-upload.png}
+    \caption{Interface web — zona de upload (\emph{Drop \& Analyze})}
+    \label{fig:web-upload}
+\end{figure}
+}{}
+
+\IfFileExists{imagens/fig-5-2-web-results.png}{%
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{fig-5-2-web-results.png}
+    \caption{Interface web — relatório, pseudo-C/IL e score de risco}
+    \label{fig:web-results}
+\end{figure}
+}{}
+
+\subsection{Assistente Gemini no painel de pseudo-C}
+
+O componente \texttt{CodePanel} inclui, no painel de código C, um botão com o ícone do Gemini
+(\texttt{GeminiAssistDialog.tsx}). O fluxo é o seguinte:
+
+\begin{enumerate}
+    \item O utilizador configura a API key do Google AI Studio; esta é persistida apenas em
+          \texttt{localStorage} (\texttt{geminiApiKey.ts}), sem passar pelo backend.
+    \item Ao abrir o chat, o frontend envia o \textbf{excerto visível} no painel — função
+          \emph{flagged} activa, janela de linhas em modo expandido ou primeiras linhas renderizadas
+          — com limite de 16\,000 caracteres (\texttt{buildCodeExcerpt} em \texttt{gemini.ts}).
+    \item A pergunta do utilizador está limitada a 1\,000 caracteres; a resposta é apresentada
+          numa \emph{chatbox} modal, com suporte a perguntas de seguimento na mesma sessão.
+    \item Um \textbf{modo demonstração} permite pré-visualizar o layout e uma resposta simulada
+          sem API key nem chamada externa (\texttt{askGeminiMock}), útil para testes de interface.
+\end{enumerate}
+
+A chamada HTTP é feita directamente do browser ao endpoint
+\texttt{generativelanguage.googleapis.com} (modelo \texttt{gemini-2.0-flash}), mantendo a
+confidencialidade da amostra no servidor local e delegando apenas o excerto seleccionado ao
+serviço externo escolhido pelo utilizador.
+
+\section{Aplicação Desktop WPF}
+
+\texttt{RatAnalyzer.Desktop} implementa MVVM: \texttt{MainDashboardViewModel} para análise
+estática via browser; \texttt{VmAnalysisViewModel} para sandbox Hyper-V via
+\texttt{04-Run-Sample.ps1}. O serviço \texttt{VmSandboxService} gere credenciais guest e paths
+(\texttt{PROJETOVM\_BasePath}). A Figura~\ref{fig:wpf-dashboard} mostra o ecrã principal da
+aplicação desktop (quando disponível).
+
+\IfFileExists{imagens/fig-5-3-wpf-dashboard.png}{%
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{fig-5-3-wpf-dashboard.png}
+    \caption{Aplicação desktop WPF — ecrã principal}
+    \label{fig:wpf-dashboard}
+\end{figure}
+}{}
+
+\section{VM Agent e Sandbox Hyper-V}
+
+\subsection{Caminho A — Backend + vm-agent HTTP}
+
+O \texttt{vm\_orchestrator.py} seleciona o driver (\texttt{SANDBOX\_VM\_DRIVER}). O vm-agent
+expõe \texttt{/api/upload}, \texttt{/api/run} e \texttt{/api/report} com header
+\texttt{X-Agent-Token}.
+
+\subsection{Caminho B — Scripts PowerShell}
+
+O \texttt{04-Run-Sample.ps1} executa fases A--G: setup, boot VM, cópia de amostra, execução,
+espera de relatório (COM1/Named Pipe + fallback \texttt{Copy-VMFile}), cleanup \texttt{try/finally}.
+
+Fluxo dentro da VM (\texttt{vm/Run-MalwareAnalysis.ps1}):
+\begin{itemize}
+    \item Baseline de processos, ficheiros, registry e rede.
+    \item Execução da amostra com timeout configurável.
+    \item Diff pós-execução; envio via \texttt{Send-ReportViaCom.ps1}.
+\end{itemize}
+
+\IfFileExists{imagens/fig-5-4-hyperv-vm.png}{%
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{fig-5-4-hyperv-vm.png}
+    \caption{Hyper-V — VM \texttt{MalwareSandbox} e snapshot \texttt{CleanState}}
+    \label{fig:hyperv-vm}
+\end{figure}
+}{}
+
+\section{Manual de Utilização}
+
+\subsection{Interface Web}
+
+\begin{enumerate}
+    \item Instalar dependências: \texttt{pip install --require-hashes -r backend/requirements.lock} e
+          \texttt{npm i} em \texttt{frontend/}.
+    \item Arrancar backend: \texttt{uvicorn api:app --host 127.0.0.1 --port 8000}.
+    \item Arrancar frontend: \texttt{npm run dev} (porta 8080).
+    \item Arrastar \texttt{.exe}/\texttt{.dll} para a zona de upload; consultar resultados.
+    \item No painel \emph{Código C}, usar o ícone Gemini para explicar o excerto visível
+          (API key própria ou modo demonstração).
+\end{enumerate}
+
+\subsection{Sandbox Hyper-V}
+
+\begin{enumerate}
+    \item Executar \texttt{01-Setup-MalwareSandbox.ps1} como Administrador (uma vez).
+    \item Configurar \texttt{PROJETOVM\_GuestPassword} e concluir first-time setup da VM.
+    \item Analisar amostra: \texttt{.\textbackslash 04-Run-Sample.ps1 -SamplePath "D:\textbackslash PROJETOVM\textbackslash Samples\textbackslash amostra.exe"}.
+    \item Relatório em \texttt{D:\textbackslash PROJETOVM\textbackslash Reports\textbackslash analysis\_<RunId>.txt}.
+\end{enumerate}
+
+\subsection{CLI Rápida}
+
+\begin{lstlisting}[style=python,caption={Análise estática via CLI},label={lst:cli}]
+python rat_analyzer.py caminho/amostra.exe -o reports/ -v
+\end{lstlisting}
+
+\section{Testes}
+
+\begin{table}[H]
+    \centering
+    \caption{Resumo dos testes automatizados}
+    \label{tab:testes}
+    \begin{tabular}{@{}llr@{}}
+        \toprule
+        \textbf{Componente} & \textbf{Framework} & \textbf{Testes} \\
+        \midrule
+        Backend & pytest + httpx & 63 \\
+        Frontend & Vitest & 34+ \\
+        .NET & dotnet build (CI) & Compilação Release \\
+        YARA & pytest (compilação regras) & Integrado \\
+        PowerShell & CI encoding + sintaxe & Scripts \texttt{hyperv-sandbox/} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Foi utilizado \texttt{benign-vm-test.exe} no \textbf{Caminho B} (pipeline PowerShell) para validar
+o pipeline dinâmico sem risco. Testes manuais confirmaram isolamento de rede, restore de snapshot
+e entrega de relatório por pipe. O \textbf{Caminho A} (vm-agent HTTP) valida execução e
+\texttt{exitCode}, mas a telemetria comportamental completa ainda não está implementada no agent.
+
+\subsection{Documentação do repositório}
+
+A documentação técnica está versionada no repositório Git:
+
+\begin{itemize}
+    \item \texttt{README.md} --- visão geral, início rápido e tabela de escolha dos caminhos A/B.
+    \item \texttt{docs/README.md} --- índice da documentação.
+    \item \texttt{docs/diagrams/} --- fonte única PlantUML; PNG em \texttt{relatório/imagens/fig-4-*.png} via \texttt{render\_plantuml.py}.
+    \item \texttt{docs/production-secrets.md} --- segredos, modo produção e checklist de deploy.
+    \item \texttt{docs/AUDITORIA.md} --- auditoria de segurança e qualidade (Jun 2026).
+    \item \texttt{docs/faq.md} --- perguntas frequentes e resolução de problemas comuns.
+    \item \texttt{CONTRIBUTING.md} --- convenções, testes automatizados e contribuição.
+    \item \texttt{scripts/hyperv-sandbox/TROUBLESHOOTING.md} --- diagnóstico operacional da sandbox.
+\end{itemize}
+
+\section{Conclusões}
+
+A implementação reflecte a arquitectura planeada: pipeline estático modular, jobs assíncronos,
+duas pipelines dinâmicas independentes e interfaces web/desktop coerentes.
+
+% ============================================================
+% CAPÍTULO 6 — CONCLUSÕES
+% ============================================================
+\chapter{Conclusões e Trabalho Futuro}
+\label{ch:conclusoes}
+
+\section{Principais Conclusões}
+
+O projecto \rat\ atingiu os objectivos definidos: plataforma integrada de análise estática e
+dinâmica para deteção de RATs, com:
+
+\begin{itemize}
+    \item Pipeline estático completo (PE, YARA, deobfuscação, descompilação, scoring).
+    \item Sandbox Hyper-V isolada com duas vias de orquestração (HTTP e serial).
+    \item Interfaces web e desktop funcionais, com testes CI e auditoria de segurança concluída.
+    \item Documentação extensa e orientação educativa (indicadores explicáveis, pseudo-C/IL,
+          assistente Gemini opcional no frontend).
+\end{itemize}
+
+O projecto permitiu consolidar competências em engenharia de software, segurança informática,
+APIs REST, desenvolvimento full-stack e automação de infraestrutura Windows/Hyper-V.
+
+\section{Trabalho Futuro}
+
+\begin{enumerate}
+    \item Integração com IDA Pro (Ghidra já integrado).
+    \item Deobfuscação avançada e extração automática de configs C2.
+    \item Telemetria dinâmica enriquecida (Sysmon/ETW/hooking) no vm-agent.
+    \item Suporte a mais formatos (PDF, Office macros, scripts).
+    \item Base de dados de assinaturas de malware conhecido.
+    \item Análise de tráfego de rede C2 durante execução dinâmica.
+    \item Evolução do assistente Gemini: proxy no backend para ambientes sem exposição de API keys,
+          suporte a outros modelos LLM e explicações automáticas de funções suspeitas.
+\end{enumerate}
+
+% ============================================================
+% APÊNDICE
+% ============================================================
+\appendix
+\chapter{Apêndice}
+
+\section{Verificação de token no vm-agent}
+
+\begin{lstlisting}[caption={Middleware de autenticação — \texttt{vm-agent/Program.cs}},label={lst:vm-agent-token}]
+app.Use(async (context, next) =>
+{
+    if (!string.IsNullOrWhiteSpace(agentToken))
+    {
+        if (!context.Request.Headers.TryGetValue("X-Agent-Token", out var provided) ||
+            !FixedTimeEquals(provided.ToString(), agentToken))
+        {
+            context.Response.StatusCode = 401;
+            return;
+        }
+    }
+    await next();
+});
+\end{lstlisting}
+
+\section{Imports suspeitos — Static Analyzer}
+
+\begin{lstlisting}[style=python,caption={Excerto de \texttt{static\_analyzer.py}},label={lst:static-imports}]
+SUSPICIOUS_IMPORTS = [
+    "wininet.dll", "ws2_32.dll", "urlmon.dll",
+    "crypt32.dll", "advapi32.dll", "ntdll.dll",
+]
+# Deteta APIs de rede, criptografia e evasao
+\end{lstlisting}
+
+\section{Protocolo de relatório serial}
+
+O guest envia o relatório linha-a-linha via COM1:
+\texttt{START\_OF\_REPORT} \textrightarrow{} linhas de conteúdo \textrightarrow{}
+\texttt{END\_OF\_REPORT}. Fallback: \texttt{Copy-VMFile} lê \texttt{C:\textbackslash analysis.txt}.
+
+% ============================================================
+% BIBLIOGRAFIA
+% ============================================================
+\backmatter
+\chapter*{Bibliografia}
+\addcontentsline{toc}{chapter}{Bibliografia}
+\markboth{Bibliografia}{Bibliografia}
+
+\begin{thebibliography}{99}
+
+\bibitem{skoudis2004}
+E.~Skoudis and L.~Zeltser.
+\newblock \emph{Malware: Fighting Malicious Code}.
+\newblock Prentice Hall, 2004.
+
+\bibitem{cipriano2019}
+M.~Cipriano, J.~Tavares, and H.~Salgado.
+\newblock Malware analysis: A survey of techniques and tools.
+\newblock \emph{Journal of Computer Virology and Hacking Techniques}, 2019.
+
+\bibitem{anyrun2024}
+Any.Run.
+\newblock Interactive Online Sandbox, 2024.
+\newblock \url{https://any.run/}.
+
+\bibitem{hybrid2019}
+Hybrid Analysis.
+\newblock Free Automated Malware Analysis Service, 2019.
+\newblock \url{https://www.hybrid-analysis.com/}.
+
+\bibitem{joe2020}
+Joe Security.
+\newblock Joe Sandbox Cloud, 2020.
+\newblock \url{https://www.joesandbox.com/}.
+
+\bibitem{virustotal2023}
+VirusTotal.
+\newblock Analyse suspicious files and URLs, 2023.
+\newblock \url{https://www.virustotal.com/}.
+
+\bibitem{cuckoo2012}
+Cuckoo Sandbox Project.
+\newblock Automated Malware Analysis, 2012.
+\newblock \url{https://cuckoosandbox.org/}.
+
+\bibitem{cape2021}
+CAPE Sandbox.
+\newblock Malware Configuration And Payload Extraction, 2021.
+\newblock \url{https://cape.contextis.com/}.
+
+\bibitem{yara2023}
+VirusTotal.
+\newblock YARA — Pattern Matching Swiss Knife, 2023.
+\newblock \url{https://virustotal.github.io/yara/}.
+
+\bibitem{ghidra2019}
+NSA Research.
+\newblock Ghidra Software Reverse Engineering Framework, 2019.
+\newblock \url{https://ghidra-sre.org/}.
+
+\bibitem{ilspy2024}
+ICSharpCode.
+\newblock ILSpy — .NET Decompiler, 2024.
+\newblock \url{https://github.com/icsharpcode/ILSpy}.
+
+\bibitem{raff2018}
+E.~Raff \emph{et al.}
+\newblock Malware detection by eating a whole exe.
+\newblock In \emph{AAAI Workshop on AI for Cybersecurity}, 2018.
+
+\bibitem{ucar2020}
+S.~Ucar, E.~Sagiroglu, and S.~Karaboga.
+\newblock Malware detection using deep learning.
+\newblock \emph{Applied Sciences}, 10(15), 2020.
+
+\bibitem{sysmon2022}
+Microsoft.
+\newblock Sysmon — System Monitor, 2022.
+\newblock \url{https://learn.microsoft.com/sysinternals/downloads/sysmon}.
+
+\bibitem{fastapi2024}
+S.~Ramírez.
+\newblock FastAPI Framework, 2024.
+\newblock \url{https://fastapi.tiangolo.com/}.
+
+\end{thebibliography}
+
+\end{document}

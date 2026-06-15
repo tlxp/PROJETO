@@ -89,6 +89,91 @@ function Set-UnattendLanguageInPlace {
     Set-Content -LiteralPath $UnattendXmlPath -Value $xmlText -Encoding UTF8 -ErrorAction Stop
 }
 
+function Set-UnattendGuestCredentialsInPlace {
+    <#
+    .SYNOPSIS
+        Alinha utilizador/password do autounattend.xml com _Config.ps1 / credenciais da WPF.
+    .DESCRIPTION
+        O ficheiro custom autounattend-malware-behavior-detection-user-gen1.xml tem credenciais
+        de exemplo embutidas. Esta função substitui Name, DisplayName, Password e AutoLogon
+        para que a conta criada na VM coincida com PROJETOVM_GuestUser/GuestPassword.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $UnattendXmlPath,
+        [Parameter(Mandatory = $true)][string] $UserName,
+        [Parameter(Mandatory = $true)][string] $Password,
+        [string] $DisplayName = "Malware Analyst",
+        [string] $ComputerName = $null
+    )
+
+    if (-not (Test-Path -LiteralPath $UnattendXmlPath)) { return }
+
+    $UserName = $UserName.Trim()
+    if ([string]::IsNullOrWhiteSpace($UserName)) {
+        throw "Set-UnattendGuestCredentialsInPlace: UserName vazio."
+    }
+    if ([string]::IsNullOrWhiteSpace($Password)) {
+        throw "Set-UnattendGuestCredentialsInPlace: Password vazia."
+    }
+
+    $escapedUser = [System.Security.SecurityElement]::Escape($UserName)
+    $escapedDisplay = [System.Security.SecurityElement]::Escape($DisplayName)
+    $escapedPassword = [System.Security.SecurityElement]::Escape($Password)
+    $xmlText = Get-Content -LiteralPath $UnattendXmlPath -Raw -ErrorAction Stop
+
+    $xmlText = [regex]::Replace(
+        $xmlText,
+        '(<LocalAccount[^>]*>\s*<Name>)[^<]*(</Name>)',
+        { param($m) "$($m.Groups[1].Value)$escapedUser$($m.Groups[2].Value)" },
+        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+    )
+    if ($xmlText -match '<DisplayName>') {
+        $xmlText = [regex]::Replace(
+            $xmlText,
+            '(<DisplayName>)[^<]*(</DisplayName>)',
+            { param($m) "$($m.Groups[1].Value)$escapedDisplay$($m.Groups[2].Value)" },
+            [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+        )
+    }
+    $xmlText = [regex]::Replace(
+        $xmlText,
+        '(<LocalAccount[\s\S]*?<Password>\s*<Value>)[^<]*(</Value>)',
+        { param($m) "$($m.Groups[1].Value)$escapedPassword$($m.Groups[2].Value)" },
+        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+    )
+    $xmlText = [regex]::Replace(
+        $xmlText,
+        '(<AutoLogon>[\s\S]*?<Username>)[^<]*(</Username>)',
+        { param($m) "$($m.Groups[1].Value)$escapedUser$($m.Groups[2].Value)" },
+        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+    )
+    $xmlText = [regex]::Replace(
+        $xmlText,
+        '(<AutoLogon>[\s\S]*?<Password>\s*<Value>)[^<]*(</Value>)',
+        { param($m) "$($m.Groups[1].Value)$escapedPassword$($m.Groups[2].Value)" },
+        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+    )
+    $xmlText = [regex]::Replace(
+        $xmlText,
+        '(net localgroup "Performance Monitor Users" )\w+( /add)',
+        { param($m) "$($m.Groups[1].Value)$escapedUser$($m.Groups[2].Value)" },
+        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+    )
+    $xmlText = $xmlText -replace 'User: analyst', "User: $escapedUser"
+
+    if (-not [string]::IsNullOrWhiteSpace($ComputerName)) {
+        $escapedComputer = [System.Security.SecurityElement]::Escape($ComputerName.Trim())
+        $xmlText = [regex]::Replace(
+            $xmlText,
+            '(<ComputerName>)[^<]*(</ComputerName>)',
+            { param($m) "$($m.Groups[1].Value)$escapedComputer$($m.Groups[2].Value)" },
+            [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+        )
+    }
+
+    Set-Content -LiteralPath $UnattendXmlPath -Value $xmlText -Encoding UTF8 -ErrorAction Stop
+}
+
 function Remove-UnattendInternationalSettings {
     <#
     .SYNOPSIS

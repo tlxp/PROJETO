@@ -1,18 +1,21 @@
 <#
 .SYNOPSIS
-    Primeira entrada na VM: valida PowerShell Direct/Guest Services,
-    garante isolamento de rede (sem adaptadores externos) e guarda snapshot CleanState.
+    Primeira entrada na VM: valida PowerShell Direct, instala Sysmon, garante isolamento
+    de rede (sem adaptadores externos) e guarda snapshot CleanState.
 .DESCRIPTION
     A correr NO HOST. Fluxo:
 
       [1/5] Parar VM (estado limpo)
       [2/5] Arrancar VM + aguardar PowerShell Direct
-      [3/5] Ativar Guest Service Interface
-      [4/5] Garantir isolamento: remover adaptadores em switches não-Internal e validar que não há internet
+      [3/5] Garantir isolamento: remover adaptadores em switches não-Internal
+      [4/5] Runtimes offline + Sysmon (telemetria primária)
       [5/5] Parar VM, criar/atualizar snapshot CleanState
+
+    Guest Services permanecem desactivados; transferências via PowerShell Direct.
 
     O snapshot final contém:
       - SEM qualquer adaptador externo -- só SandboxSwitch (Internal)
+      - Sysmon activo (serviço + canal de eventos)
       - Garantia de isolamento total da internet
 .EXAMPLE
     .\05-FirstTimeVmSetup.ps1
@@ -58,9 +61,9 @@ $FirstTimeLibDir = Join-Path $scriptRoot 'FirstTimeVmSetup'
 foreach ($phase in @(
     'PhaseA-PreCheck.ps1',
     'PhaseB-Boot.ps1',
-    'PhaseC-GuestService.ps1',
     'PhaseD-Isolation.ps1',
     'PhaseE-Runtimes.ps1',
+    'PhaseE2-Sysmon.ps1',
     'PhaseF-Snapshot.ps1',
     'PhaseG-Summary.ps1'
 )) {

@@ -7,8 +7,6 @@ comportamental/dinâmica** em sandbox de VM isolada.
 > Projeto desenvolvido no âmbito de uma licenciatura. Visa também ser uma ferramenta **educativa** de
 > análise de malware: além de detetar, explica o que cada função suspeita parece fazer.
 
-**Auditoria de segurança e qualidade (Jun 2026):** concluída a **100%** — ver [`docs/AUDITORIA.md`](docs/AUDITORIA.md) para o resumo das correções, checklist de deploy e testes.
-
 ---
 
 ## Índice
@@ -17,7 +15,7 @@ comportamental/dinâmica** em sandbox de VM isolada.
 - [Arquitetura e componentes](#arquitetura-e-componentes)
 - [Estrutura do repositório](#estrutura-do-repositório)
 - [Início rápido](#início-rápido)
-- [Segurança e configuração](#segurança-e-configuração)
+- [Segurança e configuração](#segurança-e-configuração) · [`docs/SEGURANCA.md`](docs/SEGURANCA.md)
 - [Auditoria e qualidade](#auditoria-e-qualidade)
 - [Testes e CI](#testes-e-ci)
 - [Módulos de análise](#módulos-de-análise)
@@ -52,11 +50,13 @@ recebe relatórios detalhados a partir de um único ecossistema de ferramentas.
 |------------|-------|-------|-----------|
 | **Backend** | [`backend/`](backend/README.md) | Python · FastAPI | API e pipeline de análise (estática + orquestração da dinâmica). |
 | **Frontend** | [`frontend/`](frontend/README.md) | React · Vite · TS | Interface web *Drop & Analyze* (upload, relatórios, pseudo-C, IL, xrefs). |
-| **Desktop** | `wpf-gui/` | .NET 8 · WPF | App `RatAnalyzer.Desktop`: ponto de entrada gráfico, bootstrap de dependências e VM. |
-| **VM Agent** | `vm-agent/` | .NET 8 · Minimal API | Agent HTTP que corre dentro da VM sandbox (upload/run/report). |
+| **Desktop** | [`wpf-gui/`](wpf-gui/README.md) | .NET 8 · WPF | App `RatAnalyzer.Desktop`: ponto de entrada gráfico, bootstrap de dependências e VM. |
+| **GUI Tkinter** *(opcional)* | [`backend/gui/`](backend/gui/README.md) | Python · Tkinter | Interface gráfica leve: arrastar `.cs`/`.exe` sem Node nem WPF. |
+| **VM Agent** | [`vm-agent/`](vm-agent/README.md) | .NET 8 · Minimal API | Agent HTTP que corre dentro da VM sandbox (upload/run/report). |
 | **Teste benigno** | [`benign-vm-test/`](benign-vm-test/README.md) | .NET 8 | Programa inofensivo para validar o pipeline da VM. |
+| **Exemplos .NET** *(opcional)* | [`programa/`](programa/README.md) | C# | Projetos de exemplo para testes manuais e fluxo *arrastar .cs → compilar*. |
 | **Sandbox Hyper-V** | [`scripts/hyperv-sandbox/`](scripts/hyperv-sandbox/README.md) | PowerShell | Automação Hyper-V: cria VM, executa amostra e devolve relatório por serial/Copy-VMFile. |
-| **Regras YARA** | `yara_rules/` | YARA | Assinaturas carregadas pelo scanner. |
+| **Regras YARA** | [`yara_rules/`](yara_rules/README.md) | YARA | Assinaturas carregadas pelo scanner. |
 | **Documentação** | [`docs/`](docs/README.md) | Markdown · PUML | Guias, especificações e diagramas. |
 
 ## Estrutura do repositório
@@ -70,21 +70,25 @@ PROJETO/
 │   ├── vm_orchestrator.py   #   Orquestração da análise dinâmica (escolhe driver)
 │   ├── modules/             #   Analisadores (static, yara, deobfuscator, decompilers, scoring…)
 │   ├── vm_drivers/          #   Drivers dinâmicos (stub, hyperv, proxmox)
+│   ├── gui/                 #   GUI Tkinter opcional - ver backend/gui/README.md
 │   └── tests/               #   Testes (pytest)
 ├── frontend/                # Interface web React/Vite
-├── wpf-gui/                 # App desktop WPF (.NET 8)
-├── vm-agent/                # Agent HTTP (.NET 8) para correr dentro da VM
-├── benign-vm-test/          # Programa .NET benigno para validar o pipeline da VM
-├── scripts/hyperv-sandbox/  # Automação PowerShell Hyper-V (scripts numerados 00–07)
+├── wpf-gui/                 # App desktop WPF (.NET 8) - ver wpf-gui/README.md
+├── vm-agent/                # Agent HTTP (.NET 8) na VM - ver vm-agent/README.md
+├── benign-vm-test/          # Programa .NET benigno + BenignVmTest.Tests (xUnit)
+├── programa/                # Projetos .NET de exemplo (MeuExemplo na solução)
+│   └── MeuExemplo/
+├── scripts/hyperv-sandbox/  # Automação PowerShell Hyper-V (scripts numerados 00-07)
 ├── yara_rules/              # Regras YARA (.yar)
 ├── docs/                    # Documentação, especificações e diagramas PUML
-├── RatAnalyzer.sln          # Solução .NET (wpf-gui + vm-agent + benign-vm-test)
+├── relatório/               # LaTeX académico — ver relatório/README.md
+├── RatAnalyzer.sln          # Solução .NET (WPF, vm-agent, benign-vm-test, MeuExemplo)
 └── README.md
 ```
 
-> **Artefactos de runtime** (jobs, base de dados SQLite, `reports/`, `decompiled/`) **não** ficam no
+> **Artefatos de runtime** (jobs, base de dados SQLite, `reports/`, decompilados) **não** ficam no
 > repositório: são guardados sob `DATA_DIR` (por defeito `%LOCALAPPDATA%\RatAnalyzer`, com override via
-> `RATANALYZER_DATA_DIR`). Ver `backend/config.py`.
+> `RATANALYZER_DATA_DIR`). A pasta `decompiled/` na raiz do repo, se existir, é legado - ver `backend/config.py`.
 
 ---
 
@@ -94,19 +98,19 @@ PROJETO/
 
 - **Python 3.10+** (backend e CLI)
 - **Node.js 18+** e **npm** (frontend)
-- **.NET 8 SDK** (desktop WPF, VM agent) — opcional
-- **YARA** instalado no sistema (para o scanner) — [releases](https://github.com/VirusTotal/yara/releases)
-- **Ghidra 12+** + `GHIDRA_INSTALL_DIR` (pseudo-C de binários nativos) — opcional
+- **.NET 8 SDK** (desktop WPF, VM agent) - opcional
+- **YARA** instalado no sistema (para o scanner) - [releases](https://github.com/VirusTotal/yara/releases)
+- **Ghidra 12+** + `GHIDRA_INSTALL_DIR` (pseudo-C de binários nativos) - opcional
 
 ### Interface web (recomendado)
 
 ```bash
-# 1) Backend (API FastAPI) — recomendado bind local
+# 1) Backend (API FastAPI) - recomendado bind local
 cd backend
 pip install --require-hashes -r requirements.lock
 uvicorn api:app --reload --host 127.0.0.1 --port 8000
 
-# 2) Frontend (noutro terminal) — Vite na porta 8080
+# 2) Frontend (noutro terminal) - Vite na porta 8080
 cd frontend
 npm i
 npm run dev
@@ -141,20 +145,23 @@ dotnet run --project wpf-gui
 
 Lance a app a partir da raiz do repositório (ou com `backend/` e `frontend/` resolvíveis em relação ao exe).
 
-### Limpar caches e artefactos
+### Limpar caches e artefatos
 
 ```bash
 python backend/clean.py           # use --dry-run para simular
 ```
 
-Remove apenas caches/artefactos gerados (`__pycache__/`, `.pytest_cache`, `*.pyc`, `bin/`, `obj/`,
-`decompiled/`); **não** apaga código fonte nem relatórios.
+Remove caches e artefatos gerados (`__pycache__/`, `.pytest_cache`, `*.pyc`, `programa/**/bin|obj`,
+decompilados em `DATA_DIR` e legado `decompiled/` na raiz); **não** apaga código fonte nem relatórios
+em `DATA_DIR/reports/`.
 
 ---
 
 ## Segurança e configuração
 
 > **Uso local/educativo.** Não exponha o backend nem o vm-agent à Internet sem autenticação e isolamento.
+
+**Arquitetura de segurança (estrutura completa):** [`docs/SEGURANCA.md`](docs/SEGURANCA.md) - zonas de confiança, auth por componente, uploads, sandbox e checklist.
 
 **Produção:** gere segredos com `.\scripts\generate-production-secrets.ps1` e siga [`docs/production-secrets.md`](docs/production-secrets.md). Com `RATANALYZER_ENV=production` ou `RATANALYZER_REQUIRE_API_TOKEN=1`, o backend exige `RATANALYZER_API_TOKEN` no arranque.
 
@@ -168,63 +175,25 @@ Remove apenas caches/artefactos gerados (`__pycache__/`, `.pytest_cache`, `*.pyc
 | `PROJETOVM_GuestPassword` | Scripts Hyper-V | **Obrigatório** (exceto dev com `PROJETOVM_ALLOW_INSECURE_DEFAULTS=1`). |
 | `PROJETOVM_BasePath` | Scripts Hyper-V / WPF | Pasta raiz do sandbox (default `D:\PROJETOVM`). |
 
-**Pipelines dinâmicas (independentes):**
-
-1. **Backend Python** → driver `hyperv`/`proxmox` → **vm-agent HTTP** dentro da VM.
-2. **App WPF** → scripts **`04-Run-Sample.ps1`** → relatório por **COM1 / Named Pipe** (+ fallback `Copy-VMFile`).
-
-Documentação detalhada: [`backend/README.md`](backend/README.md), [`scripts/hyperv-sandbox/README.md`](scripts/hyperv-sandbox/README.md), [`docs/production-secrets.md`](docs/production-secrets.md).
+**Pipelines dinâmicas:** ver [`docs/README.md`](docs/README.md#análise-dinâmica--qual-caminho-usar). Segredos: [`docs/production-secrets.md`](docs/production-secrets.md). Estrutura: [`docs/SEGURANCA.md`](docs/SEGURANCA.md).
 
 ---
 
 ## Auditoria e qualidade
 
-A auditoria completa do repositório (segurança, robustez, qualidade de código e documentação) foi **remediada na íntegra** em Jun 2026.
-
-| Área | Estado | Destaques |
-|------|--------|-----------|
-| Backend API | ✅ | Auth em produção, uploads seguros, worker RQ, locks `requirements*.lock` |
-| Frontend | ✅ | TS strict, hooks com `AbortController`, Error Boundaries, testes Vitest |
-| WPF / vm-agent | ✅ | MVVM, SHA-256 em downloads, bind local, token obrigatório no agent |
-| Sandbox Hyper-V | ✅ | Isolamento de rede por run, cleanup `try/finally`, UTF-8 CI |
-| YARA | ✅ | Regras v2 correlacionadas + testes de compilação |
-
-Relatório completo: **[`docs/AUDITORIA.md`](docs/AUDITORIA.md)**.
+Remediação concluída (Jun 2026) - [`docs/AUDITORIA.md`](docs/AUDITORIA.md) · segurança estrutural ★★★★★ - [`docs/SEGURANCA.md`](docs/SEGURANCA.md) · deploy: [`docs/production-secrets.md`](docs/production-secrets.md).
 
 ---
 
 ## Testes e CI
 
-```bash
-# Backend
-pip install --require-hashes -r backend/requirements.lock
-pip install --require-hashes -r backend/requirements-dev.lock
-python -m pytest backend/tests -q
-
-# Frontend
-cd frontend && npm run test && npm run build
-
-# .NET
-dotnet build RatAnalyzer.sln -c Release
-```
-
-CI automático (GitHub Actions): `.github/workflows/ci.yml`:
-
-| Job | O que valida |
-|-----|----------------|
-| **backend** | `pip install --require-hashes` a partir de `requirements.lock`; **61** testes pytest; diff de locks |
-| **frontend** | `npm ci`, lint, typecheck, **29** testes Vitest, build |
-| **dotnet** | Build `RatAnalyzer.sln` (WPF + vm-agent + benign-vm-test) |
-| **ps1-encoding** | UTF-8 BOM nos scripts PowerShell |
-| **powershell** | Sintaxe dos `.ps1` no Windows |
-
-Ver também [`docs/ps1-scripts.md`](docs/ps1-scripts.md) e [`docs/AUDITORIA.md`](docs/AUDITORIA.md).
+Comandos e convenções: [`CONTRIBUTING.md`](CONTRIBUTING.md). CI: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (66 pytest · 37 Vitest · 48 xUnit · PowerShell UTF-8 · diagramas).
 
 ---
 
 ## Módulos de análise
 
-Todos os analisadores estão em [`backend/modules/`](backend/README.md). Resumo:
+Todos os analisadores estão em `backend/modules/` - ver [README do backend](backend/README.md#estrutura). Resumo:
 
 | Módulo | Função |
 |--------|--------|
@@ -244,7 +213,7 @@ Todos os analisadores estão em [`backend/modules/`](backend/README.md). Resumo:
 
 ## Scoring de risco
 
-O score (0–100) agrega múltiplos fatores:
+O score (0-100) agrega múltiplos fatores:
 
 | Fator | Peso | | Fator | Peso |
 |-------|:----:|-|-------|:----:|
@@ -255,39 +224,37 @@ O score (0–100) agrega múltiplos fatores:
 | Indicadores de stealer | 15 | | | |
 | Técnicas de evasão | 15 | | | |
 
-**Níveis:** `80–100` CRÍTICO · `60–79` ALTO · `40–59` MÉDIO · `20–39` BAIXO · `0–19` MUITO BAIXO
+**Níveis:** `80-100` CRÍTICO · `60-79` ALTO · `40-59` MÉDIO · `20-39` BAIXO · `0-19` MUITO BAIXO
 
 ---
 
 ## Análise dinâmica (sandbox)
 
-A análise comportamental corre numa **VM isolada (sem internet)**, a partir de um snapshot limpo. Há dois
-caminhos suportados:
+VM isolada (sem internet), snapshot limpo. Dois caminhos independentes - **tabela de escolha e guias:** [`docs/README.md`](docs/README.md#análise-dinâmica--qual-caminho-usar).
 
-- **Driver `hyperv`/`proxmox` + VM Agent (HTTP)** — o orquestrador (`backend/vm_orchestrator.py`) escolhe o
-  driver por `SANDBOX_VM_DRIVER`. Por defeito usa `stub` (seguro, não executa nada).
-- **Fluxo serial PowerShell** ([`scripts/hyperv-sandbox/`](scripts/hyperv-sandbox/README.md)) — cria a VM,
-  executa a amostra e devolve o relatório por Named Pipe (COM1) e/ou `Copy-VMFile`, sem rede nem agent.
+```mermaid
+flowchart TD
+    START([Preciso de análise dinâmica?]) --> VM{Tenho VM Hyper-V<br/>configurada?}
+    VM -->|Não| STUB["Driver stub (default)<br/>valida fluxo sem executar"]
+    VM -->|Sim| WHO{Quem orquestra?}
+    WHO -->|Webapp / API FastAPI| A["Caminho A - vm-agent HTTP<br/>SANDBOX_VM_DRIVER=hyperv"]
+    WHO -->|App WPF ou scripts PS1| B["Caminho B - PowerShell serial<br/>04-Run-Sample.ps1"]
+    A --> AGENT["Telemetria básica via vm-agent<br/>VM Gen1 ou Gen2"]
+    B --> SERIAL["Telemetria completa<br/>ficheiros, registry, rede<br/>VM Gen1 obrigatório"]
+    START --> PROX{"Driver proxmox?"}
+    PROX -->|Sim| WARN["Experimental - sem guia<br/>use hyperv ou Caminho B"]
+```
 
-O guia completo (criar a VM no Hyper-V de raiz, variáveis de ambiente, endpoints e protocolo do VM Agent)
-está em **[`docs/sandbox-hyperv-setup.md`](docs/sandbox-hyperv-setup.md)**.
+- **Caminho A** - backend + vm-agent HTTP (`SANDBOX_VM_DRIVER=hyperv`; default `stub` não executa amostras).
+- **Caminho B** - WPF / `04-Run-Sample.ps1` (telemetria comportamental completa).
+
+FAQ: [`docs/faq.md`](docs/faq.md) · diagnóstico Caminho B: [`scripts/hyperv-sandbox/TROUBLESHOOTING.md`](scripts/hyperv-sandbox/TROUBLESHOOTING.md).
 
 ---
 
 ## Documentação
 
-| Documento | Conteúdo |
-|-----------|----------|
-| [`docs/AUDITORIA.md`](docs/AUDITORIA.md) | **Auditoria concluída (100%)** — resumo, checklist de deploy, testes |
-| [`docs/production-secrets.md`](docs/production-secrets.md) | Segredos e modo produção (`RATANALYZER_API_TOKEN`, etc.) |
-| [`docs/README.md`](docs/README.md) | Índice (dois caminhos dinâmicos, arquivo histórico) |
-| [`docs/sandbox-hyperv-setup.md`](docs/sandbox-hyperv-setup.md) | **Caminho A:** VM Agent + driver `hyperv` |
-| [`docs/ESPECIFICACOES-ARQUITETURA-VM-DOCKER.md`](docs/ESPECIFICACOES-ARQUITETURA-VM-DOCKER.md) | Desenho alternativo Linux+Docker (não implementado) |
-| [`docs/archive/PROJECT_ANALYSIS_DOCUMENT.md`](docs/archive/PROJECT_ANALYSIS_DOCUMENT.md) | Documento histórico de desenho |
-| [`docs/diagrams/`](docs/diagrams/) | Diagramas PUML |
-| [`scripts/hyperv-sandbox/README.md`](scripts/hyperv-sandbox/README.md) | **Caminho B:** pipeline PowerShell serial |
-| [`scripts/hyperv-sandbox/SERIAL_REPORT_PROTOCOL.md`](scripts/hyperv-sandbox/SERIAL_REPORT_PROTOCOL.md) | Protocolo `START_OF_REPORT` (implementado) |
-| [`yara_rules/README.md`](yara_rules/README.md) | Regras YARA heurísticas (educativas) |
+**Índice completo:** [`docs/README.md`](docs/README.md) · [`CONTRIBUTING.md`](CONTRIBUTING.md) · relatório académico [`relatório/main.tex`](relatório/main.tex) (co-localizado com o código; diagramas fonte em `docs/diagrams/`).
 
 ---
 
@@ -300,6 +267,7 @@ está em **[`docs/sandbox-hyperv-setup.md`](docs/sandbox-hyperv-setup.md)**.
 - Afinamento fino das regras YARA por família de malware requer amostras reais no laboratório.
 
 **Roadmap**
+- [x] Explicações assistidas por IA no frontend (Google Gemini - opcional, client-side)
 - [ ] Integração com IDA (Ghidra já integrado)
 - [ ] Deobfuscação avançada
 - [ ] Telemetria dinâmica avançada no vm-agent (Sysmon/ETW/hooking) e enriquecimento de `dynamicReport`
@@ -311,4 +279,4 @@ está em **[`docs/sandbox-hyperv-setup.md`](docs/sandbox-hyperv-setup.md)**.
 
 ## Licença
 
-[MIT](LICENSE) — projeto desenvolvido no âmbito académico (licenciatura). Sugestões e melhorias são bem-vindas.
+[MIT](LICENSE) - projeto desenvolvido no âmbito académico (licenciatura). Sugestões e melhorias são bem-vindas - ver [`CONTRIBUTING.md`](CONTRIBUTING.md).

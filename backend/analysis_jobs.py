@@ -810,7 +810,7 @@ def summarize_c_code_payload(
 
     header = (
         f"// [RESUMO] Código truncado para o payload ({len(c_code)} > {max_chars} chars). "
-        "O artefacto completo está em disco no diretório do job.\n"
+        "O artefato completo está em disco no diretório do job.\n"
     )
 
     if windows:

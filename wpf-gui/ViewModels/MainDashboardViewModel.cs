@@ -1,7 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using System.Windows.Input;
-using RatAnalyzer.Desktop;
+using RatAnalyzer.Desktop.Infrastructure;
 using RatAnalyzer.Desktop.Services;
 
 namespace RatAnalyzer.Desktop.ViewModels;
@@ -14,6 +14,8 @@ public sealed class MainDashboardViewModel : ViewModelBase
     private bool _showOptions;
     private string? _selectedFilePath;
     private bool _runFirstTimeVmSetup;
+    private bool _vmWaitForSampleExit = true;
+    private int _vmSampleTimeoutSeconds = 120;
     private bool _isAnalysisBusy;
     private string _staticStatusText = "";
     private bool _showStaticStatus;
@@ -48,6 +50,18 @@ public sealed class MainDashboardViewModel : ViewModelBase
     {
         get => _runFirstTimeVmSetup;
         set => SetProperty(ref _runFirstTimeVmSetup, value);
+    }
+
+    public bool VmWaitForSampleExit
+    {
+        get => _vmWaitForSampleExit;
+        set => SetProperty(ref _vmWaitForSampleExit, value);
+    }
+
+    public int VmSampleTimeoutSeconds
+    {
+        get => _vmSampleTimeoutSeconds;
+        set => SetProperty(ref _vmSampleTimeoutSeconds, Math.Clamp(value, 5, 7200));
     }
 
     public bool IsAnalysisBusy
@@ -216,7 +230,7 @@ public sealed class MainDashboardViewModel : ViewModelBase
             return;
         }
 
-        _dialogs.OpenVmAnalysis(_selectedFilePath, RunFirstTimeVmSetup);
+        _dialogs.OpenVmAnalysis(_selectedFilePath, RunFirstTimeVmSetup, VmSampleTimeoutSeconds, VmWaitForSampleExit);
     }
 
     private void OpenResults()

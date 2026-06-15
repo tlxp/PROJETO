@@ -2,8 +2,8 @@
 .SYNOPSIS
     Lança Run-MalwareAnalysis.ps1 num processo PowerShell separado (guest).
 .DESCRIPTION
-    O host copia launch_params.json e invoca este script via PowerShell Direct com
-    Start-Process, para evitar scriptblocks remotos grandes e instáveis.
+    Usa cmd.exe "start /B" para criar um processo independente da sessão PowerShell Direct.
+    Só reporta ok=true quando guest_alive.txt aparece (Run-MalwareAnalysis arrancou de facto).
 #>
 [CmdletBinding()]
 param(
@@ -64,6 +64,41 @@ function Write-LaunchStatusFile {
     } catch { }
 }
 
+function Format-CmdArgument {
+    param([string] $Value)
+    if ($null -eq $Value) { return '""' }
+    $s = [string]$Value
+    if ($s.Length -eq 0) { return '""' }
+    if ($s -match '[\s"&|^<>()]') {
+        return '"' + ($s -replace '"', '""') + '"'
+    }
+    return $s
+}
+
+function Wait-ForGuestAliveFile {
+    param(
+        [Parameter(Mandatory = $true)][string] $AlivePath,
+        [int] $TimeoutSeconds = 25
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-Path -LiteralPath $AlivePath) {
+            try {
+                $line = Get-Content -LiteralPath $AlivePath -TotalCount 1 -ErrorAction Stop
+                if ($line -match 'pid=(\d+)') {
+                    return [int]$Matches[1]
+                }
+                return $PID
+            } catch {
+                return $PID
+            }
+        }
+        Start-Sleep -Milliseconds 400
+    }
+    return 0
+}
+
 $workDir = "C:\analysis_work"
 try {
     if (-not (Test-Path -LiteralPath $ConfigPath)) {
@@ -86,83 +121,93 @@ try {
         $workDir = Split-Path -Parent $scriptFile
     }
     if ([string]::IsNullOrWhiteSpace($workDir)) { $workDir = "C:\analysis_work" }
+    if (-not (Test-Path -LiteralPath $workDir)) {
+        New-Item -ItemType Directory -Path $workDir -Force | Out-Null
+    }
 
     $psExe = Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\powershell.exe"
     if (-not (Test-Path -LiteralPath $psExe)) {
         $psExe = "powershell.exe"
     }
 
-    $argList = New-Object System.Collections.Generic.List[string]
-    [void]$argList.Add("-NoProfile")
-    [void]$argList.Add("-ExecutionPolicy"); [void]$argList.Add("Bypass")
-    [void]$argList.Add("-File");            [void]$argList.Add($scriptFile)
-    [void]$argList.Add("-SamplePath");     [void]$argList.Add((Get-LaunchConfigString -Config $cfg -Name "SamplePath"))
-    [void]$argList.Add("-TimeoutSeconds"); [void]$argList.Add((Get-LaunchConfigString -Config $cfg -Name "TimeoutSeconds"))
-    [void]$argList.Add("-SampleHash");    [void]$argList.Add((Get-LaunchConfigString -Config $cfg -Name "SampleHash"))
-    [void]$argList.Add("-ExecutionMode"); [void]$argList.Add((Get-LaunchConfigString -Config $cfg -Name "ExecutionMode"))
+    $timeoutKill = Get-LaunchConfigBool -Config $cfg -Name "SampleTimeoutKill"
+    if (-not $timeoutKill) {
+        # Compatibilidade com launch_params.json antigos.
+        $waitExitVal = Get-LaunchConfigProperty -Config $cfg -Name "WaitForSampleExit"
+        if ($null -ne $waitExitVal) { $timeoutKill = -not [bool]$waitExitVal }
+    }
+
+    $psArgs = @(
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", $scriptFile,
+        "-SamplePath", (Get-LaunchConfigString -Config $cfg -Name "SamplePath"),
+        "-TimeoutSeconds", (Get-LaunchConfigString -Config $cfg -Name "TimeoutSeconds"),
+        "-SampleHash", (Get-LaunchConfigString -Config $cfg -Name "SampleHash"),
+        "-ExecutionMode", (Get-LaunchConfigString -Config $cfg -Name "ExecutionMode"),
+        "-WorkingDirectory", [string]$workDir
+    )
+    if ($timeoutKill) { $psArgs += "-SampleTimeoutKill" }
 
     $sampleArgsVal = Get-LaunchConfigString -Config $cfg -Name "SampleArguments"
     if ($sampleArgsVal.Length -gt 0) {
-        [void]$argList.Add("-SampleArguments")
-        [void]$argList.Add($sampleArgsVal)
+        $psArgs += @("-SampleArguments", $sampleArgsVal)
     }
-
-    [void]$argList.Add("-WorkingDirectory"); [void]$argList.Add([string]$workDir)
 
     $dllVal = Get-LaunchConfigString -Config $cfg -Name "DllExport"
     if ($dllVal.Length -gt 0) {
-        [void]$argList.Add("-DllExport")
-        [void]$argList.Add($dllVal)
+        $psArgs += @("-DllExport", $dllVal)
     }
 
-    $requireSysmon = Get-LaunchConfigBool -Config $cfg -Name "RequireSysmon"
-    $captureWpr = Get-LaunchConfigBool -Config $cfg -Name "CaptureWpr"
-
-    if ($requireSysmon) { [void]$argList.Add("-RequireSysmon") }
-    if ($captureWpr) { [void]$argList.Add("-CaptureWpr") }
+    if (Get-LaunchConfigBool -Config $cfg -Name "RequireSysmon") { $psArgs += "-RequireSysmon" }
+    if (Get-LaunchConfigBool -Config $cfg -Name "CaptureWpr") { $psArgs += "-CaptureWpr" }
     $hostRunIdVal = Get-LaunchConfigString -Config $cfg -Name "HostRunId"
     if ($hostRunIdVal.Length -gt 0) {
-        [void]$argList.Add("-HostRunId")
-        [void]$argList.Add($hostRunIdVal)
+        $psArgs += @("-HostRunId", $hostRunIdVal)
     }
 
-    for ($ai = $argList.Count - 1; $ai -ge 0; $ai--) {
-        if ($null -eq $argList[$ai]) { throw "Lista de ArgumentList contém entrada nula na posição $ai." }
-        if (([string]$argList[$ai]).Length -eq 0) { throw "Lista de ArgumentList contém entrada vazia na posição $ai." }
+    foreach ($ai in 0..($psArgs.Count - 1)) {
+        if ($null -eq $psArgs[$ai]) { throw "ArgumentList contém entrada nula na posição $ai." }
+        if (([string]$psArgs[$ai]).Length -eq 0) { throw "ArgumentList contém entrada vazia na posição $ai." }
     }
 
-    $argArr = $argList.ToArray()
-    if (-not $argArr -or $argArr.Length -eq 0) {
-        throw "ArgumentList ficou vazia (unexpected)."
+    $launchLog = Join-Path $workDir "analysis_launch.log"
+    $alivePath = Join-Path $workDir "guest_alive.txt"
+
+    try { if (Test-Path -LiteralPath $alivePath) { Remove-Item -LiteralPath $alivePath -Force -ErrorAction SilentlyContinue } } catch { }
+    try { if (Test-Path -LiteralPath $launchLog) { Remove-Item -LiteralPath $launchLog -Force -ErrorAction SilentlyContinue } } catch { }
+
+    Set-Content -LiteralPath (Join-Path $workDir "launch_cmdline.txt") -Value @(
+        "ps=$psExe $($psArgs -join ' ')"
+        "started_at=$(Get-Date -Format 'yyyy-MM-ddTHH:mm:ssK')"
+    ) -Encoding UTF8
+
+    # Start-Process evita quoting frágil de cmd.exe start /B.
+    $proc = Start-Process -FilePath $psExe -ArgumentList $psArgs -WorkingDirectory $workDir `
+        -WindowStyle Hidden -PassThru
+
+    $detachedPid = Wait-ForGuestAliveFile -AlivePath $alivePath -TimeoutSeconds 25
+    if ($detachedPid -le 0) {
+        $tail = ""
+        if (Test-Path -LiteralPath $launchLog) {
+            $tail = (Get-Content -LiteralPath $launchLog -Tail 5 -ErrorAction SilentlyContinue) -join ' | '
+        }
+        throw "Run-MalwareAnalysis não arrancou (sem guest_alive.txt em 25s). Log: $tail"
     }
 
-    # NOTA: Usar ProcessStartInfo em vez de Start-Process -WindowStyle Hidden.
-    # Sob PowerShell Direct (VMBus), não há sessão interativa/window station,
-    # por isso -WindowStyle Hidden pode lançar exceção Win32 e matar o processo
-    # PS Direct, causando "The Hyper-V socket target process has ended."
-    # ProcessStartInfo com CreateNoWindow=$true não toca na window station.
-    $psi2 = New-Object System.Diagnostics.ProcessStartInfo
-    $psi2.FileName         = $psExe
-    # Reconstruir argList como string para ProcessStartInfo
-    $argStr = ($argList | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } }) -join ' '
-    $psi2.Arguments        = $argStr
-    $psi2.WorkingDirectory = $workDir
-    $psi2.UseShellExecute  = $false
-    $psi2.CreateNoWindow   = $true
-
-    $p = [System.Diagnostics.Process]::Start($psi2)
-    if (-not $p) { throw "Process.Start não devolveu processo." }
-
-    # Breve pausa para o processo filho estabilizar antes de fechar o pipe VMBus.
-    Start-Sleep -Seconds 1
+    $stillRunning = $null -ne (Get-Process -Id $detachedPid -ErrorAction SilentlyContinue)
+    if (-not $stillRunning) {
+        throw "Processo de análise (pid=$detachedPid) terminou logo após guest_alive.txt"
+    }
 
     $launchInfo = @{
         ok = $true
-        detached_pid = $p.Id
+        detached_pid = $detachedPid
         analysis_script = $scriptFile
         launcher = $PSCommandPath
         config = $ConfigPath
         launched_at = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssK")
+        launch_method = "start_process"
     }
     Write-LaunchStatusFile -WorkDir $workDir -Payload $launchInfo
     $launchInfo | ConvertTo-Json -Compress
