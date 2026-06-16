@@ -11,7 +11,9 @@
 | Validar fluxo sem VM | `stub` | Backend (seguro) | [`../backend/README.md`](../backend/README.md) |
 | Smoke test na VM (sem telemetria) | **A** + benign-vm-test | vm-agent | [`../benign-vm-test/README.md`](../benign-vm-test/README.md) |
 
-Os caminhos A e B são **independentes** (HTTP vs PsDirect/Copy-VMFile). Ambos usam Hyper-V com switch Internal; o Caminho B não exige Gen1 (só o setup default em `_Config.ps1` usa Gen1).
+Os caminhos A e B são **independentes** na orquestração (HTTP vs PsDirect/Copy-VMFile), mas o **Caminho B** publica o relatório VM no backend via `POST /api/analysis/upload_dynamic`, permitindo reutilizar o mesmo `jobId` da análise estática e visualizar ambos os relatórios em `/analysis/{jobId}`.
+
+![Comparação Caminho A vs B](../relatório/imagens/fig-4-7-sandbox-paths.png) · fonte [`diagrams/sandbox-paths-comparison.puml`](diagrams/sandbox-paths-comparison.puml)
 
 > **Driver `proxmox` (experimental - não usar em produção):** skeleton em
 > `backend/vm_drivers/proxmox.py` (Caminho A via vm-agent HTTP). **Sem guia de configuração**, sem testes de
@@ -30,13 +32,10 @@ Os caminhos A e B são **independentes** (HTTP vs PsDirect/Copy-VMFile). Ambos u
 | [`../scripts/hyperv-sandbox/TROUBLESHOOTING.md`](../scripts/hyperv-sandbox/TROUBLESHOOTING.md) | Diagnóstico sandbox (Caminho B) |
 | [`../scripts/hyperv-sandbox/SERIAL_REPORT_PROTOCOL.md`](../scripts/hyperv-sandbox/SERIAL_REPORT_PROTOCOL.md) | Transferência de relatório (PsDirect + SHA256) |
 | [`faq.md`](faq.md) | Perguntas frequentes |
-| [`AUDITORIA.md`](AUDITORIA.md) | Auditoria de segurança (Jun 2026) |
 | [`ps1-scripts.md`](ps1-scripts.md) | UTF-8 BOM e idioma dos `.ps1` |
 | [`diagrams/README.md`](diagrams/README.md) | Diagramas PlantUML (fonte única) |
 | [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | Testes, convenções, contribuição |
 | [`../CHANGELOG.md`](../CHANGELOG.md) | Histórico de alterações |
-
-Documentação obsoleta: mover para [`archive/`](archive/README.md) com aviso `⚠ Documento arquivado` no topo.
 
 ## Componentes
 

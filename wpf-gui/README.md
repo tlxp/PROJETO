@@ -20,8 +20,8 @@ Visão geral: [README principal](../README.md) · sandbox: [`scripts/hyperv-sand
 
 | Fluxo | O que faz |
 |-------|-----------|
-| **Análise estática** | Envia a amostra ao backend FastAPI, obtém `jobId` e abre o browser em `http://localhost:8080/resultados?jobId=…`. |
-| **Análise comportamental** | Orquestra `scripts/hyperv-sandbox/` (`04-Run-Sample.ps1`): restore snapshot → execução na VM → cópia do relatório (PsDirect) com verificação SHA256. |
+| **Análise estática** | Envia a amostra ao backend FastAPI, obtém `jobId` e abre o browser em `http://localhost:8080/analysis/{jobId}`. |
+| **Análise comportamental** | Orquestra `scripts/hyperv-sandbox/` (`04-Run-Sample.ps1`), publica o relatório no backend via `POST /api/analysis/upload_dynamic` e abre o frontend no **mesmo `jobId`** se a amostra tiver sido analisada estaticamente antes. |
 | **Arranque integrado** | `StartupSequence` verifica ou inicia uvicorn (porta **8000**) e `npm run dev` (porta **8080**). |
 | **Bootstrap de dependências** | Instala/valida Python, npm, Ghidra, ILSpy, Java e ADK do sandbox (verificação SHA-256 opcional). |
 | **Manutenção de storage** | Janela para estimar/limpar artefatos do backend (`/api/storage/*`). |
@@ -68,11 +68,12 @@ dotnet publish wpf-gui -c Release -r win-x64 --self-contained false
 1. Arranque a app (como Administrador). `LoadingView` → `StartupSequence` (dependências + backend + frontend).
 2. No dashboard, **arraste** um `.exe` ou `.dll`.
 3. Escolha:
-   - **Análise estática** - submete ao backend e abre o browser nos resultados.
-   - **Análise comportamental** - abre `VmAnalysisWindow` com log do pipeline Hyper-V.
+   - **Análise estática** - submete ao backend e abre o browser nos resultados (`/analysis/{jobId}`).
+   - **Análise comportamental** - executa na VM, envia o relatório para o backend e abre o browser. Se a mesma amostra já tiver job estático, reutiliza esse `jobId`.
 4. Opções avançadas (VM): primeira entrada (`05-FirstTimeVmSetup.ps1`), timeout da amostra, esperar saída do processo.
 
-**Relatórios comportamentais:** `D:\PROJETOVM\Reports\` (ou `PROJETOVM_BasePath`).
+**Relatórios no frontend:** coluna *Relatório* dividida horizontalmente (estático + VM) quando ambos existem.
+**Cópia local na VM:** `D:\PROJETOVM\Reports\` (ou `PROJETOVM_BasePath`).
 **Validação sem malware:** [`benign-vm-test`](../benign-vm-test/README.md).
 
 ## Credenciais do guest

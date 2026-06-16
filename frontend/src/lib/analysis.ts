@@ -29,6 +29,14 @@ export type AnalysisResult = {
   flaggedIndicators?: string[];
   /** Resumo opcional de análise dinâmica (quando existir). */
   dynamicSummary?: string | null;
+  /** Relatório textual completo da análise na VM (Caminho B — Hyper-V). */
+  vmReport?: string | null;
+  /** True quando a análise dinâmica está em curso mas o relatório ainda não chegou. */
+  dynamicPending?: boolean;
+  /** True quando a análise estática está em curso mas o relatório ainda não chegou. */
+  staticPending?: boolean;
+  /** Progresso Ghidra (0–100) publicado pelo WPF durante análise estática. */
+  staticProgress?: number | null;
   /** Funções suspeitas com ranges exatos no pseudo-C (vindo do backend). */
   flaggedFunctions?: FlaggedFunction[];
   /** Caminho do ficheiro com trechos obfuscados extraídos (quando existir). */
@@ -41,7 +49,7 @@ export type AnalysisResult = {
 
 export type AnalysisMode = "static" | "dynamic" | "both";
 
-export type ExpandedPanel = "c" | "il" | "report" | null;
+export type ExpandedPanel = "c" | "il" | "report" | "report-static" | "report-vm" | null;
 
 export type ReportCategory = {
   /** Linha de resumo, ex.: "Suspicious Imports: 3 ocorrências = 15/15 pontos" */
@@ -133,6 +141,9 @@ export function normalizeAnalysisResult(
     flaggedIndicators: filterStrings(r.flaggedIndicators),
     flaggedFunctions: normalizeFlaggedFunctions(r.flaggedFunctions),
     dynamicSummary: null,
+    vmReport: null,
+    dynamicPending: false,
+    staticPending: false,
     obfuscatedSnippetsFile:
       typeof r.obfuscatedSnippetsFile === "string" ? r.obfuscatedSnippetsFile : undefined,
     obfuscatedSnippetsDeobfuscatedFile:
@@ -141,6 +152,267 @@ export function normalizeAnalysisResult(
         : undefined,
     obfuscationIndicatorCount:
       typeof r.obfuscationIndicatorCount === "number" ? r.obfuscationIndicatorCount : undefined,
+    staticProgress:
+      typeof r.staticProgress === "number" && Number.isFinite(r.staticProgress)
+        ? r.staticProgress
+        : null,
+  };
+}
+
+const VM_REPORT_SEP_EQ = "=".repeat(80);
+const VM_REPORT_SEP_MAJOR = "-".repeat(80);
+const VM_REPORT_SEP_RESUMO = "-".repeat(40);
+
+function normalizeVmBulletLine(trimmed: string): string {
+  const body = trimmed.replace(/^[-•]\s*/, "").replace(/^\s{2}-\s*/, "");
+  return `- ${body}`;
+}
+
+function shouldVmLineBeBullet(trimmed: string): boolean {
+  if (/^[-•]\s/.test(trimmed) || /^\s{2}-\s/.test(trimmed)) return true;
+  if (/^[\+\-~]/.test(trimmed)) return true;
+  return /^(Foi (?:criado|modificado|removido|observado|detetado)|Application Error:|WER:|SideBySide:)/i.test(
+    trimmed
+  );
+}
+
+function extractVmBehaviorCounts(lines: string[]): {
+  files: number;
+  processes: number;
+  registry: number;
+  network: string;
+} {
+  let files = 0;
+  let processes = 0;
+  let registry = 0;
+  let network = "N/D";
+  for (const line of lines) {
+    const t = line.trim();
+    if (/^Foi (?:criado|modificado|removido) o ficheiro:/i.test(t)) files++;
+    if (/^Foi (?:criado|observado) o processo:/i.test(t)) processes++;
+    if (/^[\+\-~]/.test(t)) registry++;
+    if (/Foram observadas (?:diferenças nas conexões|alterações nas conexões)/i.test(t)) {
+      network = "alterada";
+    }
+    if (/Não foram detetadas alterações nas conexões/i.test(t)) network = "sem alterações";
+  }
+  return { files, processes, registry, network };
+}
+
+function extractVmScoringLines(lines: string[]): string[] {
+  const out: string[] = [];
+  for (const line of lines) {
+    const t = line.trim();
+    if (/^Score total \(0-100\):/i.test(t)) {
+      out.push(t.replace(/^Score total \(0-100\):/i, "Score:"));
+    } else if (/^Score total \(bruto\):/i.test(t)) {
+      out.push(t.replace(/^Score total \(bruto\):/i, "Score bruto:"));
+    } else if (/^Classifica/i.test(t)) {
+      out.push(t);
+    } else if (/^Nota:/i.test(t)) {
+      out.push(t);
+    }
+  }
+  return out;
+}
+
+function buildVmResumoBlock(sourceLines: string[]): string[] {
+  const counts = extractVmBehaviorCounts(sourceLines);
+  const scoring = extractVmScoringLines(sourceLines);
+  const block: string[] = [
+    "",
+    "RESUMO",
+    VM_REPORT_SEP_RESUMO,
+    `  Ficheiros: ${counts.files}  |  Processos: ${counts.processes}  |  Registry: ${counts.registry}  |  Rede: ${counts.network}`,
+  ];
+  if (scoring.length > 0) {
+    block.push("");
+    block.push(...scoring);
+  }
+  block.push("");
+  return block;
+}
+
+function formatVmReportFromJson(value: unknown): string {
+  if (!value || typeof value !== "object") return String(value ?? "");
+  const o = value as Record<string, unknown>;
+  const scoring = (o.scoring as Record<string, unknown> | undefined) ?? {};
+  const summary = (o.summary as Record<string, unknown> | undefined) ?? {};
+  const lines: string[] = [
+    VM_REPORT_SEP_EQ,
+    "RELATÓRIO DE ANÁLISE COMPORTAMENTAL — VM SANDBOX",
+    VM_REPORT_SEP_EQ,
+  ];
+  if (typeof o.sample_path === "string") lines.push(`Amostra: ${o.sample_path}`);
+  if (typeof o.sample_sha256 === "string") lines.push(`Hash SHA256: ${o.sample_sha256}`);
+  if (o.analysis_start) lines.push(`Início: ${String(o.analysis_start)}`);
+  if (o.analysis_end) lines.push(`Fim: ${String(o.analysis_end)}`);
+  lines.push("");
+  lines.push("RESUMO", VM_REPORT_SEP_RESUMO);
+  const classification =
+    typeof scoring.classification === "string" ? scoring.classification : "N/D";
+  const scoreNorm = typeof scoring.score === "number" ? scoring.score : null;
+  const scoreRaw = typeof scoring.scoreRaw === "number" ? scoring.scoreRaw : null;
+  const scoreMax = typeof scoring.scoreMax === "number" ? scoring.scoreMax : null;
+  lines.push(
+    `  Ficheiros: ${summary.file_changes_count ?? 0}  |  Processos: ${summary.new_processes_count ?? 0}  |  Registry: ${summary.registry_changes_count ?? 0}  |  Rede: ${summary.network_changed ? "alterada" : "sem alterações"}`
+  );
+  lines.push("");
+  if (scoreNorm != null) lines.push(`Score: ${scoreNorm}/100`);
+  if (scoreRaw != null && scoreMax != null) lines.push(`Score bruto: ${scoreRaw}/${scoreMax}`);
+  lines.push(`Classificação: ${classification}`);
+  if (typeof scoring.runtimeSeconds === "number") {
+    lines.push(`Tempo de execução: ${scoring.runtimeSeconds}s`);
+  }
+  lines.push("");
+  lines.push(VM_REPORT_SEP_MAJOR, "DETALHES (JSON)", VM_REPORT_SEP_MAJOR);
+  lines.push(JSON.stringify(value, null, 2));
+  return lines.join("\n").trimEnd() + "\n";
+}
+
+/**
+ * Normaliza o relatório textual da VM para o mesmo estilo visual do relatório estático:
+ * cabeçalhos ALL-CAPS, secção RESUMO, bullets e separadores consistentes.
+ */
+export function formatVmReportForDisplay(raw: string): string {
+  if (!raw?.trim()) return "";
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      return formatVmReportFromJson(JSON.parse(trimmed));
+    } catch {
+      /* continuar como texto */
+    }
+  }
+
+  const sourceLines = raw.split(/\r?\n/);
+  const out: string[] = [];
+  let inHeader = true;
+  let headerEquals = 0;
+  let resumoInserted = false;
+
+  const flushResumo = () => {
+    if (resumoInserted) return;
+    out.push(...buildVmResumoBlock(sourceLines));
+    resumoInserted = true;
+  };
+
+  for (const line of sourceLines) {
+    const t = line.trim();
+    if (!t) {
+      if (out.length > 0 && out[out.length - 1] !== "") out.push("");
+      continue;
+    }
+    if (/^(REPORT_END;?\s*|FIM DO RELATÓRIO\s*)$/i.test(t)) continue;
+
+    const secMatch = t.match(/^---\s*(.+?)\s*---\s*$/);
+    if (secMatch) {
+      if (inHeader) {
+        inHeader = false;
+        flushResumo();
+      }
+      if (out.length > 0 && out[out.length - 1] !== "") out.push("");
+      out.push(VM_REPORT_SEP_MAJOR);
+      out.push(secMatch[1].trim().toUpperCase());
+      out.push(VM_REPORT_SEP_MAJOR);
+      continue;
+    }
+
+    if (/^={5,}$/.test(t)) {
+      if (inHeader) {
+        headerEquals++;
+        out.push(VM_REPORT_SEP_EQ);
+        if (headerEquals >= 2) {
+          inHeader = false;
+          flushResumo();
+        }
+        continue;
+      }
+      continue;
+    }
+
+    if (inHeader) {
+      if (/^RELATÓRIO DE ANÁLISE/i.test(t)) {
+        out.push("RELATÓRIO DE ANÁLISE COMPORTAMENTAL — VM SANDBOX");
+      } else {
+        out.push(t);
+      }
+      continue;
+    }
+
+    if (!resumoInserted) flushResumo();
+
+    if (shouldVmLineBeBullet(t)) {
+      out.push(normalizeVmBulletLine(t));
+    } else {
+      out.push(t);
+    }
+  }
+
+  if (!resumoInserted && out.length > 0) flushResumo();
+
+  return out.join("\n").trimEnd() + "\n";
+}
+
+/** Texto do relatório VM pronto para apresentação no frontend. */
+export function getDisplayVmReport(report: string | null | undefined): string {
+  return formatVmReportForDisplay(report ?? "");
+}
+
+/** Extrai o texto do relatório dinâmico a partir do payload `dynamicResult`. */
+function extractVmReportFromDynamic(dr: Record<string, unknown> | null): string {
+  if (!dr) return "";
+  if (typeof dr.dynamicReportText === "string" && dr.dynamicReportText.trim()) {
+    return dr.dynamicReportText;
+  }
+  if (typeof dr.report === "string" && dr.report.trim() && !dr.cCode) {
+    return dr.report;
+  }
+  if (dr.dynamicReport != null && typeof dr.dynamicReport === "string") {
+    return dr.dynamicReport;
+  }
+  if (dr.dynamicReport != null && typeof dr.dynamicReport === "object") {
+    return JSON.stringify(dr.dynamicReport, null, 2);
+  }
+  return "";
+}
+
+function computeStaticPending(
+  report: string,
+  jobStatus?: string,
+  analysisType?: string
+): boolean {
+  if (report.trim()) return false;
+  const status = (jobStatus ?? "").toLowerCase();
+  if (status !== "running" && status !== "queued") return false;
+  const type = (analysisType ?? "").toLowerCase();
+  return type === "static" || type === "both";
+}
+
+function mergeDynamicFields(
+  base: AnalysisResult,
+  dynamicResult: unknown,
+  jobStatus?: string,
+  analysisType?: string
+): AnalysisResult {
+  const dr = asRecord(dynamicResult);
+  const vmReport = extractVmReportFromDynamic(dr);
+  const dynamicSummary =
+    dr && typeof dr.dynamicSummary === "string" ? dr.dynamicSummary : base.dynamicSummary ?? null;
+  const status = (jobStatus ?? "").toLowerCase();
+  const dynamicPending =
+    !vmReport &&
+    (status === "running" || status === "queued" || status === "pending");
+  const staticPending =
+    computeStaticPending(base.report, jobStatus, analysisType) || !!base.staticPending;
+
+  return {
+    ...base,
+    vmReport: vmReport || null,
+    dynamicSummary,
+    dynamicPending,
+    staticPending,
+    staticProgress: base.staticProgress ?? null,
   };
 }
 
@@ -151,6 +423,9 @@ export function buildAnalysisResultFromJob(
 ): AnalysisResult | null {
   const fj = asRecord(job);
   if (!fj) return null;
+
+  const jobStatus = typeof fj.status === "string" ? fj.status : undefined;
+  const analysisType = typeof fj.analysisType === "string" ? fj.analysisType : undefined;
 
   let staticResult: unknown = fj.staticResult ?? null;
   const dynamicResult = fj.dynamicResult ?? null;
@@ -166,17 +441,37 @@ export function buildAnalysisResultFromJob(
 
   const sr = asRecord(staticResult);
   if (sr) {
-    const dr = asRecord(dynamicResult);
-    return {
-      ...normalizeAnalysisResult(sr, fallbackFileName),
-      dynamicSummary: dr && typeof dr.dynamicSummary === "string" ? dr.dynamicSummary : null,
-    };
+    return mergeDynamicFields(
+      normalizeAnalysisResult(sr, fallbackFileName),
+      dynamicResult,
+      jobStatus,
+      analysisType
+    );
   }
 
   const dr = asRecord(dynamicResult);
   if (dr) {
+    const vmReport = extractVmReportFromDynamic(dr);
     const dynamicSummary =
       typeof dr.dynamicSummary === "string" ? dr.dynamicSummary : "Análise dinâmica concluída.";
+    if (vmReport) {
+      return {
+        report: "",
+        cCode: "",
+        ilCode: "",
+        fileName:
+          typeof dr.fileName === "string"
+            ? dr.fileName
+            : (fallbackFileName ?? "output"),
+        riskScore: 0,
+        riskLevel: "",
+        flaggedIndicators: [],
+        dynamicSummary,
+        vmReport,
+        dynamicPending: false,
+        staticPending: computeStaticPending("", jobStatus, analysisType),
+      };
+    }
     const behaviorStr = dr.dynamicReport != null ? JSON.stringify(dr.dynamicReport, null, 2) : "";
     return {
       report: `# Análise dinâmica\n\n${dynamicSummary}\n\n${behaviorStr}`,
@@ -187,6 +482,25 @@ export function buildAnalysisResultFromJob(
       riskLevel: "",
       flaggedIndicators: [],
       dynamicSummary,
+      vmReport: behaviorStr || null,
+      dynamicPending: (jobStatus ?? "").toLowerCase() === "running",
+      staticPending: computeStaticPending("", jobStatus, analysisType),
+    };
+  }
+
+  if (computeStaticPending("", jobStatus, analysisType)) {
+    return {
+      report: "",
+      cCode: "",
+      ilCode: "",
+      fileName: fallbackFileName ?? "output",
+      riskScore: 0,
+      riskLevel: "",
+      flaggedIndicators: [],
+      dynamicSummary: null,
+      vmReport: null,
+      dynamicPending: false,
+      staticPending: true,
     };
   }
 
@@ -222,6 +536,19 @@ export async function publishStaticAnalysisResult(
     throw new Error("Resposta inesperada ao publicar resultado estático (jobId em falta).");
   }
   return data.jobId;
+}
+
+/** Indica se a análise estática ainda não concluiu (streaming ou job em polling). */
+export function isStaticAnalysisInProgress(
+  result: AnalysisResult | null,
+  isAnalyzing: boolean
+): boolean {
+  if (!result) return isAnalyzing;
+  if (result.staticPending) return true;
+  if (!isAnalyzing) return false;
+  const hasReport = !!(result.report && result.report.trim());
+  const hasCCode = !!(result.cCode && result.cCode.trim());
+  return !hasReport || !hasCCode;
 }
 
 /** Encontra blocos top-level no código C por matching de chavetas (funções ou blocos). */

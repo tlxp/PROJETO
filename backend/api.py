@@ -197,21 +197,39 @@ async def _read_upload_bytes(file: UploadFile, max_bytes: int) -> bytes:
     return bytes(buf)
 
 class StaticAnalysisUpload(BaseModel):
-    """Payload enviado pelo WPF com um resultado de análise estática já concluído.
-
-    Este endpoint permite que o WPF faça a análise completa primeiro (usando, por exemplo,
-    /api/analyze ou /api/analyze_stream) e só depois publique o resultado final no backend
-    para ser consumido pelo frontend via /api/analysis/{jobId}.
+    """Publica (ou actualiza) análise estática — suporta estado `running` para feedback
+    em tempo real no frontend (mesmo `jobId` que a análise VM quando aplicável).
     """
 
-    fileName: str
-    report: str
-    cCode: str
-    ilCode: str
+    jobId: str | None = None
+    fileName: str = ""
+    report: str = ""
+    cCode: str = ""
+    ilCode: str = ""
     riskScore: int = 0
     riskLevel: str = ""
     flaggedIndicators: list[str] | None = None
     flaggedFunctions: list[dict] | None = None
+    status: str = "completed"
+    staticProgress: float | None = None
+    error: str | None = None
+
+
+class DynamicAnalysisUpload(BaseModel):
+    """Publica (ou actualiza) o resultado de análise dinâmica na VM (Caminho B — WPF/PowerShell).
+
+    Se `jobId` for fornecido, o relatório é associado ao job existente (ex.: após análise
+    estática). Caso contrário, cria um novo job dinâmico. O estado `running` permite
+    sinalizar ao frontend que a análise na VM está em curso.
+    """
+
+    jobId: str | None = None
+    fileName: str = ""
+    report: str = ""
+    dynamicSummary: str | None = None
+    runId: str | None = None
+    status: str = "completed"
+    error: str | None = None
 
 
 def _read_file_safe(path: str | None, encoding: str = "utf-8", errors: str = "replace") -> str:
@@ -573,32 +591,85 @@ async def submit_analysis(
 
 @app.post("/api/analysis/upload_static", dependencies=[Depends(require_api_token)])
 async def upload_static_analysis(payload: StaticAnalysisUpload) -> dict:
-    """Permite que um cliente (por exemplo, o WPF) publique um resultado de
-    análise estática já concluído e receba um jobId compatível com
-    /api/analysis/{jobId}.
-
-    O frontend consegue depois consumir este job exatamente como qualquer
-    outro criado via /api/analysis.
-    """
+    """Publica análise estática (completa ou em curso) no backend para /api/analysis/{jobId}."""
     from analysis_jobs import AnalysisType, JobStatus  # import local para evitar ciclos
     from modules.deobfuscator import Deobfuscator
     from modules.obfuscation_snippet_extractor import extract_and_write_snippets_from_content
     import hashlib
     import json
 
+    status_raw = (payload.status or "completed").strip().lower()
+    if status_raw not in {JobStatus.RUNNING.value, JobStatus.COMPLETED.value, JobStatus.FAILED.value}:
+        raise HTTPException(400, "status inválido (use running, completed ou failed).")
+
+    job_status = JobStatus(status_raw)
+    existing_row = None
+
+    if payload.jobId:
+        job_id = _require_valid_job_id(payload.jobId.strip())
+        existing_row = job_store.get_job_row(job_id)
+        if not existing_row:
+            raise HTTPException(404, "Job não encontrado.")
+    else:
+        job_id = str(uuid.uuid4())
+        file_name = payload.fileName or "static_analysis"
+        h = hashlib.sha256()
+        h.update(file_name.encode("utf-8", "ignore"))
+        sha = h.hexdigest()
+        job_store.insert_job(
+            job_id=job_id,
+            analysis_type=AnalysisType.STATIC.value,
+            file_name=file_name,
+            sha256=sha,
+            status=JobStatus.QUEUED.value,
+        )
+
+    file_name = payload.fileName or (existing_row.get("fileName") if existing_row else "") or "analysis"
+
+    if job_status == JobStatus.RUNNING:
+        static_result = {
+            "report": "",
+            "cCode": "",
+            "ilCode": "",
+            "fileName": file_name,
+            "riskScore": 0,
+            "riskLevel": "",
+            "flaggedIndicators": [],
+            "flaggedFunctions": [],
+            "staticProgress": float(payload.staticProgress or 0),
+        }
+        job_store.update_results(job_id, static_result, None)
+        if existing_row and existing_row.get("dynamicResult"):
+            job_store.update_analysis_type(job_id, AnalysisType.BOTH.value)
+            analysis_type = AnalysisType.BOTH.value
+        elif existing_row:
+            analysis_type = existing_row.get("analysisType") or AnalysisType.STATIC.value
+        else:
+            analysis_type = AnalysisType.STATIC.value
+        job_store.update_status(job_id, JobStatus.RUNNING.value, error=None)
+        logger.info(
+            "Estática em curso via upload_static: job_id=%s progress=%s",
+            job_id,
+            payload.staticProgress,
+        )
+        return {
+            "jobId": job_id,
+            "analysisType": analysis_type,
+            "status": JobStatus.RUNNING.value,
+        }
+
     logger.info(
-        "Pedido /api/analysis/upload_static recebido: file=%s score=%s level=%s",
+        "Pedido /api/analysis/upload_static recebido: file=%s score=%s level=%s job_id=%s",
         payload.fileName,
         payload.riskScore,
         payload.riskLevel,
+        job_id,
     )
-
-    job_id = str(uuid.uuid4())
 
     out_dir = _get_job_output_dir(job_id)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    base_name = short_stem(Path(payload.fileName or "analysis").stem or "analysis")
+    base_name = short_stem(Path(file_name).stem or "analysis")
     report_path = out_dir / short_filename(base_name, "report", ext="txt")
     c_code_path = out_dir / short_filename(base_name, "c", ext="txt")
     il_code_path = out_dir / short_filename(base_name, "il", ext="txt")
@@ -643,7 +714,7 @@ async def upload_static_analysis(payload: StaticAnalysisUpload) -> dict:
         "report": payload.report or "",
         "cCode": c_code,
         "ilCode": payload.ilCode or "",
-        "fileName": payload.fileName,
+        "fileName": file_name,
         "riskScore": int(payload.riskScore or 0),
         "riskLevel": payload.riskLevel or "",
         "flaggedIndicators": payload.flaggedIndicators or [],
@@ -651,10 +722,11 @@ async def upload_static_analysis(payload: StaticAnalysisUpload) -> dict:
         "obfuscatedSnippetsFile": obf_snippets,
         "obfuscatedSnippetsDeobfuscatedFile": obf_snippets_deob,
         "obfuscationIndicatorCount": obfuscation_indicator_count,
+        "staticProgress": 100.0,
     }
 
     last_analysis_payload = {
-        "target_file": payload.fileName or "",
+        "target_file": file_name,
         "report_path": str(report_path),
         "decompiled_c_file": str(c_code_path),
         "disassembly_file": str(il_code_path),
@@ -665,8 +737,6 @@ async def upload_static_analysis(payload: StaticAnalysisUpload) -> dict:
         "obfuscated_snippets_pseudoc_file": "",
         "obfuscated_snippets_deobfuscated_pseudoc_file": "",
         "obfuscation_snippets_summary": obf_summary,
-        # Mantemos vazio para permitir fallback por parsing de relatório
-        # quando não existirem snippets.
         "obfuscation_indicators": [],
     }
     try:
@@ -679,37 +749,146 @@ async def upload_static_analysis(payload: StaticAnalysisUpload) -> dict:
     except OSError:
         logger.warning("Falha ao guardar last_analysis.json para job_id=%s", job_id)
 
-    # Como não temos acesso direto ao binário aqui, usamos um hash sintético
-    # baseado nos campos principais apenas para fins de auditoria.
     h = hashlib.sha256()
-    h.update((payload.fileName or "").encode("utf-8", "ignore"))
+    h.update(file_name.encode("utf-8", "ignore"))
     h.update((payload.report or "").encode("utf-8", "ignore"))
     h.update((payload.cCode or "").encode("utf-8", "ignore"))
     h.update((payload.ilCode or "").encode("utf-8", "ignore"))
     sha = h.hexdigest()
 
-    # Reutilizamos a pipeline de histórico existente: primeiro insert em estado queued,
-    # depois update_results + update_status para completed.
-    job_store.insert_job(
-        job_id=job_id,
-        analysis_type=AnalysisType.STATIC.value,
-        file_name=payload.fileName,
-        sha256=sha,
-        status=JobStatus.QUEUED.value,
-    )
     job_store.update_results(job_id, static_result, None)
-    job_store.update_status(job_id, JobStatus.COMPLETED.value, error=None)
+
+    if existing_row and existing_row.get("dynamicResult"):
+        job_store.update_analysis_type(job_id, AnalysisType.BOTH.value)
+        analysis_type = AnalysisType.BOTH.value
+    elif existing_row:
+        analysis_type = existing_row.get("analysisType") or AnalysisType.STATIC.value
+    else:
+        analysis_type = AnalysisType.STATIC.value
+
+    if job_status == JobStatus.FAILED:
+        job_store.update_status(job_id, JobStatus.FAILED.value, error=payload.error)
+        final_status = JobStatus.FAILED.value
+    else:
+        job_store.update_status(job_id, JobStatus.COMPLETED.value, error=None)
+        final_status = JobStatus.COMPLETED.value
 
     logger.info(
         "Resultado estático publicado via /api/analysis/upload_static: job_id=%s file=%s",
         job_id,
-        payload.fileName,
+        file_name,
     )
 
     return {
         "jobId": job_id,
-        "analysisType": AnalysisType.STATIC.value,
-        "status": JobStatus.COMPLETED.value,
+        "analysisType": analysis_type,
+        "status": final_status,
+    }
+
+
+def _summarize_dynamic_report(report: str) -> str:
+    """Extrai um resumo curto do relatório textual da VM."""
+    if not report or not report.strip():
+        return "Análise dinâmica na VM concluída."
+    for line in report.splitlines():
+        trimmed = line.strip()
+        if trimmed and not trimmed.startswith("=") and not trimmed.startswith("-"):
+            return trimmed[:240]
+    return "Análise dinâmica na VM concluída."
+
+
+@app.post("/api/analysis/upload_dynamic", dependencies=[Depends(require_api_token)])
+async def upload_dynamic_analysis(payload: DynamicAnalysisUpload) -> dict:
+    """Publica o relatório de análise dinâmica (Hyper-V / Caminho B) no backend.
+
+    Permite associar o resultado ao mesmo `jobId` de uma análise estática prévia,
+    para o frontend mostrar ambos os relatórios na mesma página `/analysis/{jobId}`.
+    """
+    from analysis_jobs import AnalysisType, JobStatus  # import local para evitar ciclos
+    import hashlib
+
+    status_raw = (payload.status or "completed").strip().lower()
+    if status_raw not in {JobStatus.RUNNING.value, JobStatus.COMPLETED.value, JobStatus.FAILED.value}:
+        raise HTTPException(400, "status inválido (use running, completed ou failed).")
+
+    job_status = JobStatus(status_raw)
+    existing_row = None
+
+    if payload.jobId:
+        job_id = _require_valid_job_id(payload.jobId.strip())
+        existing_row = job_store.get_job_row(job_id)
+        if not existing_row:
+            raise HTTPException(404, "Job não encontrado.")
+    else:
+        job_id = str(uuid.uuid4())
+        file_name = payload.fileName or "dynamic_analysis"
+        h = hashlib.sha256()
+        h.update(file_name.encode("utf-8", "ignore"))
+        h.update((payload.runId or "").encode("utf-8", "ignore"))
+        sha = h.hexdigest()
+        job_store.insert_job(
+            job_id=job_id,
+            analysis_type=AnalysisType.DYNAMIC.value,
+            file_name=file_name,
+            sha256=sha,
+            status=JobStatus.QUEUED.value,
+        )
+
+    out_dir = _get_job_output_dir(job_id)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    report_text = payload.report or ""
+    if report_text.strip() and job_status == JobStatus.COMPLETED:
+        base_name = short_stem(
+            Path((payload.fileName or (existing_row.get("fileName") if existing_row else "")) or "analysis").stem
+            or "analysis"
+        )
+        report_path = out_dir / short_filename(base_name, "dynamic_report", ext="txt")
+        try:
+            report_path.write_text(report_text, encoding="utf-8", errors="replace")
+        except OSError:
+            logger.warning("Falha ao guardar dynamic_report.txt para job_id=%s", job_id)
+
+    summary = payload.dynamicSummary or _summarize_dynamic_report(report_text)
+    dynamic_result = {
+        "report": "",
+        "cCode": "",
+        "ilCode": "",
+        "fileName": payload.fileName or (existing_row.get("fileName") if existing_row else ""),
+        "dynamicReportText": report_text,
+        "dynamicSummary": summary,
+        "runId": payload.runId,
+        "source": "hyperv_powershell",
+    }
+
+    job_store.update_results(job_id, None, dynamic_result)
+
+    if existing_row and existing_row.get("staticResult"):
+        job_store.update_analysis_type(job_id, AnalysisType.BOTH.value)
+        analysis_type = AnalysisType.BOTH.value
+    elif existing_row:
+        analysis_type = existing_row.get("analysisType") or AnalysisType.DYNAMIC.value
+    else:
+        analysis_type = AnalysisType.DYNAMIC.value
+
+    job_store.update_status(
+        job_id,
+        job_status.value,
+        error=payload.error if job_status == JobStatus.FAILED else None,
+    )
+
+    logger.info(
+        "Resultado dinâmico publicado via /api/analysis/upload_dynamic: job_id=%s status=%s type=%s runId=%s",
+        job_id,
+        job_status.value,
+        analysis_type,
+        payload.runId,
+    )
+
+    return {
+        "jobId": job_id,
+        "analysisType": analysis_type,
+        "status": job_status.value,
     }
 
 

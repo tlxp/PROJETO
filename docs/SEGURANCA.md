@@ -1,6 +1,6 @@
 # Arquitetura de segurança
 
-Documento canónico da **estrutura de segurança** do RAT Analyzer. Complementa a remediação de [`AUDITORIA.md`](AUDITORIA.md) (Jun 2026) e o guia operacional [`production-secrets.md`](production-secrets.md).
+Documento canónico da **estrutura de segurança** do RAT Analyzer. Complementa o guia operacional [`production-secrets.md`](production-secrets.md).
 
 > **Âmbito:** uso local, laboratório ou rede interna controlada. O projeto **não** foi desenhado para exposição pública à Internet sem camadas adicionais (reverse proxy, TLS, firewall, IAM).
 
@@ -38,34 +38,9 @@ Documento canónico da **estrutura de segurança** do RAT Analyzer. Complementa 
 
 ## Zonas de confiança
 
-```mermaid
-flowchart TB
-    subgraph Host["Zona host (operador)"]
-        WEB["frontend :8080"]
-        API["backend :8000"]
-        WPF["WPF desktop"]
-        PS["scripts Hyper-V"]
-    end
+![Zonas de confiança](../relatório/imagens/fig-4-6-security-trust-zones.png)
 
-    subgraph Net["Rede interna sandbox"]
-        VMA["vm-agent :5000"]
-    end
-
-    subgraph Guest["Zona guest (não confiável)"]
-        SAMPLE["Amostra malware"]
-        VMPS["RunMalwareAnalysis.ps1"]
-    end
-
-    WEB -->|X-API-Token| API
-    WPF -->|X-API-Token| API
-    WPF --> PS
-    API -->|driver hyperv + X-Agent-Token| VMA
-    PS -->|PsDirect + SHA256| VMPS
-    VMA --> SAMPLE
-    VMPS --> SAMPLE
-
-    Internet((Internet)) -.->|bloqueado| Guest
-```
+Fonte: [`diagrams/security-trust-zones.puml`](diagrams/security-trust-zones.puml)
 
 | Zona | Componentes | Nível de confiança | Dados sensíveis |
 |------|-------------|-------------------|-----------------|
@@ -78,6 +53,10 @@ flowchart TB
 ---
 
 ## Mapa de autenticação
+
+![Mapa de autenticação](../relatório/imagens/fig-4-10-security-auth.png)
+
+Fonte: [`diagrams/security-auth-tokens.puml`](diagrams/security-auth-tokens.puml)
 
 | Componente | Mecanismo | Header / canal | Obrigatório em produção |
 |------------|-----------|----------------|-------------------------|
@@ -177,6 +156,8 @@ Ver `.gitignore` na raiz e `backend/config.py`.
 
 Guias: [`sandbox-hyperv-setup.md`](sandbox-hyperv-setup.md) · [`../scripts/hyperv-sandbox/README.md`](../scripts/hyperv-sandbox/README.md).
 
+Sequências detalhadas: Caminho A · [`fig-4-8`](../relatório/imagens/fig-4-8-sequence-path-a.png) · Caminho B · [`fig-4-9`](../relatório/imagens/fig-4-9-sequence-path-b.png).
+
 **Driver `stub` (default):** não executa ficheiros - adequado para validar pipeline sem risco de execução.
 
 **Driver `proxmox`:** experimental, sem validação CI - **não usar em produção** até haver guia e testes dedicados.
@@ -238,7 +219,7 @@ Implementação: `wpf-gui/Helpers/DownloadIntegrity.cs` (testado em `RatAnalyzer
 | Scripts PS1 | UTF-8 + validação de sintaxe | idem |
 | Documentação `.md` | Links internos + ortografia PT | `scripts/ci/check_md_links.py` |
 
-Contagens atuais: **66 pytest · 37 Vitest · 48 xUnit** - ver [`AUDITORIA.md`](AUDITORIA.md).
+Contagens atuais: **66 pytest · 37 Vitest · 48 xUnit** (ver [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)).
 
 ---
 
@@ -262,7 +243,6 @@ Use antes de cada deploy ou demonstração com amostras reais:
 
 | Documento | Conteúdo |
 |-----------|----------|
-| [`AUDITORIA.md`](AUDITORIA.md) | Remediação Jun 2026 e resumo por área |
 | [`production-secrets.md`](production-secrets.md) | Geração, deploy e checklist operacional |
 | [`faq.md`](faq.md) | Problemas comuns (401, tokens, vm-agent) |
 | [`../backend/README.md`](../backend/README.md) | Endpoints e variáveis do backend |
@@ -272,4 +252,4 @@ Use antes de cada deploy ou demonstração com amostras reais:
 
 ---
 
-**Estado:** arquitetura de segurança documentada e alinhada com o código (Jun 2026). Alterações de auth, isolamento ou gestão de segredos devem atualizar este ficheiro e [`AUDITORIA.md`](AUDITORIA.md).
+**Estado:** arquitetura de segurança documentada e alinhada com o código. Alterações de auth, isolamento ou gestão de segredos devem atualizar este ficheiro.

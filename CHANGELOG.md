@@ -6,6 +6,9 @@ Versionamento [SemVer](https://semver.org/) a partir de `0.1.0` (projeto académ
 ## [Unreleased]
 
 ### Added
+- `POST /api/analysis/upload_dynamic` — publica relatório VM (Caminho B) no backend; associa ao mesmo `jobId` da análise estática.
+- Frontend: coluna *Relatório* dividida horizontalmente (estático + VM) e polling em tempo real em `/analysis/{jobId}`.
+- WPF: após transferência do relatório da VM, envia para o backend e abre o browser no permalink unificado.
 - Job CI `diagrams` - valida PNG do relatório vs `docs/diagrams/`.
 - Projeto exemplo `programa/MeuExemplo/` para GUI Tkinter e testes manuais.
 - Testes de driver VM: stub unitário + integração `hyperv`/`proxmox` (opt-in via `RUN_VM_DRIVER_INTEGRATION=1`).
@@ -22,8 +25,6 @@ Versionamento [SemVer](https://semver.org/) a partir de `0.1.0` (projeto académ
 - Documento canónico de segurança: [`docs/SEGURANCA.md`](docs/SEGURANCA.md).
 - Sandbox Hyper-V: isolamento de rede, cleanup `try/finally`, UTF-8 CI.
 - Regras YARA v2 + testes; CI (pytest, Vitest, xUnit, PowerShell, Markdown, diagramas).
-
-Detalhe da remediação: [`docs/AUDITORIA.md`](docs/AUDITORIA.md).
 
 ### Documentação
 - Índice único em `docs/README.md`; diagramas sem duplicação.

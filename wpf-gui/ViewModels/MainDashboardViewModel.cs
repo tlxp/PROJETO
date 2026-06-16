@@ -11,6 +11,11 @@ public sealed class MainDashboardViewModel : ViewModelBase
     private readonly IMainDashboardDialogs _dialogs;
     private readonly StaticAnalysisService _staticAnalysis;
 
+    private string? _lastStaticJobId;
+    private string? _lastStaticFilePath;
+    private string? _lastVmJobId;
+    private string? _lastVmFilePath;
+
     private bool _showOptions;
     private string? _selectedFilePath;
     private bool _runFirstTimeVmSetup;
@@ -174,13 +179,44 @@ public sealed class MainDashboardViewModel : ViewModelBase
         try
         {
             var progress = new Progress<string>(msg => StaticStatusText = msg);
-            var jobId = await _staticAnalysis.RunAndPublishAsync(_selectedFilePath, progress).ConfigureAwait(true);
+            var progressPct = new Progress<double>(pct =>
+            {
+                StaticProgressIndeterminate = false;
+                StaticProgressValue = Math.Clamp(pct, 0, 100);
+            });
+
+            var linkedJobId = ResolveLinkedJobId();
+
+            var jobId = await _staticAnalysis.RunAndPublishAsync(
+                _selectedFilePath,
+                linkedJobId,
+                progress,
+                progressPct,
+                onJobIdKnown: knownJobId =>
+                {
+                    _lastResultsUrl = $"{AppConstants.FrontendUrl}/analysis/{Uri.EscapeDataString(knownJobId)}";
+                    StaticJobIdText = $"Job ID: {knownJobId}";
+                    StaticJobUrlText = _lastResultsUrl;
+                    ShowStaticJobDetails = true;
+                    ShowOpenResults = true;
+                    try
+                    {
+                        _dialogs.OpenBrowserUrl(_lastResultsUrl);
+                    }
+                    catch
+                    {
+                        /* browser opcional */
+                    }
+                }).ConfigureAwait(true);
+
+            _lastStaticJobId = jobId;
+            _lastStaticFilePath = _selectedFilePath;
 
             StaticStatusText = "Análise estática concluída. A abrir resultados no navegador...";
             StaticProgressIndeterminate = false;
             StaticProgressValue = 100;
 
-            _lastResultsUrl = $"{AppConstants.FrontendUrl}/resultados?jobId={Uri.EscapeDataString(jobId)}";
+            _lastResultsUrl = $"{AppConstants.FrontendUrl}/analysis/{Uri.EscapeDataString(jobId)}";
             StaticJobIdText = $"Job ID: {jobId}";
             StaticJobUrlText = _lastResultsUrl;
             ShowStaticJobDetails = true;
@@ -230,7 +266,35 @@ public sealed class MainDashboardViewModel : ViewModelBase
             return;
         }
 
-        _dialogs.OpenVmAnalysis(_selectedFilePath, RunFirstTimeVmSetup, VmSampleTimeoutSeconds, VmWaitForSampleExit);
+        var linkedJobId = ResolveLinkedJobId();
+
+        _dialogs.OpenVmAnalysis(
+            _selectedFilePath,
+            RunFirstTimeVmSetup,
+            VmSampleTimeoutSeconds,
+            VmWaitForSampleExit,
+            linkedJobId,
+            onJobIdKnown: id =>
+            {
+                _lastVmJobId = id;
+                _lastVmFilePath = _selectedFilePath;
+            });
+    }
+
+    private string? ResolveLinkedJobId()
+    {
+        if (string.IsNullOrEmpty(_selectedFilePath))
+            return null;
+
+        if (string.Equals(_selectedFilePath, _lastVmFilePath, StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(_lastVmJobId))
+            return _lastVmJobId;
+
+        if (string.Equals(_selectedFilePath, _lastStaticFilePath, StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(_lastStaticJobId))
+            return _lastStaticJobId;
+
+        return null;
     }
 
     private void OpenResults()

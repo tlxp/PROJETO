@@ -55,7 +55,6 @@ CI completo: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (inclui job 
   [`scripts/ci/diagram_sources.py`](scripts/ci/diagram_sources.py) (`docs/diagrams/` → `relatório/imagens/fig-4-*.png`).
   Validar: `python scripts/ci/sync_diagrams_to_report.py --check` (CI job `diagrams`). Regenerar PNG:
   `python relatório/imagens/render_plantuml.py` (requer `plantuml.jar`).
-- Desenhos obsoletos: mover para [`docs/archive/`](docs/archive/README.md) com aviso `⚠ Documento arquivado` no topo (a pasta pode estar vazia até haver documentos a arquivar).
 - Validação local: `python scripts/ci/check_md_links.py` (links, ortografia legada, H1 único, espaços finais).
 
 ## Sandbox e segurança

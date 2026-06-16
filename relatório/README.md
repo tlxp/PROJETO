@@ -19,7 +19,7 @@ relatório/
 | Ficheiro | Função |
 |----------|--------|
 | `main.tex` | Texto, referências, `\graphicspath{{imagens/}}` |
-| `imagens/fig-4-*.png` | Diagramas sincronizados com `docs/diagrams/*.puml` |
+| `imagens/fig-4-*.png` | Diagramas sincronizados com `docs/diagrams/*.puml` (10 figuras, cap. 4) |
 | `imagens/render_plantuml.py` | Gera ou valida PNG (requer Java + `plantuml.jar` local) |
 | `imagens/fig-5-*.png` | *(opcional)* Screenshots cap. 5 — o PDF compila sem eles |
 
@@ -55,5 +55,5 @@ pdflatex main.tex
 | Capítulo | Conteúdo ligado ao repo |
 |----------|-------------------------|
 | 4 — Arquitetura | Diagramas em `docs/diagrams/` |
-| 5 — Implementação | `frontend/`, `backend/`, `wpf-gui/`, sandbox (PsDirect + SHA256; histórico COM1 no texto) |
+| 5 — Implementação | `frontend/`, `backend/`, `wpf-gui/`, sandbox; job unificado estático+VM via `upload_dynamic` |
 | Segurança | [`docs/SEGURANCA.md`](../docs/SEGURANCA.md) |

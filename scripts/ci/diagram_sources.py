@@ -15,6 +15,11 @@ MAPPING: list[tuple[str, str]] = [
     ("analysis-activity-dynamic.puml", "fig-4-3-activity-dynamic"),
     ("analysis-architecture.puml", "fig-4-4-architecture"),
     ("analysis-sequence-overview.puml", "fig-4-5-sequence-overview"),
+    ("security-trust-zones.puml", "fig-4-6-security-trust-zones"),
+    ("sandbox-paths-comparison.puml", "fig-4-7-sandbox-paths"),
+    ("sequence-path-a-vmagent.puml", "fig-4-8-sequence-path-a"),
+    ("sequence-path-b-powershell.puml", "fig-4-9-sequence-path-b"),
+    ("security-auth-tokens.puml", "fig-4-10-security-auth"),
 ]
 
 _STARTUML_LINE_RE = re.compile(r"^@startuml\b.*\r?\n?", re.MULTILINE)

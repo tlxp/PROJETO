@@ -1,3 +1,5 @@
+using System;
+
 namespace RatAnalyzer.Desktop.ViewModels;
 
 /// <summary>Diálogos e navegação do dashboard principal — implementado pela view WPF.</summary>
@@ -15,9 +17,15 @@ public interface IMainDashboardDialogs
 
     void ShowAdministratorRequired();
 
-    void OpenVmAnalysis(string samplePath, bool runFirstTimeSetup, int sampleTimeoutSeconds, bool waitForSampleExit);
+    void OpenBrowserUrl(string url);
+
+    void OpenVmAnalysis(
+        string samplePath,
+        bool runFirstTimeSetup,
+        int sampleTimeoutSeconds,
+        bool waitForSampleExit,
+        string? linkedJobId = null,
+        Action<string>? onJobIdKnown = null);
 
     void OpenStorageMaintenance();
-
-    void OpenBrowserUrl(string url);
 }

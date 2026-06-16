@@ -1,19 +1,19 @@
 # Drop & Analyze - Interface Web do RAT Analyzer
 
-Interface web para análise de ficheiros executáveis (.exe) e DLLs, integrada com o backend **RAT Analyzer**. Permite arrastar ficheiros, executar análise em tempo real e visualizar relatórios, pseudo-código C e código IL com destaque de indicadores de risco.
+Interface web para análise de ficheiros `.exe`, `.dll` e `.cs`, integrada com o backend **RAT Analyzer**. Permite arrastar ficheiros, executar análise em tempo real e visualizar relatórios, pseudo-código C e código IL com destaque de indicadores de risco.
 
 Documentação geral: [`docs/README.md`](../docs/README.md) · Segurança: [`docs/production-secrets.md`](../docs/production-secrets.md).
 
 ## Funcionalidades
 
-- **Zona de arrastar** - Arraste ficheiros .exe ou .dll para iniciar a análise
+- **Zona de arrastar** - Arraste ficheiros `.exe`, `.dll` ou `.cs` para iniciar a análise
 - **Modos de análise** - Estática (streaming ou job), dinâmica ou ambas (`useIndexAnalysisSession`)
-- **Três painéis** - Relatório de análise, pseudo-C (Ghidra) e código IL com navegação por categorias e funções suspeitas
+- **Três painéis** - Código C, IL e **Relatório** (dividido horizontalmente em *estático* + *VM* quando ambos existem no mesmo `jobId`)
 - **Score de risco** - Nível (CRÍTICO, ALTO, MÉDIO, BAIXO, MUITO BAIXO) e indicadores destacados no código
 - **Navegação contextual** - Saltar do relatório para as linhas relevantes no pseudo-C e no IL
 - **Assistência Gemini** *(opcional)* - Explicar excertos de pseudo-C com Google Gemini (API key no browser)
 - **Trechos ofuscados** - Visualizar ficheiros de excertos obfuscados/deobfuscados quando o backend os gera
-- **Acesso por link** - `/?jobId=` ou `/resultados?jobId=` com polling até o job concluir
+- **Acesso por link** - `/analysis/{jobId}` (permalink canónico); polling em tempo real enquanto a VM corre
 
 ## Requisitos
 

@@ -71,10 +71,35 @@ export const HighlightedLine: React.FC<{
       return <span className="block border-b border-border/40 my-1" />;
     }
 
-    // Título principal
-    if (trimmed.startsWith("RELATÓRIO DE ANÁLISE")) {
+    // Título principal (estático ou VM)
+    if (/^RELATÓRIO DE ANÁLISE/i.test(trimmed)) {
       return (
         <span className="block text-sm font-semibold text-code-function mb-1">
+          {trimmed}
+        </span>
+      );
+    }
+
+    // Alertas do relatório VM
+    if (trimmed.startsWith("[ERRO]")) {
+      return (
+        <span className="block pl-3 text-[11px] text-destructive font-medium mb-[2px]">
+          {trimmed}
+        </span>
+      );
+    }
+    if (trimmed.startsWith("[AVISO]")) {
+      return (
+        <span className="block pl-3 text-[11px] text-code-string mb-[2px]">
+          {trimmed}
+        </span>
+      );
+    }
+
+    // Notas explicativas (execução inconclusiva, benign validation, etc.)
+    if (trimmed.startsWith("Nota:")) {
+      return (
+        <span className="block pl-3 text-[11px] italic text-muted-foreground mb-[2px]">
           {trimmed}
         </span>
       );
@@ -130,10 +155,38 @@ export const HighlightedLine: React.FC<{
     if (colonIdx > 0 && colonIdx < trimmed.length - 1) {
       const label = trimmed.slice(0, colonIdx).trim();
       const value = trimmed.slice(colonIdx + 1).trim();
+      const valueLower = value.toLowerCase();
+      let valueClass = "text-muted-foreground";
+      if (/^classifica/i.test(label)) {
+        if (valueLower.includes("malicious") || valueLower.includes("malici")) {
+          valueClass = "text-destructive font-semibold";
+        } else if (valueLower.includes("suspicious") || valueLower.includes("suspeit")) {
+          valueClass = "text-code-string font-semibold";
+        } else if (valueLower.includes("benign") || valueLower.includes("benigno")) {
+          valueClass = "text-primary font-semibold";
+        }
+      } else if (/^score/i.test(label) && /\d+\/100/.test(value)) {
+        const scoreNum = parseInt(value, 10);
+        if (scoreNum >= 70) valueClass = "text-destructive font-semibold";
+        else if (scoreNum >= 35) valueClass = "text-code-string font-semibold";
+        else valueClass = "text-primary font-semibold";
+      }
       return (
         <span className="block pl-2 text-[11px] leading-relaxed">
           <span className="font-semibold text-foreground">{label}:</span>{" "}
-          <span className="text-muted-foreground">{value}</span>
+          <span className={valueClass}>{value}</span>
+        </span>
+      );
+    }
+
+    // Linhas informativas negativas (sem deteções)
+    if (
+      /^Não foram detetad/i.test(trimmed) ||
+      /^Sem (alterações|eventos|diferenças)/i.test(trimmed)
+    ) {
+      return (
+        <span className="block pl-3 text-[11px] text-muted-foreground/80 mb-[2px]">
+          {trimmed}
         </span>
       );
     }

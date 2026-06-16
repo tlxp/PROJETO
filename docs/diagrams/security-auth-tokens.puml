@@ -1,0 +1,60 @@
+@startuml
+title Mapa de autenticação — tokens e credenciais
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+actor "Analista" as U
+
+package "Cliente" #E8F5E9 {
+  [Frontend React\nVITE_API_TOKEN] as FE
+  [WPF Desktop] as WPF
+}
+
+package "API host" #E3F2FD {
+  [Backend FastAPI\nRATANALYZER_API_TOKEN] as API
+  [upload_security.py] as UP
+}
+
+package "Sandbox" #FFE0B2 {
+  [vm-agent\nVM_AGENT_TOKEN] as AGENT
+  [Scripts Hyper-V\nPROJETOVM_Guest*] as PS
+}
+
+database "secrets/\nbackend.env" as SEC
+
+U --> FE
+U --> WPF
+
+FE --> API : X-API-Token
+WPF --> API : X-API-Token
+WPF --> PS : credenciais guest
+API --> UP : validar uploads
+API --> AGENT : X-Agent-Token\n(driver hyperv)
+
+SEC ..> API : RATANALYZER_API_TOKEN
+SEC ..> FE : build-time token
+SEC ..> AGENT : VM_AGENT_TOKEN
+SEC ..> PS : PROJETOVM_GuestPassword
+
+note right of API
+  **Fail-closed** em produção:
+  RATANALYZER_ENV=production
+  exige token válido
+end note
+
+note bottom of AGENT
+  Comparação em tempo constante
+  (TokenComparer.cs)
+end note
+
+note bottom of PS
+  PowerShell Direct —
+  sem token HTTP;
+  password obrigatória
+  (exceto flag dev)
+end note
+
+rectangle "Driver stub" as STUB #F5F5F5
+API ..> STUB : sem auth\n(não executa amostras)
+
+@enduml

@@ -16,7 +16,6 @@ isolada — num único fluxo operacional (web, API ou desktop).
 - [Estrutura do repositório](#estrutura-do-repositório)
 - [Início rápido](#início-rápido)
 - [Segurança e configuração](#segurança-e-configuração) · [`docs/SEGURANCA.md`](docs/SEGURANCA.md)
-- [Segurança e auditoria](#segurança-e-auditoria)
 - [Testes e CI](#testes-e-ci)
 - [Módulos de análise](#módulos-de-análise)
 - [Scoring de risco](#scoring-de-risco)
@@ -176,12 +175,6 @@ em `DATA_DIR/reports/`.
 | `PROJETOVM_BasePath` | Scripts Hyper-V / WPF | Pasta raiz do sandbox (default `D:\PROJETOVM`). |
 
 **Pipelines dinâmicas:** ver [`docs/README.md`](docs/README.md#análise-dinâmica--qual-caminho-usar). Segredos: [`docs/production-secrets.md`](docs/production-secrets.md). Estrutura: [`docs/SEGURANCA.md`](docs/SEGURANCA.md).
-
----
-
-## Segurança e auditoria
-
-Documentação operacional: [`docs/SEGURANCA.md`](docs/SEGURANCA.md) (arquitetura e checklist) · [`docs/production-secrets.md`](docs/production-secrets.md) (segredos e deploy) · [`docs/AUDITORIA.md`](docs/AUDITORIA.md) (remediação Jun 2026).
 
 ---
 

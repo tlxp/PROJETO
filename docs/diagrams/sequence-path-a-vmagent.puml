@@ -1,0 +1,42 @@
+@startuml
+title Sequência — Caminho A (vm-agent HTTP)
+autonumber
+skinparam responseMessageBelowArrow true
+
+actor "Utilizador" as U
+participant "Frontend" as FE
+participant "API FastAPI" as API
+participant "VM Orchestrator" as VMO
+participant "Driver hyperv" as DRV
+participant "Hyper-V host" as HV
+participant "vm-agent" as AGENT
+database "sandbox_jobs" as DB
+
+U -> FE : submeter amostra (dynamic/both)
+FE -> API : POST /api/analysis\nX-API-Token
+API -> DB : create_job (queued)
+API --> FE : jobId
+
+API -> VMO : pipeline dinâmica
+VMO -> DRV : restore + start VM
+DRV -> HV : Restore-VMSnapshot CleanState
+DRV -> HV : Start-VM
+DRV -> AGENT : GET /health\nX-Agent-Token
+
+DRV -> AGENT : POST /samples/upload
+AGENT --> DRV : sampleId
+
+DRV -> AGENT : POST /samples/{id}/run\n(timeout)
+AGENT -> AGENT : executar amostra\nisolada na guest
+AGENT --> DRV : comportamento JSON
+
+DRV -> HV : Stop-VM + restore snapshot
+VMO -> DB : dynamicResult (completed)
+
+loop polling
+  FE -> API : GET /api/analysis/{jobId}
+  API -> DB : ler estado
+  API --> FE : relatório comportamental
+end
+
+@enduml

@@ -155,12 +155,13 @@ if ($waitSec -gt 0) {
         if ($shouldPullGuest -and $guestState) {
             $lastGuestPullUtc = $nowUtc
             $pullReason = $null
+            $guestFinished = (-not $guestState.pidRunning)
 
-            if ($guestState.doneFile) {
+            if ($guestState.doneFile -and $guestFinished) {
                 $pullReason = "guest_analysis_done.txt"
-            } elseif ($guestState.reportComplete) {
+            } elseif ($guestState.reportComplete -and $guestFinished) {
                 $pullReason = "REPORT_END; em C:\analysis.txt"
-            } elseif ($allowPartial -and $guestState.reportBytes -gt 200) {
+            } elseif ($allowPartial -and $guestFinished -and $guestState.reportBytes -gt 200) {
                 $pullReason = "relatório parcial ($($guestState.reportBytes) bytes, guest terminou/crash)"
             }
 

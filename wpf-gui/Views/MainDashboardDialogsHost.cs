@@ -58,13 +58,27 @@ internal sealed class MainDashboardDialogsHost : IMainDashboardDialogs
             "• Ou abra o PowerShell como Administrador e execute: dotnet run",
             "Elevação necessária");
 
-    public void OpenVmAnalysis(string samplePath, bool runFirstTimeSetup, int sampleTimeoutSeconds, bool waitForSampleExit)
+    public void OpenVmAnalysis(
+        string samplePath,
+        bool runFirstTimeSetup,
+        int sampleTimeoutSeconds,
+        bool waitForSampleExit,
+        string? linkedJobId = null,
+        Action<string>? onJobIdKnown = null)
     {
         var credentials = ResolveGuestCredentials();
         if (credentials == null)
             return;
 
-        var vmWindow = new VmAnalysisWindow(samplePath, runFirstTimeSetup, sampleTimeoutSeconds, waitForSampleExit, credentials) { Owner = Owner };
+        var vmWindow = new VmAnalysisWindow(
+            samplePath,
+            runFirstTimeSetup,
+            sampleTimeoutSeconds,
+            waitForSampleExit,
+            credentials,
+            linkedJobId,
+            OpenBrowserUrl,
+            onJobIdKnown) { Owner = Owner };
         vmWindow.Show();
     }
 

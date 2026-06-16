@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import type { useIndexResultsViewModel } from "@/hooks/useIndexResultsViewModel";
 import type { AnalysisResult, ReportCategory } from "@/lib/analysis";
+import { isStaticAnalysisInProgress } from "@/lib/analysis";
 import type { StillRunningJob } from "./UploadView";
 import StillRunningNotice from "./StillRunningNotice";
 import ResultsOverview from "./ResultsOverview";
@@ -13,6 +14,7 @@ export type AnalysisResultsViewProps = {
   resultsTitle: string;
   error: string | null;
   isAnalyzing: boolean;
+  ghidraProgress: number | null;
   stillRunningJob: StillRunningJob | null;
   onClear: () => void;
   onResumeWaiting: () => void;
@@ -30,6 +32,7 @@ const AnalysisResultsView = ({
   resultsTitle,
   error,
   isAnalyzing,
+  ghidraProgress,
   stillRunningJob,
   onClear,
   onResumeWaiting,
@@ -41,7 +44,13 @@ const AnalysisResultsView = ({
   overviewCategoryIndex,
   onChangeCategoryIndex,
   vm,
-}: AnalysisResultsViewProps) => (
+}: AnalysisResultsViewProps) => {
+  const staticInProgress = isStaticAnalysisInProgress(result, isAnalyzing);
+  const staticProgress = staticInProgress
+    ? (ghidraProgress ?? result?.staticProgress ?? null)
+    : null;
+
+  return (
   <motion.div key="results" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-3">
@@ -90,6 +99,8 @@ const AnalysisResultsView = ({
       cFunctionHighlights={vm.cFunctionHighlights}
       baseDownloadName={vm.baseDownloadName}
       geminiAllowMock={isMockDemo}
+      staticInProgress={staticInProgress}
+      staticProgress={staticProgress}
       onExpand={vm.handleExpandPanel}
     />
 
@@ -108,7 +119,10 @@ const AnalysisResultsView = ({
           activeCFunctionId={vm.activeCFunctionId}
           onSelectFlaggedFunction={vm.selectFlaggedFunction}
           onViewportLineChange={vm.handleViewportLineChange}
-          reportChapters={vm.reportChapters}
+          reportChapters={vm.isReportExpanded ? vm.expandedReportChapters : vm.reportChapters}
+          expandedReportText={vm.expandedReportText}
+          expandedReportTitle={vm.expandedReportTitle}
+          isReportExpanded={vm.isReportExpanded}
           scrollToLine={vm.scrollToLine}
           onScrollToLine={vm.setScrollToLine}
           highlightedLineRange={vm.highlightedLineRange}
@@ -130,6 +144,7 @@ const AnalysisResultsView = ({
       )}
     </AnimatePresence>
   </motion.div>
-);
+  );
+};
 
 export default AnalysisResultsView;

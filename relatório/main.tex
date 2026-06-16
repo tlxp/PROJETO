@@ -173,7 +173,9 @@ Por fim, agradeço ao leitor por dar um tempo de vida a ler este relatório.
     JSON & JavaScript Object Notation \\
     LLM & Large Language Model (modelo de linguagem de grande dimensão) \\
     NFR & Non-Functional Requirement (Requisito Não-Funcional) \\
+    NDJSON & Newline-Delimited JSON (streaming de eventos) \\
     PE & Portable Executable \\
+    PsDirect & PowerShell Direct (acesso remoto à guest Hyper-V) \\
     RAT & Remote Access Trojan \\
     REST & Representational State Transfer \\
     RQ & Redis Queue \\
@@ -181,6 +183,7 @@ Por fim, agradeço ao leitor por dar um tempo de vida a ler este relatório.
     UBI & Universidade da Beira Interior \\
     UUID & Universally Unique Identifier \\
     VM & Virtual Machine (Máquina Virtual) \\
+    SHA-256 & Secure Hash Algorithm 256 bits (integridade de ficheiros) \\
     WPF & Windows Presentation Foundation \\
     YARA & Yet Another Recursive Acronym (linguagem de regras de deteção) \\
 \end{tabular}
@@ -271,7 +274,8 @@ Para demonstrar as etapas do processo realizado, este relatório está organizad
     \item O terceiro capítulo --- \emph{Tecnologias e Ferramentas Utilizadas} --- descreve o stack
           tecnológico adoptado ao longo do ciclo de desenvolvimento.
     \item O quarto capítulo --- \emph{Engenharia de Software} --- apresenta requisitos, diagramas
-          de casos de uso, diagramas de actividade e arquitectura do sistema.
+          (casos de uso, actividade, arquitectura, sequência, zonas de confiança, autenticação e
+          caminhos de sandbox), modelo de dados e arquitectura de segurança.
     \item O quinto capítulo --- \emph{Implementação} --- detalha os componentes implementados,
           o manual de utilização e os testes efectuados.
     \item O sexto capítulo --- \emph{Conclusões e Trabalho Futuro} --- sintetiza os resultados
@@ -386,9 +390,19 @@ Três projectos .NET partilham \texttt{RatAnalyzer.sln}: \textbf{RatAnalyzer.Des
 
 \section{Hyper-V, PowerShell, SQLite}
 
-Sandbox em \textbf{Hyper-V} (VM \texttt{MalwareSandbox}, snapshot \texttt{CleanState}).
-\textbf{PowerShell} automatiza setup e execução. \textbf{SQLite} persiste jobs em
-\texttt{analysis.db}; \textbf{Redis + RQ} é opcional para fila distribuída.
+Sandbox em \textbf{Hyper-V} (VM \texttt{MalwareSandbox}, snapshot \texttt{CleanState}, switch
+\textbf{Internal} sem Internet na guest). \textbf{PowerShell} automatiza setup (\texttt{01-Setup-MalwareSandbox.ps1}),
+execução de amostras (\texttt{04-Run-Sample.ps1}) e orquestração Hyper-V no Caminho A.
+\textbf{SQLite} persiste jobs em \texttt{analysis.db}; \textbf{Redis + RQ} é opcional para fila distribuída.
+
+\section{Segurança e isolamento}
+
+O desenho adopta \emph{fail-closed} em produção: o backend recusa arrancar sem
+\texttt{RATANALYZER\_API\_TOKEN} quando \texttt{RATANALYZER\_ENV=production}; o vm-agent termina
+sem \texttt{VM\_AGENT\_TOKEN}. Segredos residem em \texttt{secrets/} (gitignored), gerados por
+\texttt{scripts/generate-production-secrets.ps1}. Uploads HTTP são autenticados, com sanitização
+de nomes, limite de tamanho e armazenamento em \texttt{DATA\_DIR} fora do repositório. A
+documentação canónica de segurança está em \texttt{docs/SEGURANCA.md}.
 
 \section{Conclusão}
 
@@ -404,7 +418,8 @@ pipeline e API, TypeScript para UX, C\# para Windows/Hyper-V, PowerShell para in
 \section{Introdução}
 
 Este capítulo detalha requisitos funcionais e não-funcionais, diagramas de casos de uso e
-actividade, e a arquitectura global do \rat.
+actividade, arquitectura global, zonas de confiança, autenticação, caminhos de sandbox e modelo
+de dados do \rat.
 
 \section{Análise de Requisitos}
 
@@ -435,8 +450,10 @@ monitorizar comportamento e devolver relatório comportamental. Suporta modos \t
 \textbf{Gestão de jobs.} Criar, consultar e listar jobs (\texttt{POST/GET /api/analysis}).
 Persistência em SQLite com UUID v4; artefatos em \texttt{sandbox\_jobs/}. \\
 \fr{05} &
-\textbf{Visualização de resultados.} Interface web com três painéis: relatório, pseudo-C (Ghidra)
-e IL (.NET); navegação contextual entre indicadores e código. \\
+\textbf{Visualização de resultados.} Interface web com três painéis: pseudo-C (Ghidra),
+IL (.NET) e \emph{relatório} (dividido horizontalmente em estático + VM quando ambos existem
+no mesmo \texttt{jobId}); navegação contextual entre indicadores e código. Permalink
+\texttt{/analysis/\{jobId\}} com actualização em tempo real enquanto a análise na VM decorre. \\
 \fr{06} &
 \textbf{Scoring de risco.} Calcular score 0--100 agregando YARA, C2, evasão, packers, ofuscação,
 persistência e entropia; classificar em CRÍTICO/ALTO/MÉDIO/BAIXO/MUITO BAIXO. \\
@@ -445,7 +462,10 @@ persistência e entropia; classificar em CRÍTICO/ALTO/MÉDIO/BAIXO/MUITO BAIXO.
 incrementais durante a análise estática. \\
 \fr{08} &
 \textbf{Orquestração VM.} Dois caminhos dinâmicos: (A) backend Python + vm-agent HTTP;
-(B) scripts PowerShell + cópia PsDirect/\texttt{Copy-VMFile} com verificação SHA256 (WPF). \\
+(B) scripts PowerShell + cópia PsDirect/\texttt{Copy-VMFile} com verificação SHA256 (WPF).
+No Caminho~B, o relatório transferido para o host é publicado via
+\texttt{POST /api/analysis/upload\_dynamic}, reutilizando o \texttt{jobId} da análise estática
+quando aplicável. \\
 \fr{09} &
 \textbf{Assistente Gemini no pseudo-C.} No painel de código C descompilado, o utilizador pode
 configurar uma API key do Google AI Studio (armazenamento local) e perguntar, via chat, o que faz
@@ -525,11 +545,184 @@ detalha a sequência integrada entre frontend, WPF, API e sandbox.
     \label{fig:sequence}
 \end{figure}
 
+\subsection{Zonas de confiança e autenticação}
+
+A Figura~\ref{fig:trust-zones} resume as zonas de confiança (host, rede sandbox, guest).
+A Figura~\ref{fig:auth} mapeia tokens e credenciais entre componentes.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{fig-4-6-security-trust-zones.png}
+    \caption{Zonas de confiança — isolamento host / sandbox / guest}
+    \label{fig:trust-zones}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.92\textwidth]{fig-4-10-security-auth.png}
+    \caption{Mapa de autenticação — tokens e credenciais}
+    \label{fig:auth}
+\end{figure}
+
+\subsection{Caminhos de sandbox (A e B)}
+
+A Figura~\ref{fig:sandbox-paths} compara os dois caminhos independentes de análise dinâmica.
+As Figuras~\ref{fig:seq-path-a} e~\ref{fig:seq-path-b} detalham cada fluxo.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.98\textwidth]{fig-4-7-sandbox-paths.png}
+    \caption{Comparação dos caminhos A (vm-agent HTTP) e B (PowerShell Hyper-V)}
+    \label{fig:sandbox-paths}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{fig-4-8-sequence-path-a.png}
+    \caption{Sequência — Caminho A (vm-agent HTTP)}
+    \label{fig:seq-path-a}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{fig-4-9-sequence-path-b.png}
+    \caption{Sequência — Caminho B (PsDirect + verificação SHA256)}
+    \label{fig:seq-path-b}
+\end{figure}
+
+\section{Arquitectura de Segurança}
+\label{sec:seguranca}
+
+A Figura~\ref{fig:trust-zones} modela três zonas: \textbf{host} (componentes sob controlo do
+operador), \textbf{rede sandbox} (switch Internal Hyper-V, tráfego API$\leftrightarrow$vm-agent) e
+\textbf{guest} (ambiente não confiável onde a amostra executa). A Internet não é encaminhada para
+a guest; cada run inicia com \emph{restore} ao snapshot \texttt{CleanState}.
+
+A Figura~\ref{fig:auth} resume os mecanismos de autenticação. O backend valida
+\texttt{X-API-Token}; o vm-agent valida \texttt{X-Agent-Token} com comparação em tempo constante
+(\texttt{TokenComparer.cs}); os scripts Hyper-V usam credenciais guest via PowerShell Direct. O
+driver \texttt{stub} não executa amostras e dispensa autenticação de sandbox.
+
+\begin{table}[H]
+    \centering
+    \caption{Princípios de segurança e implementação}
+    \label{tab:seguranca-principios}
+    \small
+    \begin{tabular}{@{}p{3.2cm}p{9.8cm}@{}}
+        \toprule
+        \textbf{Princípio} & \textbf{Implementação} \\
+        \midrule
+        Fail-closed & Backend e vm-agent recusam arranque sem tokens em produção \\
+        Malware isolado & Execução apenas em VM Hyper-V ou driver \texttt{stub} \\
+        Segredos fora do Git & \texttt{secrets/}, \texttt{.env} gitignored \\
+        Bind local & API em \texttt{127.0.0.1}; vm-agent no IP interno da VM \\
+        Menor privilégio & Guest com utilizador \texttt{analyst}; host admin só para Hyper-V \\
+        Defesa em profundidade & Auth + sanitização + limites de upload + snapshot limpo \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{table}[H]
+    \centering
+    \caption{Autenticação por componente}
+    \label{tab:auth}
+    \small
+    \begin{tabular}{@{}p{2.4cm}p{3.2cm}p{4.2cm}p{2.8cm}@{}}
+        \toprule
+        \textbf{Componente} & \textbf{Mecanismo} & \textbf{Canal} & \textbf{Produção} \\
+        \midrule
+        Backend & Token estático & \texttt{X-API-Token} & Obrigatório \\
+        Frontend & Build-time & \texttt{VITE\_API\_TOKEN} & Obrigatório \\
+        WPF & Propagação & \texttt{X-API-Token} + env & Obrigatório \\
+        vm-agent & Token estático & \texttt{X-Agent-Token} & Obrigatório \\
+        Scripts Hyper-V & PsDirect & \texttt{PROJETOVM\_Guest*} & Obrigatório \\
+        Driver stub & --- & Não executa amostras & N/A \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{table}[H]
+    \centering
+    \caption{Superfícies de ataque e mitigações estruturais}
+    \label{tab:attack-surfaces}
+    \small
+    \begin{tabular}{@{}p{2.6cm}p{3.4cm}p{6.8cm}@{}}
+        \toprule
+        \textbf{Superfície} & \textbf{Risco} & \textbf{Mitigação} \\
+        \midrule
+        API FastAPI & Upload de malware; acesso a relatórios &
+          Bind \texttt{127.0.0.1}; token; CORS restrito \\
+        vm-agent & Execução remota na guest &
+          Token; IP interno; VM isolada \\
+        Gemini (frontend) & Exfiltração de código &
+          Opcional; chave no \texttt{localStorage}; sem backend \\
+        PowerShell sandbox & Credenciais em logs &
+          Password via env/diálogo WPF \\
+        Path traversal & Escrita fora de diretórios seguros &
+          \texttt{upload\_security.py}; \texttt{SampleStorage.cs} \\
+        Dependências & Binários adulterados &
+          Locks com hashes; SHA-256 opcional no WPF \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\section{Comparação dos Caminhos de Sandbox}
+\label{sec:caminhos-ab}
+
+Os caminhos A e B são \textbf{independentes}: o driver \texttt{hyperv.py} do backend comunica com
+o vm-agent por HTTP e \textbf{não} invoca \texttt{04-Run-Sample.ps1}. O Caminho B é orquestrado
+pela aplicação WPF ou directamente pelos scripts em \texttt{scripts/hyperv-sandbox/}. Ambos
+partilham o hypervisor Hyper-V, switch Internal e snapshot \texttt{CleanState}.
+
+\begin{table}[H]
+    \centering
+    \caption{Comparação técnica — Caminho A (vm-agent) vs Caminho B (PowerShell)}
+    \label{tab:caminhos-ab}
+    \small
+    \begin{tabular}{@{}p{3.4cm}p{5.2cm}p{5.2cm}@{}}
+        \toprule
+        \textbf{Aspecto} & \textbf{Caminho A} & \textbf{Caminho B} \\
+        \midrule
+        Orquestrador & \texttt{vm\_orchestrator.py} (backend) & WPF / \texttt{04-Run-Sample.ps1} \\
+        Entrada típica & Frontend + \texttt{POST /api/analysis} & WPF drag-and-drop \\
+        Transporte & HTTP REST (upload, run, report) & PsDirect / \texttt{Copy-VMFile} \\
+        Integridade & Resposta JSON do agent & SHA-256 pós-cópia (\texttt{guest\_analysis\_done.txt}) \\
+        Telemetria & Processo, stdout/stderr & Ficheiros, registry, rede, Sysmon \\
+        Endpoints guest & \texttt{/api/upload}, \texttt{/api/run}, \texttt{/api/report} &
+          \texttt{Run-MalwareAnalysis.ps1} \\
+        Driver backend & \texttt{SANDBOX\_VM\_DRIVER=hyperv} & Não aplicável (fora do backend) \\
+        Gen VM & Gen1 ou Gen2 & Gen1 ou Gen2 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
 \section{Modelo de Dados}
 
-A persistência assenta em \textbf{SQLite} (\texttt{analysis.db}) sob \texttt{DATA\_DIR}. Cada job
-regista: \texttt{job\_id} (UUID v4), \texttt{analysis\_type}, estado, timestamps, caminhos para
-artefatos (\texttt{last\_analysis.json}, relatório dinâmico, excertos ofuscados). A Tabela~\ref{tab:scoring}
+A persistência assenta em \textbf{SQLite} (\texttt{analysis.db}) sob \texttt{DATA\_DIR}
+(por defeito \texttt{\%LOCALAPPDATA\%\textbackslash RatAnalyzer}). Cada registo na tabela
+\texttt{analyses} inclui \texttt{job\_id} (UUID v4), \texttt{analysis\_type}
+(\texttt{static}|\texttt{dynamic}|\texttt{both}), \texttt{status}, \texttt{file\_name},
+\texttt{sha256}, timestamps e metadados de pipeline. Artefatos por job residem em
+\texttt{sandbox\_jobs/\{job\_id\}/}: relatório estático (\texttt{last\_analysis.json}),
+relatório dinâmico, excertos ofuscados e cópia da amostra.
+
+\begin{table}[H]
+    \centering
+    \caption{Ciclo de vida de um job (\texttt{analysis\_jobs.py})}
+    \label{tab:job-states}
+    \begin{tabular}{@{}llp{7.5cm}@{}}
+        \toprule
+        \textbf{Estado} & \textbf{Valor} & \textbf{Significado} \\
+        \midrule
+        Em fila & \texttt{queued} & Job criado; worker ainda não iniciou \\
+        Em execução & \texttt{running} & Pipeline estático e/ou dinâmico activo \\
+        Concluído & \texttt{completed} & Resultados disponíveis via \texttt{GET /api/analysis/\{id\}} \\
+        Falha & \texttt{failed} & Erro registado em \texttt{error}; sem resultado completo \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+A Tabela~\ref{tab:scoring}
 resume os pesos do scoring.
 
 \begin{table}[H]
@@ -555,7 +748,9 @@ resume os pesos do scoring.
 \section{Conclusões}
 
 A modelação garante rastreabilidade desde o upload até ao relatório final, com separação clara
-entre camadas de apresentação, API, análise e infraestrutura sandbox.
+entre camadas de apresentação, API, análise e infraestrutura sandbox. Os dez diagramas do
+capítulo (casos de uso, pipelines, arquitectura, sequências, zonas de confiança, autenticação e
+caminhos A/B) documentam tanto o fluxo funcional como os controlos de isolamento e integridade.
 
 % ============================================================
 % CAPÍTULO 5 — IMPLEMENTAÇÃO
@@ -583,7 +778,49 @@ A classe \texttt{RATAnalyzer} (\texttt{backend/rat\_analyzer.py}) orquestra o pi
 \end{enumerate}
 
 A API FastAPI (\texttt{backend/api.py}) expõe endpoints REST documentados em OpenAPI
-(\texttt{/docs}). Exemplo de criação de job:
+(\texttt{/docs}). A Tabela~\ref{tab:api-endpoints} resume os principais contratos HTTP; todos os
+endpoints de análise e armazenamento exigem \texttt{X-API-Token} excepto \texttt{/api/health}.
+
+\begin{table}[H]
+    \centering
+    \caption{Endpoints REST principais do backend}
+    \label{tab:api-endpoints}
+    \small
+    \begin{tabular}{@{}llp{6.8cm}@{}}
+        \toprule
+        \textbf{Método} & \textbf{Rota} & \textbf{Função} \\
+        \midrule
+        POST & \texttt{/api/analyze\_stream} & Análise estática com streaming NDJSON \\
+        POST & \texttt{/api/analysis} & Criar job (\texttt{static|dynamic|both}) \\
+        POST & \texttt{/api/analysis/upload\_static} & Publicar resultado estático num job existente \\
+        GET & \texttt{/api/analysis/\{job\_id\}} & Estado e artefatos do job \\
+        GET & \texttt{/api/analysis/\{job\_id\}/artifacts/obfuscated\_snippets} & Excertos ofuscados (texto) \\
+        GET & \texttt{/api/analyses} & Listagem de jobs recentes \\
+        GET & \texttt{/api/health} & \emph{Health check} (sem token) \\
+        POST & \texttt{/api/storage/cleanup|archive|purge} & Gestão de \texttt{DATA\_DIR} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{table}[H]
+    \centering
+    \caption{Controlos de upload HTTP (\texttt{upload\_security.py})}
+    \label{tab:upload-security}
+    \small
+    \begin{tabular}{@{}p{2.8cm}p{9.2cm}@{}}
+        \toprule
+        \textbf{Controlo} & \textbf{Detalhe} \\
+        \midrule
+        Autenticação & \texttt{X-API-Token} em todos os uploads \\
+        Nome de ficheiro & Rejeita \texttt{..}, separadores, paths absolutos \\
+        Tamanho & \texttt{RATANALYZER\_MAX\_UPLOAD\_MB} (default 100~MB) \\
+        Job ID & Apenas UUID v4 \\
+        Armazenamento & \texttt{DATA\_DIR} fora do repositório Git \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Exemplo de criação de job:
 
 \begin{lstlisting}[style=python,caption={Endpoint de criação de job — \texttt{analysis\_jobs.py}},label={lst:create-job}]
 @app.post("/api/analysis")
@@ -663,11 +900,38 @@ aplicação desktop (quando disponível).
 
 \section{VM Agent e Sandbox Hyper-V}
 
+A análise dinâmica está documentada nos diagramas das Figuras~\ref{fig:sandbox-paths},
+\ref{fig:seq-path-a} e~\ref{fig:seq-path-b} (capítulo~\ref{ch:engenharia}). A Tabela~\ref{tab:caminhos-ab}
+resume as diferenças operacionais entre os dois caminhos.
+
 \subsection{Caminho A — Backend + vm-agent HTTP}
 
-O \texttt{vm\_orchestrator.py} seleciona o driver (\texttt{SANDBOX\_VM\_DRIVER}). O vm-agent
-expõe \texttt{/api/upload}, \texttt{/api/run} e \texttt{/api/report} com header
-\texttt{X-Agent-Token}.
+O \texttt{vm\_orchestrator.py} seleciona o driver via \texttt{SANDBOX\_VM\_DRIVER}
+(\texttt{stub} por defeito, \texttt{hyperv} ou \texttt{proxmox} experimental). Com
+\texttt{hyperv}, o host restaura o snapshot, arranca a VM e comunica com o vm-agent nos
+endpoints \texttt{/api/health}, \texttt{/api/upload}, \texttt{/api/run} e
+\texttt{/api/report}, sempre com header \texttt{X-Agent-Token}. O agent limita uploads a
+200~MB, impede \emph{path traversal} em \texttt{samples/} e serializa execuções via
+\texttt{RunGate} (um run de cada vez).
+
+\begin{table}[H]
+    \centering
+    \caption{Variáveis de ambiente — sandbox dinâmica (Caminho A)}
+    \label{tab:env-sandbox-a}
+    \small
+    \begin{tabular}{@{}p{4.8cm}p{7.2cm}@{}}
+        \toprule
+        \textbf{Variável} & \textbf{Função} \\
+        \midrule
+        \texttt{SANDBOX\_VM\_DRIVER} & \texttt{stub} | \texttt{hyperv} | \texttt{proxmox} \\
+        \texttt{HYPERV\_VM\_NAME} & Nome da VM (ex.: \texttt{MalwareSandbox}) \\
+        \texttt{HYPERV\_SNAPSHOT\_NAME} & Snapshot limpo (ex.: \texttt{CleanState}) \\
+        \texttt{VM\_AGENT\_BASE\_URL} & URL do agent (ex.: \texttt{http://192.168.100.10:5000}) \\
+        \texttt{VM\_AGENT\_TOKEN} & Token partilhado backend$\leftrightarrow$agent \\
+        \texttt{SANDBOX\_VM\_OP\_TIMEOUT\_SECONDS} & Timeout restore/start (default 120~s) \\
+        \bottomrule
+    \end{tabular}
+\end{table}
 
 \subsection{Caminho B — Scripts PowerShell}
 
@@ -685,7 +949,28 @@ Fluxo dentro da VM (\texttt{vm/Run-MalwareAnalysis.ps1}):
 \end{itemize}
 
 O host valida integridade comparando o hash e o tamanho do ficheiro copiado com o digest
-registado no guest; em caso de discrepância, o relatório no host é descartado.
+registado no guest; em caso de discrepância, o relatório no host é descartado. O destino típico
+é \texttt{D:\textbackslash PROJETOVM\textbackslash Reports\textbackslash analysis\_<RunId>.txt};
+o JSON do run regista \texttt{report\_sha256} e \texttt{report\_hash\_verified}.
+
+\begin{table}[H]
+    \centering
+    \caption{Campos de \texttt{guest\_analysis\_done.txt} (protocolo PsDirect)}
+    \label{tab:guest-done}
+    \small
+    \begin{tabular}{@{}lp{9.5cm}@{}}
+        \toprule
+        \textbf{Campo} & \textbf{Descrição} \\
+        \midrule
+        \texttt{finishedUtc} & Timestamp ISO 8601 (UTC) \\
+        \texttt{reportPath} & Caminho do relatório no guest (\texttt{C:\textbackslash analysis.txt}) \\
+        \texttt{reportSha256} & SHA-256 do relatório \textbf{no guest} \\
+        \texttt{reportBytes} & Tamanho em bytes \\
+        \texttt{jsonReportPath} & Caminho do JSON (\texttt{C:\textbackslash analysis.json}) \\
+        \texttt{transport} & Valor fixo \texttt{psdirect} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
 
 \subsubsection{Abordagens anteriores de transporte}
 \label{sec:caminho-b-historico}
@@ -753,6 +1038,9 @@ python rat_analyzer.py caminho/amostra.exe -o reports/ -v
         .NET & dotnet build (CI) & Compilação Release \\
         YARA & pytest (compilação regras) & Integrado \\
         PowerShell & CI encoding + sintaxe & Scripts \texttt{hyperv-sandbox/} \\
+        vm-agent & xUnit (\texttt{VmAgent.Tests}) & 30 \\
+        WPF & xUnit (\texttt{RatAnalyzer.Desktop.Tests}) & 12 \\
+        Diagramas & \texttt{render\_plantuml.py --check} & 10 figuras cap.~4 \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -770,6 +1058,8 @@ A documentação técnica está versionada no repositório Git:
     \item \texttt{README.md} --- visão geral, início rápido e tabela de escolha dos caminhos A/B.
     \item \texttt{docs/README.md} --- índice da documentação.
     \item \texttt{docs/diagrams/} --- fonte única PlantUML; PNG em \texttt{relatório/imagens/fig-4-*.png} via \texttt{render\_plantuml.py}.
+    \item \texttt{docs/SEGURANCA.md} --- arquitectura de segurança, zonas de confiança e checklist.
+    \item \texttt{docs/sandbox-hyperv-setup.md} --- guia Caminho A (vm-agent + Hyper-V).
     \item \texttt{docs/production-secrets.md} --- segredos, modo produção e checklist de deploy.
     \item \texttt{docs/AUDITORIA.md} --- auditoria de segurança e qualidade (Jun 2026).
     \item \texttt{docs/faq.md} --- perguntas frequentes e resolução de problemas comuns.
@@ -779,8 +1069,11 @@ A documentação técnica está versionada no repositório Git:
 
 \section{Conclusões}
 
-A implementação reflecte a arquitectura planeada: pipeline estático modular, jobs assíncronos,
-duas pipelines dinâmicas independentes e interfaces web/desktop coerentes.
+A implementação reflecte a arquitectura planeada: pipeline estático modular, jobs assíncronos com
+estados \texttt{queued}$\rightarrow$\texttt{running}$\rightarrow$\texttt{completed|failed}, duas
+pipelines dinâmicas independentes (HTTP e PsDirect+SHA-256), controlos de upload e autenticação
+documentados nas Tabelas~\ref{tab:auth} e~\ref{tab:upload-security}, e interfaces web/desktop
+coerentes.
 
 % ============================================================
 % CAPÍTULO 6 — CONCLUSÕES
@@ -797,12 +1090,11 @@ dinâmica para deteção de RATs, com:
     \item Pipeline estático completo (PE, YARA, deobfuscação, descompilação, scoring).
     \item Sandbox Hyper-V isolada com duas vias de orquestração (HTTP e PowerShell Direct).
     \item Interfaces web e desktop funcionais, com testes CI e auditoria de segurança concluída.
-    \item Documentação extensa e orientação educativa (indicadores explicáveis, pseudo-C/IL,
-          assistente Gemini opcional no frontend).
+    \item Documentação extensa, diagramas PlantUML sincronizados com o relatório e auditoria de
+          segurança concluída (\texttt{docs/AUDITORIA.md}, Jun 2026).
+    \item Indicadores explicáveis (pseudo-C/IL, scoring, YARA) e assistente Gemini opcional no
+          frontend (API key apenas no browser).
 \end{itemize}
-
-O projecto permitiu consolidar competências em engenharia de software, segurança informática,
-APIs REST, desenvolvimento full-stack e automação de infraestrutura Windows/Hyper-V.
 
 \section{Trabalho Futuro}
 
@@ -850,6 +1142,25 @@ SUSPICIOUS_IMPORTS = [
 ]
 # Deteta APIs de rede, criptografia e evasao
 \end{lstlisting}
+
+\section{Limites do vm-agent}
+
+\begin{table}[H]
+    \centering
+    \caption{Controlos de execução no vm-agent (\texttt{AgentLimits.cs}, \texttt{RunGate.cs})}
+    \label{tab:vm-agent-limits}
+    \begin{tabular}{@{}lp{9cm}@{}}
+        \toprule
+        \textbf{Controlo} & \textbf{Valor / comportamento} \\
+        \midrule
+        Upload máximo & 200~MB \\
+        Timeout de execução & Configurável; máximo 600~s \\
+        Path traversal & Destino restrito a \texttt{samples/} \\
+        Concorrência & Um run activo (\texttt{RunGate}) \\
+        Autenticação & \texttt{X-Agent-Token} em todas as rotas \\
+        \bottomrule
+    \end{tabular}
+\end{table}
 
 \section{Protocolo de transferência de relatório (Caminho B)}
 

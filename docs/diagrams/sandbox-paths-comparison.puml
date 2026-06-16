@@ -1,0 +1,52 @@
+@startuml
+title Caminhos de análise dinâmica — comparação A vs B
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+left to right direction
+
+package "Caminho A — VM Agent HTTP" #E3F2FD {
+  [Frontend / API] as A_FE
+  [VM Orchestrator\nvm_orchestrator.py] as A_VMO
+  [Driver hyperv\nou proxmox] as A_DRV
+  [Hyper-V VM] as A_VM
+  [vm-agent\nMinimal API] as A_AGENT
+}
+
+package "Caminho B — PowerShell Hyper-V" #FFF9C4 {
+  [WPF Desktop] as B_WPF
+  [04-Run-Sample.ps1\n+ fases RunSample] as B_PS
+  [Hyper-V VM] as B_VM
+  [Run-MalwareAnalysis.ps1\n+ Sysmon] as B_GUEST
+}
+
+A_FE --> A_VMO : POST /api/analysis
+A_VMO --> A_DRV
+A_DRV --> A_VM : restore snapshot\nstart / stop
+A_DRV --> A_AGENT : HTTP REST\nupload · run · report
+A_AGENT --> A_VM
+
+B_WPF --> B_PS : orquestração local
+B_PS --> B_VM : restore snapshot\nCopy-VMFile / PsDirect
+B_PS --> B_GUEST : credenciais guest
+B_GUEST --> B_VM
+
+note bottom of A_AGENT
+  Telemetria básica
+  (processo, stdout/stderr)
+  Orquestrador: backend
+end note
+
+note bottom of B_GUEST
+  Telemetria completa
+  (ficheiros, registry, rede)
+  Orquestrador: WPF / scripts
+end note
+
+note as N1
+  **Independentes** — HTTP vs PsDirect.
+  Ambos usam switch Internal e snapshot CleanState.
+  O driver hyperv **não** invoca 04-Run-Sample.ps1.
+end note
+
+@enduml

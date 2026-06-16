@@ -8,3 +8,7 @@
 ^C:\\Windows\\Temp\\
 ^C:\\Users\\[^\\]+\\AppData\\Local\\Temp\\
 ^C:\\Users\\[^\\]+\\AppData\\Roaming\\Microsoft\\Windows\\Recent\\
+# Artefactos gerados pela pipeline de análise (baseline/after/during em analysis_work)
+^C:\\analysis_work\\baseline\\
+^C:\\analysis_work\\after\\
+^C:\\analysis_work\\during\\

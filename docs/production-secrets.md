@@ -2,9 +2,7 @@
 
 O RAT Analyzer usa três segredos principais. **Nunca** ative `ALLOW_INSECURE` em produção.
 
-> Contexto da auditoria: [`AUDITORIA.md`](AUDITORIA.md).
 > Arquitetura de segurança (zonas, auth, uploads): [`SEGURANCA.md`](SEGURANCA.md).
-> Checklist abaixo.
 
 | Segredo | Variável | Componentes |
 |---------|----------|-------------|

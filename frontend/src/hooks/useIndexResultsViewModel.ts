@@ -12,6 +12,7 @@ import {
   parseReportCategories,
   parseReportChapters,
   parseReportResumoLines,
+  getDisplayVmReport,
   parseSnippetFileSections,
   zipSnippetPairs,
   type AnalysisResult,
@@ -477,10 +478,33 @@ export function useIndexResultsViewModel({ result, file, currentJobId }: UseInde
     [leftColWidth, rightColWidth]
   );
 
-  const handleExpandPanel = useCallback((panel: "c" | "il" | "report") => {
+  const handleExpandPanel = useCallback((panel: Exclude<ExpandedPanel, null>) => {
     setScrollToLine(null);
     setExpandedPanel(panel);
   }, []);
+
+  const expandedReportText = useMemo(() => {
+    if (expandedPanel === "report-vm") return getDisplayVmReport(result?.vmReport);
+    if (expandedPanel === "report-static" || expandedPanel === "report") return result?.report ?? "";
+    return "";
+  }, [expandedPanel, result?.vmReport, result?.report]);
+
+  const expandedReportChapters = useMemo(
+    () => parseReportChapters(expandedReportText),
+    [expandedReportText]
+  );
+
+  const expandedReportTitle = useMemo(() => {
+    if (expandedPanel === "report-vm") return "Relatório VM";
+    if (expandedPanel === "report-static") return "Relatório estático";
+    if (expandedPanel === "report") return "Relatório";
+    return "";
+  }, [expandedPanel]);
+
+  const isReportExpanded =
+    expandedPanel === "report" ||
+    expandedPanel === "report-static" ||
+    expandedPanel === "report-vm";
 
   const handleCloseExpanded = useCallback(() => {
     setExpandedPanel(null);
@@ -535,6 +559,10 @@ export function useIndexResultsViewModel({ result, file, currentJobId }: UseInde
     resetViewState,
     reportCategories,
     reportChapters,
+    expandedReportChapters,
+    expandedReportText,
+    expandedReportTitle,
+    isReportExpanded,
     reportResumoLines,
     flaggedFunctionsSorted,
     activeFlaggedFunction,

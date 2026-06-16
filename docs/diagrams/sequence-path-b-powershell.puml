@@ -1,0 +1,40 @@
+@startuml
+title Sequência — Caminho B (PowerShell / PsDirect + SHA256)
+autonumber
+skinparam responseMessageBelowArrow true
+
+actor "Utilizador" as U
+participant "WPF Desktop" as WPF
+participant "04-Run-Sample.ps1" as PS
+participant "Hyper-V host" as HV
+participant "Guest VM" as GUEST
+participant "Run-MalwareAnalysis.ps1" as ANALYSIS
+
+U -> WPF : drag-and-drop +\nanálise dinâmica
+WPF -> PS : invocar pipeline\n(credenciais guest)
+PS -> HV : Restore-VMSnapshot CleanState
+PS -> HV : Start-VM
+PS -> GUEST : copiar amostra +\nscripts (PsDirect)
+
+PS -> ANALYSIS : Invoke-Command\nRun-MalwareAnalysis.ps1
+ANALYSIS -> ANALYSIS : monitorizar\nficheiros · registry · rede
+ANALYSIS -> GUEST : gravar C:\analysis.txt\n+ guest_analysis_done.txt\n(SHA256)
+
+loop PhaseE-WaitReport
+  PS -> GUEST : polling guest_analysis_done.txt
+end
+
+PS -> GUEST : Copy-SandboxVMFileFromGuest\n(PsDirect ou Copy-VMFile)
+GUEST --> PS : analysis_<RunId>.txt
+
+PS -> PS : Assert-SandboxCopiedReportHash\n(comparar SHA256)
+alt hash inválido
+  PS -> PS : apagar ficheiro no host
+  PS --> WPF : erro de integridade
+else hash válido
+  PS -> HV : Stop-VM + restore snapshot
+  PS --> WPF : relatório + run JSON
+  WPF -> WPF : publicar job na API\n(opcional: abrir browser)
+end
+
+@enduml

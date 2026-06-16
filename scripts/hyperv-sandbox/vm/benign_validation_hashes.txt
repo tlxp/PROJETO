@@ -1,0 +1,3 @@
+# SHA256 de amostras inofensivas para validação do pipeline (classificação benign esperada).
+# BenignVmTest.exe (publish Release win-x64)
+9CB316156CA52F30F322B347CA78C46B2DE29CE1DF3204A5AF8F8914359995C8

@@ -29,6 +29,9 @@ type ExpandedViewProps = {
   onViewportLineChange: (line: number) => void;
 
   reportChapters: ReportChapter[];
+  expandedReportText: string;
+  expandedReportTitle: string;
+  isReportExpanded: boolean;
   scrollToLine: number | null;
   onScrollToLine: (line: number) => void;
   highlightedLineRange: LineRange | null;
@@ -74,6 +77,9 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({
   onSelectFlaggedFunction,
   onViewportLineChange,
   reportChapters,
+  expandedReportText,
+  expandedReportTitle,
+  isReportExpanded,
   scrollToLine,
   onScrollToLine,
   highlightedLineRange,
@@ -103,7 +109,7 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({
       <span className="font-mono text-sm font-medium text-muted-foreground">
         {expandedPanel === "c" && "Código C"}
         {expandedPanel === "il" && "IL / Bytecode"}
-        {expandedPanel === "report" && "Relatório"}
+        {isReportExpanded && expandedReportTitle}
       </span>
       <div className="flex items-center gap-2">
         {expandedPanel === "c" && (
@@ -136,7 +142,7 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({
         <h3 className="font-mono text-xs font-semibold text-muted-foreground">
           {expandedPanel === "c" && "Funções suspeitas"}
           {expandedPanel === "il" && "Navegação"}
-          {expandedPanel === "report" && "Marcadores do relatório"}
+          {isReportExpanded && "Marcadores do relatório"}
         </h3>
       </div>
       <div className="flex-1 overflow-auto p-2">
@@ -239,7 +245,7 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({
               </ul>
             </div>
           )
-        ) : expandedPanel === "report" ? (
+        ) : isReportExpanded ? (
           reportChapters.length === 0 ? (
             <p className="text-xs text-muted-foreground">Nenhum marcador no relatório.</p>
           ) : (
@@ -329,20 +335,25 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({
           }
         />
       )}
-      {expandedPanel === "report" && (
+      {isReportExpanded && (
         <CodePanel
-          title="Relatório"
+          title={expandedReportTitle}
           language="report"
-          code={result?.report ?? ""}
+          code={expandedReportText}
           icon={<FileText className="h-3.5 w-3.5 text-code-string" />}
           scrollToLine={scrollToLine}
           compactHeader
           downloadFileName={
-            result?.report != null
+            expandedReportText
               ? buildShortFileName({
                   baseName: baseDownloadName,
                   kind: "report",
-                  parts: [],
+                  parts:
+                    expandedPanel === "report-vm"
+                      ? ["vm"]
+                      : expandedPanel === "report-static"
+                        ? ["static"]
+                        : [],
                   ext: "txt",
                   maxTotal: 120,
                 })

@@ -5,6 +5,7 @@ import {
   parseReportCategories,
   parseReportChapters,
   parseReportResumoLines,
+  formatVmReportForDisplay,
   getCBlocks,
   mergeRanges,
   getBlockContainingLine,
@@ -12,6 +13,7 @@ import {
   getWordStats,
   clampFlaggedFunctionsToCode,
   isFlaggedRangeInCode,
+  isStaticAnalysisInProgress,
 } from "@/lib/analysis";
 
 const SAMPLE_REPORT = [
@@ -41,6 +43,61 @@ const SAMPLE_C_CODE = [
   "    read_config();",       // 8
   "}",                        // 9
 ].join("\n");
+
+describe("formatVmReportForDisplay", () => {
+  const SAMPLE_VM_RAW = [
+    "===============================================================================",
+    "RELATÓRIO DE ANÁLISE COMPORTAMENTAL (VM SANDBOX)",
+    "Amostra: C:\\analysis_work\\sample.exe",
+    "Hash SHA256: ABC123",
+    "Data/Hora: 2025-06-16 12:00:00",
+    "===============================================================================",
+    "",
+    "--- BASELINE (antes da execução) ---",
+    "Modo baseline rápido",
+    "",
+    "--- ALTERAÇÕES EM FICHEIROS ---",
+    "Foi criado o ficheiro: C:\\Users\\Public\\evil.dll",
+    "Não foram detetadas alterações nos ficheiros nas pastas monitorizadas.",
+    "",
+    "--- AVALIAÇÃO DE RISCO (SCORING) ---",
+    "Score total (bruto): 8/21",
+    "Score total (0-100): 38/100",
+    "Classificação: suspicious",
+    "REPORT_END;",
+  ].join("\n");
+
+  it("converte secções --- ... --- em cabeçalhos ALL-CAPS como o relatório estático", () => {
+    const formatted = formatVmReportForDisplay(SAMPLE_VM_RAW);
+    expect(formatted).toContain("RESUMO");
+    expect(formatted).toContain("BASELINE (ANTES DA EXECUÇÃO)");
+    expect(formatted).toContain("ALTERAÇÕES EM FICHEIROS");
+    expect(formatted).toContain("AVALIAÇÃO DE RISCO (SCORING)");
+    expect(formatted).not.toContain("REPORT_END");
+    expect(formatted).not.toMatch(/^---\s/m);
+  });
+
+  it("transforma deteções em bullets e inclui score no resumo", () => {
+    const formatted = formatVmReportForDisplay(SAMPLE_VM_RAW);
+    expect(formatted).toContain("- Foi criado o ficheiro: C:\\Users\\Public\\evil.dll");
+    expect(formatted).toContain("Score: 38/100");
+    expect(formatted).toContain("Classificação: suspicious");
+    expect(formatted).toContain("Ficheiros: 1");
+  });
+
+  it("formata relatório JSON enriquecido da VM", () => {
+    const json = JSON.stringify({
+      sample_path: "C:\\sample.exe",
+      sample_sha256: "deadbeef",
+      scoring: { score: 10, scoreRaw: 2, scoreMax: 21, classification: "benign" },
+      summary: { file_changes_count: 0, new_processes_count: 1, registry_changes_count: 0, network_changed: false },
+    });
+    const formatted = formatVmReportForDisplay(json);
+    expect(formatted).toContain("RELATÓRIO DE ANÁLISE COMPORTAMENTAL");
+    expect(formatted).toContain("Classificação: benign");
+    expect(formatted).toContain("Processos: 1");
+  });
+});
 
 describe("parseReportCategories", () => {
   it("extrai categorias com resumo e linhas de ocorrências", () => {
@@ -117,7 +174,8 @@ describe("buildAnalysisResultFromJob", () => {
     const job = { dynamicResult: { dynamicSummary: "ok", dynamicReport: { a: 1 } } };
     const res = buildAnalysisResultFromJob(job, "x.exe");
     expect(res?.dynamicSummary).toBe("ok");
-    expect(res?.report).toContain("Análise dinâmica");
+    expect(res?.vmReport).toContain('"a": 1');
+    expect(res?.report).toBe("");
     expect(res?.cCode).toBe("");
   });
 
@@ -130,6 +188,35 @@ describe("buildAnalysisResultFromJob", () => {
   it("devolve null para payloads sem resultado", () => {
     expect(buildAnalysisResultFromJob(null)).toBeNull();
     expect(buildAnalysisResultFromJob({ status: "running" })).toBeNull();
+  });
+});
+
+describe("isStaticAnalysisInProgress", () => {
+  it("detecta staticPending no resultado do job", () => {
+    expect(
+      isStaticAnalysisInProgress(
+        { report: "", cCode: "", ilCode: "", fileName: "x", riskScore: 0, riskLevel: "", staticPending: true, vmReport: "vm" },
+        false
+      )
+    ).toBe(true);
+  });
+
+  it("mantém overlay enquanto isAnalyzing e faltam report/cCode mesmo com vmReport", () => {
+    expect(
+      isStaticAnalysisInProgress(
+        { report: "", cCode: "", ilCode: "", fileName: "x", riskScore: 0, riskLevel: "", vmReport: "relatório VM" },
+        true
+      )
+    ).toBe(true);
+  });
+
+  it("liberta quando estática completa", () => {
+    expect(
+      isStaticAnalysisInProgress(
+        { report: "R", cCode: "void f(){}", ilCode: "", fileName: "x", riskScore: 0, riskLevel: "", vmReport: "vm" },
+        false
+      )
+    ).toBe(false);
   });
 });
 

@@ -97,6 +97,13 @@ foreach ($lib in (Get-ChildItem -LiteralPath $analysisLibDir -Filter "*.ps1" -Fi
     Copy-SandboxVMFile -VMName $VMName -Credential $cred -SourcePath $lib.FullName -DestinationPath "$VMScriptsPath\RunMalwareAnalysis\$($lib.Name)"
 }
 
+foreach ($supportFile in @('noise_patterns.txt', 'benign_validation_hashes.txt')) {
+    $supportPath = Join-Path $scriptDir $supportFile
+    if (Test-Path -LiteralPath $supportPath) {
+        Copy-SandboxVMFile -VMName $VMName -Credential $cred -SourcePath $supportPath -DestinationPath "$VMScriptsPath\$supportFile"
+    }
+}
+
 # Launcher destacado: corre Run-MalwareAnalysis.ps1 num processo separado dentro da VM
 # para que a análise sobreviva ao fecho da sessão PowerShell Direct (VMBus).
 $launchScript = Join-Path $scriptDir "Launch-AnalysisDetached.ps1"

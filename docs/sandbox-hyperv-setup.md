@@ -13,6 +13,8 @@ do projeto consulte o [README principal](../README.md).
 > usado pela app WPF: executa a amostra na VM, monitoriza alterações e copia o relatório para o host via
 > **PsDirect / Copy-VMFile**, com verificação **SHA256** após a cópia. **Não** é invocado pelo driver `hyperv.py` do backend.
 
+Diagramas: comparação A/B · [`fig-4-7`](../relatório/imagens/fig-4-7-sandbox-paths.png) · sequência A · [`fig-4-8`](../relatório/imagens/fig-4-8-sequence-path-a.png) · sequência B · [`fig-4-9`](../relatório/imagens/fig-4-9-sequence-path-b.png) (fonte em [`docs/diagrams/`](diagrams/README.md)).
+
 ## Índice
 
 - [Resumo rápido (Caminho A)](#resumo-rápido-caminho-a)

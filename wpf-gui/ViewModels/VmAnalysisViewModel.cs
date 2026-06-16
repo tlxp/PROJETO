@@ -24,6 +24,11 @@ public sealed class VmAnalysisViewModel : ViewModelBase
     private readonly bool _waitForSampleExit;
     private readonly VmGuestCredentials _guestCredentials;
     private readonly IVmAnalysisDialogs _dialogs;
+    private readonly DynamicAnalysisService _dynamicAnalysis;
+    private readonly Action<string>? _openBrowserUrl;
+    private readonly Action<string>? _onJobIdKnown;
+    private readonly string? _linkedJobId;
+    private string? _activeJobId;
     private readonly CancellationTokenSource _cts = new();
     private readonly StringBuilder _logBuilder = new();
     private readonly Stopwatch _sw = Stopwatch.StartNew();
@@ -54,7 +59,11 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         int sampleTimeoutSeconds,
         bool waitForSampleExit,
         VmGuestCredentials guestCredentials,
-        IVmAnalysisDialogs dialogs)
+        IVmAnalysisDialogs dialogs,
+        string? linkedJobId = null,
+        Action<string>? openBrowserUrl = null,
+        Action<string>? onJobIdKnown = null,
+        DynamicAnalysisService? dynamicAnalysis = null)
     {
         _samplePath = samplePath ?? throw new ArgumentNullException(nameof(samplePath));
         _runFirstTimeSetup = runFirstTimeSetup;
@@ -62,6 +71,10 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         _waitForSampleExit = waitForSampleExit;
         _guestCredentials = guestCredentials ?? throw new ArgumentNullException(nameof(guestCredentials));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
+        _linkedJobId = string.IsNullOrWhiteSpace(linkedJobId) ? null : linkedJobId.Trim();
+        _openBrowserUrl = openBrowserUrl;
+        _onJobIdKnown = onJobIdKnown;
+        _dynamicAnalysis = dynamicAnalysis ?? new DynamicAnalysisService();
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
 
         OpenRunFolderCommand = new RelayCommand(OpenRunFolder, () => CanOpenRunFolder);
@@ -334,6 +347,24 @@ public sealed class VmAnalysisViewModel : ViewModelBase
             _expectedReportJsonPath = Path.Combine(_reportsDir!, $"analysis_{_runId}.json");
         }
 
+        try
+        {
+            var progress = new Progress<string>(msg => AppendLine($"[*] {msg}", withTimestamp: true));
+            _activeJobId = await _dynamicAnalysis.MarkRunningAsync(
+                _linkedJobId,
+                Path.GetFileName(_samplePath),
+                _runId,
+                progress,
+                _cts.Token).ConfigureAwait(true);
+            _onJobIdKnown?.Invoke(_activeJobId);
+            AppendLine($"[*] Job associado à análise dinâmica: {_activeJobId}", withTimestamp: true);
+        }
+        catch (Exception ex)
+        {
+            AppendLine($"[AVISO] Não foi possível registar a análise dinâmica no backend: {ex.Message}", withTimestamp: true);
+            _activeJobId = _linkedJobId;
+        }
+
         var runArgs = new List<string> { "-SamplePath", _samplePath };
         if (!string.IsNullOrWhiteSpace(_runId))
             runArgs.AddRange(new[] { "-RunId", _runId });
@@ -368,7 +399,47 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         if (!string.IsNullOrWhiteSpace(_expectedReportJsonPath))
             AppendLine($"[*] JSON esperado: {_expectedReportJsonPath}", withTimestamp: true);
 
+        if (reportReady && !string.IsNullOrWhiteSpace(_expectedReportPath))
+            await TryPublishDynamicReportAsync().ConfigureAwait(true);
+
         await PersistGuiLogAsync().ConfigureAwait(false);
+    }
+
+    private async Task TryPublishDynamicReportAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_expectedReportPath) || !File.Exists(_expectedReportPath))
+            return;
+
+        try
+        {
+            StatusText = "A enviar relatório para o frontend...";
+            var progress = new Progress<string>(msg => AppendLine($"[*] {msg}", withTimestamp: true));
+            var jobId = await _dynamicAnalysis.PublishReportAsync(
+                _activeJobId ?? _linkedJobId,
+                _expectedReportPath,
+                Path.GetFileName(_samplePath),
+                _runId,
+                progress,
+                _cts.Token).ConfigureAwait(true);
+
+            _activeJobId = jobId;
+            var resultsUrl = $"{AppConstants.FrontendUrl}/analysis/{Uri.EscapeDataString(jobId)}";
+            AppendLine($"[*] Relatório publicado no backend. URL: {resultsUrl}", withTimestamp: true);
+            StatusText = "Concluído — relatório disponível no frontend.";
+
+            try
+            {
+                _openBrowserUrl?.Invoke(resultsUrl);
+            }
+            catch (Exception ex)
+            {
+                AppendLine($"[AVISO] Não foi possível abrir o navegador automaticamente: {ex.Message}", withTimestamp: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendLine($"[AVISO] Falha ao publicar relatório no backend: {ex.Message}", withTimestamp: true);
+        }
     }
 
     private void AppendLine(string line, bool withTimestamp = false)

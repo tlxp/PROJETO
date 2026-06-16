@@ -97,7 +97,7 @@ export function useAnalysisJob() {
     async (
       jobId: string,
       signal: AbortSignal,
-      onTick?: (status: string, attempt: number) => void
+      onTick?: (status: string, attempt: number, job?: Record<string, unknown>) => void
     ): Promise<PollOutcome> => {
       let lastStatus = "desconhecido";
       for (let attempt = 1; attempt <= POLL_MAX_ATTEMPTS; attempt++) {
@@ -105,7 +105,7 @@ export function useAnalysisJob() {
         lastStatus = typeof job.status === "string" ? job.status : "desconhecido";
 
         if (lastStatus === "queued" || lastStatus === "running") {
-          onTick?.(lastStatus, attempt);
+          onTick?.(lastStatus, attempt, job);
           await sleep(POLL_INTERVAL_MS, signal);
           continue;
         }

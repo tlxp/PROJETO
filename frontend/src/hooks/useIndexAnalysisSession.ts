@@ -34,7 +34,7 @@ export function useIndexAnalysisSession() {
   const [isMockDemo, setIsMockDemo] = useState(false);
 
   const stream = useAnalysisStream();
-  const { beginSession, submitJob, pollJob, cancel: cancelJob } = useAnalysisJob();
+  const { beginSession, submitJob, pollJob, fetchJob, cancel: cancelJob } = useAnalysisJob();
   const analyzeRunRef = useRef(0);
 
   const handleFileLoaded = useCallback((f: File) => {
@@ -89,7 +89,17 @@ export function useIndexAnalysisSession() {
           navigate(ROUTES.analysis(jobId), { replace: true });
         }
 
-        const outcome = await pollJob(jobId, signal, (status, attempt) => {
+        const outcome = await pollJob(jobId, signal, (status, attempt, partialJob) => {
+          if (!cancelled && partialJob) {
+            const partial = buildAnalysisResultFromJob(
+              partialJob,
+              typeof partialJob.fileName === "string" ? partialJob.fileName : undefined
+            );
+            if (partial) {
+              setAnalysisResult(partial);
+              setShowResults(true);
+            }
+          }
           if (!cancelled && (attempt === 1 || attempt % 10 === 0)) {
             setAnalysisLogs((prev) => [
               ...prev,
@@ -136,6 +146,39 @@ export function useIndexAnalysisSession() {
       cancelled = true;
     };
   }, [location.search, currentJobId, jobIdFromPath, navigate, beginSession, pollJob]);
+
+  /** Atualiza resultados em tempo real enquanto o job evolui (ex.: VM a correr após estática). */
+  useEffect(() => {
+    if (!currentJobId || !showResults) return;
+
+    let cancelled = false;
+    const intervalId = window.setInterval(async () => {
+      if (cancelled) return;
+      try {
+        const job = await fetchJob(currentJobId);
+        if (cancelled) return;
+        const jobStatus = typeof job.status === "string" ? job.status : "";
+        const updated = buildAnalysisResultFromJob(
+          job,
+          typeof job.fileName === "string" ? job.fileName : undefined
+        );
+        if (updated) {
+          setAnalysisResult(updated);
+          const stillPending = !!(updated.staticPending || updated.dynamicPending);
+          const statusActive =
+            jobStatus === "running" || jobStatus === "queued";
+          setIsAnalyzing(stillPending || statusActive);
+        }
+      } catch {
+        /* ignorar erros transitórios de polling */
+      }
+    }, 1000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [currentJobId, showResults, fetchJob]);
 
   const loadMockDemo = useCallback(() => {
     setFile(null);

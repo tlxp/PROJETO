@@ -48,6 +48,7 @@ const Index = () => {
               resultsTitle={resultsVm.resultsTitle}
               error={session.error}
               isAnalyzing={session.isAnalyzing}
+              ghidraProgress={session.ghidraProgress}
               stillRunningJob={session.stillRunningJob}
               onClear={session.handleClear}
               onResumeWaiting={session.handleResumeWaiting}

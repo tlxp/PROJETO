@@ -1,3 +1,4 @@
+using System;
 using System.ComponentModel;
 using System.Threading.Tasks;
 using System.Windows;
@@ -10,11 +11,28 @@ public partial class VmAnalysisWindow : Window
 {
     private readonly VmAnalysisViewModel _viewModel;
 
-    public VmAnalysisWindow(string samplePath, bool runFirstTimeSetup, int sampleTimeoutSeconds, bool waitForSampleExit, VmGuestCredentials guestCredentials)
+    public VmAnalysisWindow(
+        string samplePath,
+        bool runFirstTimeSetup,
+        int sampleTimeoutSeconds,
+        bool waitForSampleExit,
+        VmGuestCredentials guestCredentials,
+        string? linkedJobId = null,
+        Action<string>? openBrowserUrl = null,
+        Action<string>? onJobIdKnown = null)
     {
         InitializeComponent();
 
-        _viewModel = new VmAnalysisViewModel(samplePath, runFirstTimeSetup, sampleTimeoutSeconds, waitForSampleExit, guestCredentials, new VmAnalysisDialogsHost(this));
+        _viewModel = new VmAnalysisViewModel(
+            samplePath,
+            runFirstTimeSetup,
+            sampleTimeoutSeconds,
+            waitForSampleExit,
+            guestCredentials,
+            new VmAnalysisDialogsHost(this),
+            linkedJobId,
+            openBrowserUrl,
+            onJobIdKnown: onJobIdKnown);
         _viewModel.RequestClose += Close;
         DataContext = _viewModel;
 

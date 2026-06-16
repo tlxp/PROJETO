@@ -247,6 +247,25 @@ def find_completed_by_sha256(sha256: str, analysis_type: str | None = None, pipe
         "artifactsDeletedAt": d.get("artifacts_deleted_at"),
     }
 
+def update_analysis_type(job_id: str, analysis_type: str) -> None:
+    _ensure_init()
+    with _LOCK:
+        conn = _connect()
+        try:
+            conn.execute(
+                """
+                UPDATE analyses
+                   SET analysis_type = ?,
+                       updated_at = ?
+                 WHERE job_id = ?
+                """,
+                (analysis_type, _utc_now_iso(), job_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
 def update_status(job_id: str, status: str, error: Optional[str] = None) -> None:
     _ensure_init()
     with _LOCK:
