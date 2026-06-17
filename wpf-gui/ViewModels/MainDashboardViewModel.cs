@@ -21,7 +21,7 @@ public sealed class MainDashboardViewModel : ViewModelBase
     private bool _runFirstTimeVmSetup;
     private bool _vmWaitForSampleExit = true;
     private int _vmSampleTimeoutSeconds = 120;
-    private bool _isAnalysisBusy;
+    private bool _isStaticAnalysisBusy;
     private string _staticStatusText = "";
     private bool _showStaticStatus;
     private bool _showStaticProgress;
@@ -38,11 +38,11 @@ public sealed class MainDashboardViewModel : ViewModelBase
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
         _staticAnalysis = staticAnalysis ?? new StaticAnalysisService();
 
-        SelectFileCommand = new RelayCommand(SelectFile, () => !IsAnalysisBusy);
-        RunStaticAnalysisCommand = new RelayCommand(() => _ = RunStaticAnalysisAsync(), () => !IsAnalysisBusy);
-        RunDynamicAnalysisCommand = new RelayCommand(RunDynamicAnalysis, () => !IsAnalysisBusy);
+        SelectFileCommand = new RelayCommand(SelectFile);
+        RunStaticAnalysisCommand = new RelayCommand(() => _ = RunStaticAnalysisAsync(), () => !IsStaticAnalysisBusy);
+        RunDynamicAnalysisCommand = new RelayCommand(RunDynamicAnalysis);
         OpenResultsCommand = new RelayCommand(OpenResults, () => ShowOpenResults);
-        OpenStorageMaintenanceCommand = new RelayCommand(OpenStorageMaintenance, () => !IsAnalysisBusy);
+        OpenStorageMaintenanceCommand = new RelayCommand(OpenStorageMaintenance);
     }
 
     public bool ShowOptions
@@ -69,12 +69,13 @@ public sealed class MainDashboardViewModel : ViewModelBase
         set => SetProperty(ref _vmSampleTimeoutSeconds, Math.Clamp(value, 5, 7200));
     }
 
-    public bool IsAnalysisBusy
+    /// <summary>True enquanto a análise estática decorre (não bloqueia a VM).</summary>
+    public bool IsStaticAnalysisBusy
     {
-        get => _isAnalysisBusy;
+        get => _isStaticAnalysisBusy;
         private set
         {
-            SetProperty(ref _isAnalysisBusy, value);
+            SetProperty(ref _isStaticAnalysisBusy, value);
             InvalidateCommands();
         }
     }
@@ -166,7 +167,7 @@ public sealed class MainDashboardViewModel : ViewModelBase
             return;
         }
 
-        IsAnalysisBusy = true;
+        IsStaticAnalysisBusy = true;
         ResetStaticProgress();
         StaticStatusText = "A preparar ambiente de análise estática...";
         ShowStaticStatus = true;
@@ -242,7 +243,7 @@ public sealed class MainDashboardViewModel : ViewModelBase
         }
         finally
         {
-            IsAnalysisBusy = false;
+            IsStaticAnalysisBusy = false;
         }
     }
 

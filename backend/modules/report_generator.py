@@ -256,11 +256,16 @@ class ReportGenerator:
         report_lines.append("-" * 80)
         report_lines.append(f"O ficheiro apresenta um nível de risco {analysis_results['risk_level']}.")
         report_lines.append(f"Score de risco: {analysis_results['risk_score']}/100")
-        
-        if analysis_results['risk_score'] >= 60:
+
+        if analysis_results.get("validation_sample"):
+            note = (analysis_results.get("validation_note") or "").strip()
+            if note:
+                report_lines.append(f"\nNota: {note}")
+
+        if analysis_results['risk_score'] >= 55 and analysis_results.get('risk_level') in ('ALTO', 'CRÍTICO'):
             report_lines.append("\n⚠️  AVISO: Este ficheiro apresenta características altamente suspeitas!")
             report_lines.append("Recomenda-se análise adicional e isolamento do sistema.")
-        elif analysis_results['risk_score'] >= 40:
+        elif analysis_results['risk_score'] >= 35:
             report_lines.append("\n⚠️  ATENÇÃO: Este ficheiro apresenta algumas características suspeitas.")
             report_lines.append("Recomenda-se análise adicional.")
         

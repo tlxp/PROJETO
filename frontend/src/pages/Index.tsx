@@ -41,7 +41,6 @@ const Index = () => {
               onAnalyze={session.handleAnalyze}
               onLoadMock={handleLoadMock}
               stillRunning={session.stillRunningJob}
-              onResumeWaiting={session.handleResumeWaiting}
             />
           ) : (
             <AnalysisResultsView
@@ -51,7 +50,6 @@ const Index = () => {
               ghidraProgress={session.ghidraProgress}
               stillRunningJob={session.stillRunningJob}
               onClear={session.handleClear}
-              onResumeWaiting={session.handleResumeWaiting}
               isMockDemo={session.isMockDemo}
               result={session.analysisResult}
               currentJobId={session.currentJobId}

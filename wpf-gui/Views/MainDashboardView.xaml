@@ -98,14 +98,13 @@
                                 Margin="8"
                                 Style="{StaticResource ModernButtonStyle}"
                                 Command="{Binding RunStaticAnalysisCommand}"
-                                IsEnabled="{Binding IsAnalysisBusy, Converter={StaticResource InverseBool}}" />
+                                IsEnabled="{Binding IsStaticAnalysisBusy, Converter={StaticResource InverseBool}}" />
                         <Button Content="Análise comportamental em VM"
                                 Width="210"
                                 Height="46"
                                 Margin="8"
                                 Style="{StaticResource AccentButtonStyle}"
-                                Command="{Binding RunDynamicAnalysisCommand}"
-                                IsEnabled="{Binding IsAnalysisBusy, Converter={StaticResource InverseBool}}" />
+                                Command="{Binding RunDynamicAnalysisCommand}" />
                     </StackPanel>
                     <Button Content="Manutenção / Limpeza..."
                             Margin="0,10,0,0"
@@ -114,7 +113,6 @@
                             HorizontalAlignment="Center"
                             Style="{StaticResource BaseButtonStyle}"
                             Command="{Binding OpenStorageMaintenanceCommand}"
-                            IsEnabled="{Binding IsAnalysisBusy, Converter={StaticResource InverseBool}}"
                             ToolTip="Limpeza segura de jobs antigos e estimativa de espaço." />
                     <CheckBox Content="Primeira entrada na VM (instalar software comum com winget e criar snapshot)"
                               Foreground="{StaticResource TextSecondaryBrush}"

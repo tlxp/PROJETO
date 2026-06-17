@@ -91,7 +91,7 @@ export function useAnalysisJob() {
   /**
    * Faz polling do job até concluir, falhar ou esgotar as tentativas.
    * Em vez de lançar erro por timeout, devolve `still-running` para a UI
-   * poder oferecer "continuar a aguardar".
+   * mostrar um aviso informativo.
    */
   const pollJob = useCallback(
     async (

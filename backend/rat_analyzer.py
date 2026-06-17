@@ -144,14 +144,19 @@ class RATAnalyzer:
 
         # 6) Cálculo do score de risco
         self._log("[6/7] Cálculo do score de risco...")
+        file_sha256 = (self.analysis_results.get("file_info") or {}).get("sha256")
         risk_assessment = self.risk_scorer.calculate_risk(
             self.analysis_results["static_analysis"],
             self.analysis_results["yara_matches"],
             self.analysis_results["deobfuscation"],
+            file_sha256=file_sha256,
         )
         self.analysis_results["risk_score"] = risk_assessment["score"]
         self.analysis_results["risk_level"] = risk_assessment["level"]
         self.analysis_results["risk_details"] = risk_assessment["details"]
+        if risk_assessment.get("validation_sample"):
+            self.analysis_results["validation_sample"] = True
+            self.analysis_results["validation_note"] = risk_assessment.get("validation_note", "")
         
         # 6) Se houve descompilação .NET, aplicar deobfuscação ao código fonte; senão, tentar desmontagem (assembly) para binários nativos
         decomp = self.analysis_results.get("dotnet_decompilation", {})

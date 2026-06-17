@@ -1,11 +1,17 @@
 import { describe, it, expect } from "vitest";
 import {
+  areAnalysisResultsEquivalent,
   buildAnalysisResultFromJob,
+  flaggedFunctionsSignature,
   normalizeAnalysisResult,
+  resolveFlaggedFunctionId,
   parseReportCategories,
   parseReportChapters,
   parseReportResumoLines,
   formatVmReportForDisplay,
+  parseVmScoringFromReport,
+  compareAnalysisScores,
+  translateVmClassification,
   getCBlocks,
   mergeRanges,
   getBlockContainingLine,
@@ -64,25 +70,56 @@ describe("formatVmReportForDisplay", () => {
     "Score total (bruto): 8/21",
     "Score total (0-100): 38/100",
     "Classificação: suspicious",
+    "Nota: amostra de validação conhecida (BenignVmTest)",
+    "",
+    "===============================================================================",
+    "FIM DO RELATÓRIO",
+    "===============================================================================",
     "REPORT_END;",
   ].join("\n");
 
   it("converte secções --- ... --- em cabeçalhos ALL-CAPS como o relatório estático", () => {
     const formatted = formatVmReportForDisplay(SAMPLE_VM_RAW);
     expect(formatted).toContain("RESUMO");
+    expect(formatted).toContain("INFORMAÇÕES DO FICHEIRO");
+    expect(formatted).toContain("SCORE DE RISCO");
     expect(formatted).toContain("BASELINE (ANTES DA EXECUÇÃO)");
     expect(formatted).toContain("ALTERAÇÕES EM FICHEIROS");
-    expect(formatted).toContain("AVALIAÇÃO DE RISCO (SCORING)");
+    expect(formatted).not.toContain("AVALIAÇÃO DE RISCO (SCORING)");
     expect(formatted).not.toContain("REPORT_END");
+    expect(formatted).not.toContain("FIM DO RELAT");
     expect(formatted).not.toMatch(/^---\s/m);
   });
 
-  it("transforma deteções em bullets e inclui score no resumo", () => {
+  it("transforma deteções em bullets e inclui score na secção SCORE DE RISCO", () => {
     const formatted = formatVmReportForDisplay(SAMPLE_VM_RAW);
-    expect(formatted).toContain("- Foi criado o ficheiro: C:\\Users\\Public\\evil.dll");
+    expect(formatted).toContain("  - Foi criado o ficheiro: C:\\Users\\Public\\evil.dll");
     expect(formatted).toContain("Score: 38/100");
-    expect(formatted).toContain("Classificação: suspicious");
-    expect(formatted).toContain("Ficheiros: 1");
+    expect(formatted).toContain("Nível: SUSPEITO");
+    expect(formatted).toContain("amostra de validação conhecida (BenignVmTest)");
+    expect(formatted).not.toContain("Nota:");
+  });
+
+  it("ignora secção de scoring duplicada com título corrompido no fim", () => {
+    const raw = [
+      ...SAMPLE_VM_RAW.split("\n").slice(0, -5),
+      "--- AVALIA\u00C3\u00A7\u00C3\u00A3O DE RISCO (SCORING) ---",
+      "Nota: amostra de validação conhecida (BenignVmTest)",
+      "REPORT_END;",
+    ].join("\n");
+    const formatted = formatVmReportForDisplay(raw);
+    expect(formatted).toContain("SCORE DE RISCO");
+    expect(formatted).toContain("Nível: SUSPEITO");
+    expect(formatted).not.toMatch(/AVALIA.{0,4}O DE RISCO \(SCORING\)/i);
+    expect(formatted).toContain("amostra de validação conhecida (BenignVmTest)");
+  });
+
+  it("reformata relatório já normalizado sem perder secções", () => {
+    const once = formatVmReportForDisplay(SAMPLE_VM_RAW);
+    const twice = formatVmReportForDisplay(once);
+    expect(twice).toContain("ALTERAÇÕES EM FICHEIROS");
+    expect(twice).toContain("BASELINE (ANTES DA EXECUÇÃO)");
+    expect(twice).not.toMatch(/AVALIA.{0,4}O DE RISCO \(SCORING\)/i);
   });
 
   it("formata relatório JSON enriquecido da VM", () => {
@@ -94,8 +131,41 @@ describe("formatVmReportForDisplay", () => {
     });
     const formatted = formatVmReportForDisplay(json);
     expect(formatted).toContain("RELATÓRIO DE ANÁLISE COMPORTAMENTAL");
-    expect(formatted).toContain("Classificação: benign");
+    expect(formatted).toContain("SCORE DE RISCO");
+    expect(formatted).toContain("Nível: BENIGNO");
     expect(formatted).toContain("Processos: 1");
+    expect(formatted).not.toContain("DETALHES (JSON)");
+  });
+});
+
+describe("parseVmScoringFromReport", () => {
+  it("extrai score e classificação do relatório VM", () => {
+    const vm = parseVmScoringFromReport(
+      "Score total (0-100): 43/100\nScore total (bruto): 9/21\nClassificação: benign\nNota: amostra de validação conhecida (BenignVmTest)"
+    );
+    expect(vm?.score).toBe(43);
+    expect(vm?.scoreRaw).toBe(9);
+    expect(vm?.scoreMax).toBe(21);
+    expect(vm?.classification).toBe("BENIGNO");
+    expect(vm?.knownValidationSample).toBe(true);
+  });
+});
+
+describe("translateVmClassification", () => {
+  it("traduz classificações legadas em inglês", () => {
+    expect(translateVmClassification("suspicious")).toBe("SUSPEITO");
+    expect(translateVmClassification("malicious")).toBe("MALICIOSO");
+    expect(translateVmClassification("not_executed")).toBe("NÃO EXECUTADO");
+  });
+});
+
+describe("compareAnalysisScores", () => {
+  it("deteta divergência entre estática alta e VM benigna (BenignVmTest)", () => {
+    const vm = parseVmScoringFromReport("Score: 43/100\nClassificação: benign\nBenignVmTest");
+    const cmp = compareAnalysisScores(69, "ALTO", vm);
+    expect(cmp.hasBoth).toBe(true);
+    expect(cmp.diverges).toBe(true);
+    expect(cmp.summary).toContain("amostra de validação");
   });
 });
 
@@ -299,5 +369,37 @@ describe("getWordStats", () => {
   it("rejeita palavras que não são identificadores válidos (sem construir RegExp)", () => {
     const stats = getWordStats(SAMPLE_C_CODE, "a+b(", undefined);
     expect(stats).toEqual({ mentions: 0, inferredType: null, functionsCount: 0, maliciousCount: 0 });
+  });
+});
+
+describe("resolveFlaggedFunctionId / flaggedFunctionsSignature", () => {
+  it("gera ID estável com ou sem campo id", () => {
+    expect(resolveFlaggedFunctionId({ name: "foo", startLine: 10, endLine: 20 })).toBe("foo:10-20");
+    expect(resolveFlaggedFunctionId({ name: "foo", id: "FUN_1", startLine: 10, endLine: 20 })).toBe("FUN_1");
+  });
+
+  it("assinatura ignora ordem de referência do array", () => {
+    const a = [{ name: "a", startLine: 1, endLine: 2 }, { name: "b", startLine: 3, endLine: 4 }];
+    const b = [...a];
+    expect(flaggedFunctionsSignature(a)).toBe(flaggedFunctionsSignature(b));
+  });
+});
+
+describe("areAnalysisResultsEquivalent", () => {
+  it("considera equivalentes resultados com mesmo conteúdo mas referências diferentes", () => {
+    const base = normalizeAnalysisResult({
+      report: "r",
+      cCode: "c",
+      ilCode: "il",
+      flaggedFunctions: [{ name: "f", startLine: 1, endLine: 2 }],
+    });
+    const copy = { ...base, flaggedFunctions: [...(base.flaggedFunctions ?? [])] };
+    expect(areAnalysisResultsEquivalent(base, copy)).toBe(true);
+  });
+
+  it("deteta alterações relevantes", () => {
+    const a = normalizeAnalysisResult({ report: "r", cCode: "c" });
+    const b = normalizeAnalysisResult({ report: "r2", cCode: "c" });
+    expect(areAnalysisResultsEquivalent(a, b)).toBe(false);
   });
 });

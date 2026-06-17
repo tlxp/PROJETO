@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ApiError, isAbortError } from "@/lib/api";
 import {
+  areAnalysisResultsEquivalent,
   buildAnalysisResultFromJob,
   publishStaticAnalysisResult,
   type AnalysisMode,
@@ -163,7 +164,9 @@ export function useIndexAnalysisSession() {
           typeof job.fileName === "string" ? job.fileName : undefined
         );
         if (updated) {
-          setAnalysisResult(updated);
+          setAnalysisResult((prev) =>
+            prev && areAnalysisResultsEquivalent(prev, updated) ? prev : updated
+          );
           const stillPending = !!(updated.staticPending || updated.dynamicPending);
           const statusActive =
             jobStatus === "running" || jobStatus === "queued";
@@ -277,44 +280,6 @@ export function useIndexAnalysisSession() {
     }
   }, [file, analysisMode, stream, beginSession, submitJob, pollJob, navigate, finishJobOutcome]);
 
-  const handleResumeWaiting = useCallback(async () => {
-    const pending = stillRunningJob;
-    if (!pending) return;
-    const runId = ++analyzeRunRef.current;
-    const isCurrent = () => analyzeRunRef.current === runId;
-    setIsAnalyzing(true);
-    setError(null);
-
-    try {
-      const signal = beginSession();
-      const outcome = await pollJob(pending.jobId, signal, (status, attempt) => {
-        if (isCurrent() && (attempt === 1 || attempt % 10 === 0)) {
-          setAnalysisLogs((prev) => [...prev, `Estado do job: ${status}`]);
-        }
-      });
-      if (!isCurrent()) return;
-
-      if (outcome.kind === "failed") {
-        setStillRunningJob(null);
-        throw new Error(outcome.error);
-      }
-      if (outcome.kind === "still-running") {
-        setStillRunningJob({ jobId: pending.jobId, lastStatus: outcome.lastStatus });
-        return;
-      }
-
-      setStillRunningJob(null);
-      finishJobOutcome(pending.jobId, outcome.job, file?.name);
-    } catch (e) {
-      if (!isCurrent() || isAbortError(e)) return;
-      setError(e instanceof Error ? e.message : "Erro ao aguardar pela análise.");
-    } finally {
-      if (isCurrent()) {
-        setIsAnalyzing(false);
-      }
-    }
-  }, [stillRunningJob, beginSession, pollJob, file?.name, finishJobOutcome]);
-
   return {
     file,
     isAnalyzing,
@@ -331,7 +296,6 @@ export function useIndexAnalysisSession() {
     handleFileLoaded,
     handleClear,
     handleAnalyze,
-    handleResumeWaiting,
     loadMockDemo,
   };
 }

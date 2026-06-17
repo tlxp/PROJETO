@@ -20,7 +20,6 @@ type UploadViewProps = {
   onAnalyze: () => void;
   onLoadMock: () => void;
   stillRunning: StillRunningJob | null;
-  onResumeWaiting: () => void;
 };
 
 const MODES: { value: AnalysisMode; label: string }[] = [
@@ -42,7 +41,6 @@ const UploadView: React.FC<UploadViewProps> = ({
   onAnalyze,
   onLoadMock,
   stillRunning,
-  onResumeWaiting,
 }) => (
   <motion.div
     key="upload"
@@ -91,12 +89,7 @@ const UploadView: React.FC<UploadViewProps> = ({
     )}
 
     {stillRunning && (
-      <StillRunningNotice
-        jobId={stillRunning.jobId}
-        lastStatus={stillRunning.lastStatus}
-        isWaiting={isAnalyzing}
-        onResume={onResumeWaiting}
-      />
+      <StillRunningNotice jobId={stillRunning.jobId} lastStatus={stillRunning.lastStatus} />
     )}
 
     {analysisLogs.length > 0 && (

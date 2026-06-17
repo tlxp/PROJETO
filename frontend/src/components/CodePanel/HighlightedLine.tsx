@@ -157,12 +157,24 @@ export const HighlightedLine: React.FC<{
       const value = trimmed.slice(colonIdx + 1).trim();
       const valueLower = value.toLowerCase();
       let valueClass = "text-muted-foreground";
-      if (/^classifica/i.test(label)) {
-        if (valueLower.includes("malicious") || valueLower.includes("malici")) {
+      if (/^classifica/i.test(label) || /^n[ií]vel/i.test(label)) {
+        if (
+          valueLower.includes("malicious") ||
+          valueLower.includes("malicioso") ||
+          valueLower.includes("malici")
+        ) {
           valueClass = "text-destructive font-semibold";
-        } else if (valueLower.includes("suspicious") || valueLower.includes("suspeit")) {
+        } else if (
+          valueLower.includes("suspicious") ||
+          valueLower.includes("suspeito") ||
+          valueLower.includes("suspeit")
+        ) {
           valueClass = "text-code-string font-semibold";
-        } else if (valueLower.includes("benign") || valueLower.includes("benigno")) {
+        } else if (
+          valueLower.includes("benign") ||
+          valueLower.includes("benigno") ||
+          valueLower.includes("inofensivo")
+        ) {
           valueClass = "text-primary font-semibold";
         }
       } else if (/^score/i.test(label) && /\d+\/100/.test(value)) {

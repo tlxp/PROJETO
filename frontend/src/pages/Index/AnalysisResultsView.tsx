@@ -17,7 +17,6 @@ export type AnalysisResultsViewProps = {
   ghidraProgress: number | null;
   stillRunningJob: StillRunningJob | null;
   onClear: () => void;
-  onResumeWaiting: () => void;
   isMockDemo: boolean;
   result: AnalysisResult | null;
   currentJobId: string | null;
@@ -35,7 +34,6 @@ const AnalysisResultsView = ({
   ghidraProgress,
   stillRunningJob,
   onClear,
-  onResumeWaiting,
   isMockDemo,
   result,
   currentJobId,
@@ -68,12 +66,7 @@ const AnalysisResultsView = ({
     {error && <p className="mt-2 text-sm text-destructive font-medium">{error}</p>}
 
     {stillRunningJob && (
-      <StillRunningNotice
-        jobId={stillRunningJob.jobId}
-        lastStatus={stillRunningJob.lastStatus}
-        isWaiting={isAnalyzing}
-        onResume={onResumeWaiting}
-      />
+      <StillRunningNotice jobId={stillRunningJob.jobId} lastStatus={stillRunningJob.lastStatus} />
     )}
 
     {result && (

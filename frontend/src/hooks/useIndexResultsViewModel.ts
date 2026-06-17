@@ -5,6 +5,7 @@ import { openXrefExplorerTab, writeXrefSession } from "@/lib/cCodeXref";
 import {
   clampFlaggedFunctionsToCode,
   extractObfuscationIndicatorsFromReport,
+  flaggedFunctionsSignature,
   getBlockContainingLine,
   getCDisplayRanges,
   getWordStats,
@@ -14,6 +15,7 @@ import {
   parseReportResumoLines,
   getDisplayVmReport,
   parseSnippetFileSections,
+  resolveFlaggedFunctionId,
   zipSnippetPairs,
   type AnalysisResult,
   type ExpandedPanel,
@@ -109,17 +111,21 @@ export function useIndexResultsViewModel({ result, file, currentJobId }: UseInde
     return arr.sort((a, b) => a.startLine - b.startLine || a.endLine - b.endLine);
   }, [flaggedFunctionsInCode, flaggedFunctionsOrder]);
 
+  const flaggedFunctionsListSignature = useMemo(
+    () => flaggedFunctionsSignature(flaggedFunctionsSorted),
+    [flaggedFunctionsSorted]
+  );
+
   useEffect(() => {
     if (!activeCFunctionId || !flaggedFunctionsSorted.length) return;
-    const idx = flaggedFunctionsSorted.findIndex((f) => {
-      const fid = (f.id && f.id.trim()) || `${f.name}:${f.startLine}-${f.endLine}`;
-      return fid === activeCFunctionId;
-    });
+    const idx = flaggedFunctionsSorted.findIndex(
+      (f) => resolveFlaggedFunctionId(f) === activeCFunctionId
+    );
     if (idx >= 0 && idx !== activeFlaggedFunctionIndex) {
       suppressAutoScrollRef.current = true;
       setActiveFlaggedFunctionIndex(idx);
     }
-  }, [activeCFunctionId, activeFlaggedFunctionIndex, flaggedFunctionsSorted]);
+  }, [activeCFunctionId, activeFlaggedFunctionIndex, flaggedFunctionsListSignature, flaggedFunctionsSorted]);
 
   const getFlaggedFunctionIndexForLine = useCallback(
     (line: number): number => {
@@ -148,11 +154,25 @@ export function useIndexResultsViewModel({ result, file, currentJobId }: UseInde
       setActiveCFunctionId(null);
       return;
     }
+
+    if (activeCFunctionId) {
+      const idx = flaggedFunctionsSorted.findIndex(
+        (f) => resolveFlaggedFunctionId(f) === activeCFunctionId
+      );
+      if (idx >= 0) {
+        setActiveFlaggedFunctionIndex((prev) => {
+          if (prev === idx) return prev;
+          suppressAutoScrollRef.current = true;
+          return idx;
+        });
+        return;
+      }
+    }
+
+    suppressAutoScrollRef.current = true;
     setActiveFlaggedFunctionIndex(0);
-    const f0 = flaggedFunctionsSorted[0];
-    const fid0 = (f0.id && f0.id.trim()) || `${f0.name}:${f0.startLine}-${f0.endLine}`;
-    setActiveCFunctionId(fid0);
-  }, [flaggedFunctionsSorted]);
+    setActiveCFunctionId(resolveFlaggedFunctionId(flaggedFunctionsSorted[0]));
+  }, [flaggedFunctionsListSignature, flaggedFunctionsSorted, activeCFunctionId]);
 
   const activeFlaggedFunction: FlaggedFunction | null = flaggedFunctionsSorted.length
     ? flaggedFunctionsSorted[
@@ -188,8 +208,7 @@ export function useIndexResultsViewModel({ result, file, currentJobId }: UseInde
 
       suppressAutoScrollRef.current = !scroll;
       setActiveFlaggedFunctionIndex(clamped);
-      const fid = (f.id && f.id.trim()) || `${f.name}:${f.startLine}-${f.endLine}`;
-      setActiveCFunctionId(fid);
+      setActiveCFunctionId(resolveFlaggedFunctionId(f));
 
       if (scroll && (expandedPanel === "c" || expandedPanel === null)) {
         setScrollToLine(f.startLine);
@@ -199,14 +218,14 @@ export function useIndexResultsViewModel({ result, file, currentJobId }: UseInde
   );
 
   useEffect(() => {
-    if (!activeFlaggedFunction) return;
+    if (!activeCFunctionId || !activeFlaggedFunction) return;
     if (suppressAutoScrollRef.current) {
       suppressAutoScrollRef.current = false;
       return;
     }
     if (expandedPanel !== "c" && expandedPanel !== null) return;
     setScrollToLine(activeFlaggedFunction.startLine);
-  }, [activeFlaggedFunction, expandedPanel]);
+  }, [activeCFunctionId, activeFlaggedFunction?.startLine, expandedPanel]);
 
   const cDisplayRanges = useMemo(
     () =>
@@ -518,9 +537,7 @@ export function useIndexResultsViewModel({ result, file, currentJobId }: UseInde
       if (idx >= 0 && idx !== activeFlaggedFunctionIndex) {
         selectFlaggedFunction(idx, { scroll: false });
       } else if (idx >= 0) {
-        const f = flaggedFunctionsSorted[idx];
-        const fid = (f.id && f.id.trim()) || `${f.name}:${f.startLine}-${f.endLine}`;
-        setActiveCFunctionId(fid);
+        setActiveCFunctionId(resolveFlaggedFunctionId(flaggedFunctionsSorted[idx]));
       }
     },
     [

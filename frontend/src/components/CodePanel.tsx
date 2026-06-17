@@ -492,9 +492,12 @@ const CodePanel: React.FC<CodePanelProps> = ({
     const container = scrollRef.current;
     if (!container) return;
     const lineEl = container.querySelector<HTMLElement>(`[data-line="${scrollToLine}"]`);
-    if (lineEl) {
-      lineEl.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
+    if (!lineEl) return;
+    const containerRect = container.getBoundingClientRect();
+    const lineRect = lineEl.getBoundingClientRect();
+    const offset = lineRect.top - containerRect.top + container.scrollTop;
+    const target = offset - container.clientHeight / 2 + lineEl.clientHeight / 2;
+    container.scrollTo({ top: Math.max(0, target), behavior: "smooth" });
   }, [scrollToLine, foldedRows]);
 
   const doDownload = useCallback((text: string, fileName: string) => {
