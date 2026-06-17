@@ -6,6 +6,15 @@ Versionamento [SemVer](https://semver.org/) a partir de `0.1.0` (projeto académ
 ## [Unreleased]
 
 ### Added
+- **Internacionalização PT/EN** — WPF (`Localization/`), frontend (`src/i18n/`), backend (`i18n.py`); propagação via `RATANALYZER_LANG`, `VITE_DEFAULT_LOCALE`, `Accept-Language` e `?lang=` nas URLs do browser.
+- WPF: ecrã de escolha de idioma no primeiro arranque, botão *Idioma* no dashboard, persistência em `ui-settings.json`.
+- WPF: tema visual *Signal* (obsidian + teal), logs de arranque localizados (`LogCatalog`), correção de encoding de processos (`ProcessOutputEncoding`).
+- Documentação: [`docs/i18n.md`](docs/i18n.md).
+- Backend modularizado em `routers/` (`analyze`, `jobs`, `health`, `storage`) + `app_factory.py`.
+- Observabilidade: `/api/health` enriquecido, `/metrics` (Prometheus text), logs com `job_id`, rate limiting de uploads.
+- CI: cobertura pytest/vitest, `pip-audit`, `npm audit`, `gitleaks`, Playwright E2E.
+- Dependabot (`.github/dependabot.yml`), pre-commit (`.pre-commit-config.yaml`), `SECURITY.md`, ADRs em `docs/adr/`.
+- `yara_rules/VERSION`, `.nvmrc`, testes `FileDropZone`, flags React Router v7.
 - `POST /api/analysis/upload_dynamic` — publica relatório VM (Caminho B) no backend; associa ao mesmo `jobId` da análise estática.
 - Frontend: coluna *Relatório* dividida horizontalmente (estático + VM) e polling em tempo real em `/analysis/{jobId}`.
 - WPF: após transferência do relatório da VM, envia para o backend e abre o browser no permalink unificado.
@@ -15,6 +24,8 @@ Versionamento [SemVer](https://semver.org/) a partir de `0.1.0` (projeto académ
 - Diagrama Mermaid de decisão (Caminho A vs B) no README principal.
 
 ### Changed
+- WPF: URLs do frontend passam a incluir `?lang=` (`AppConstants.BuildFrontendUrl`); pedidos HTTP ao backend enviam `Accept-Language`.
+- Frontend: textos de UI, erros e labels de relatório VM reformatado traduzidos; `api.ts` envia `Accept-Language`.
 - `backend/clean.py`: limpa `.pytest_cache` em todo o repo, `programa/**/bin|obj`, `DATA_DIR/decompiled` e legado `decompiled/` na raiz.
 - Avisos reforçados para driver `proxmox` (experimental).
 

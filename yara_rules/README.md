@@ -1,6 +1,6 @@
 # Regras YARA - RAT Analyzer
 
-Conjunto heurístico de regras para indicadores em binários **PE Windows**. Fonte única carregada por `backend/modules/yara_scanner.py` no arranque do pipeline estático.
+Conjunto heurístico de regras para indicadores em binários **PE Windows**. Versão do conjunto: [`VERSION`](VERSION) (semver do pacote de regras).
 
 Índice: [`docs/README.md`](../docs/README.md) · scoring: `backend/modules/risk_scorer.py` (peso **20** para matches YARA).
 

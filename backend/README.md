@@ -70,14 +70,21 @@ python worker.py
 | `GET`  | `/api/analysis/{job_id}` | Estado e artefatos de um job. |
 | `GET`  | `/api/analysis/{job_id}/artifacts/obfuscated_snippets` | Excertos ofuscados (texto). |
 | `GET`  | `/api/analyses` | Lista de jobs recentes. |
-| `GET`  | `/api/health` | Healthcheck. |
+| `GET`  | `/api/health` | Healthcheck enriquecido (DB, YARA, Ghidra, driver VM). |
+| `GET`  | `/metrics` | Métricas Prometheus (contadores em memória). |
+| `GET`  | `/docs` | Documentação OpenAPI interativa (Swagger). |
 | `GET`  | `/api/storage/estimate` · `POST /api/storage/{cleanup,archive,purge}` | Gestão de armazenamento. |
 
 ## Estrutura
 
 ```
 backend/
-├── api.py                  # Endpoints FastAPI
+├── api.py                  # Entrada uvicorn (app factory)
+├── app_factory.py          # Criação FastAPI, middleware, routers
+├── routers/                # analyze, jobs, health, storage
+├── observability.py        # Métricas /metrics e contexto job_id nos logs
+├── i18n.py                 # Mensagens PT/EN (fallbacks de relatório e erros de API)
+├── middleware.py           # Rate limit uploads + logging por job_id
 ├── analysis_jobs.py        # Jobs static | dynamic | both
 ├── rat_analyzer.py         # Entrada da análise estática (CLI e biblioteca)
 ├── rat_analyzer_gui.py     # Entrada da GUI Tkinter opcional (ver gui/)
@@ -136,6 +143,7 @@ Variáveis de ambiente relevantes:
 | `RATANALYZER_MAX_UPLOAD_MB` | Limite de tamanho de upload em MB (default **100**). Pedidos acima do limite devolvem **HTTP 413** (verificado via `Content-Length` quando disponível e novamente durante a leitura por chunks). Aplica-se a `/api/analyze`, `/api/analyze_stream` e `/api/analysis`. |
 | `RATANALYZER_MAX_WORKERS` | Nº máximo de jobs de análise concorrentes no modo local de threads (default **2**). |
 | `RATANALYZER_CORS_ORIGINS` | Lista de origens CORS separadas por vírgulas. Default: `http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173`. |
+| `RATANALYZER_LANG` | Idioma dos fallbacks da API (`pt` \| `en`; default `pt`). Lido também de `Accept-Language` nos routers quando aplicável. |
 | `GHIDRA_INSTALL_DIR` | Caminho do Ghidra (ativa pseudo-C nativo). |
 | `REDIS_URL` | Ativa o modo de fila (RQ); sem ela, jobs em threads locais. |
 | `SANDBOX_VM_DRIVER` | Driver da análise dinâmica (`stub`/`hyperv`/`proxmox`). |
@@ -166,9 +174,9 @@ pip install --require-hashes -r requirements-dev.lock
 python -m pytest tests -q
 ```
 
-**66 testes** pytest - não dependem de YARA/Ghidra/ILSpy (o pipeline pesado é substituído por mocks) e usam
-`RATANALYZER_DATA_DIR` apontado para um diretório temporário. Inclui: API, upload security, job reconstruction,
-pipeline logging, regras YARA (`test_yara_rules.py`).
+**84 testes** pytest — não dependem de YARA/Ghidra/ILSpy (o pipeline pesado é substituído por mocks) e usam
+`RATANALYZER_DATA_DIR` apontado para um diretório temporário. Inclui: API, health, métricas, rate limit, upload security, job reconstruction,
+pipeline logging, regras YARA (`test_yara_rules.py`). Cobertura mínima: `pytest --cov` (ver `.coveragerc`, threshold 45%).
 
 ## Limpeza
 

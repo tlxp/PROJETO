@@ -5,6 +5,8 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using RatAnalyzer.Desktop.Helpers;
+using RatAnalyzer.Desktop.Infrastructure;
+using RatAnalyzer.Desktop.Localization;
 using RatAnalyzer.Desktop.Views;
 
 namespace RatAnalyzer.Desktop.Bootstrap;
@@ -21,7 +23,7 @@ public static class ProjectDependencyBootstrap
     /// </summary>
     public static async Task EnsureAndInstallAsync(Action<string> log, CancellationToken cancellationToken)
     {
-        log("[INFO] === Dependências: análise estática + VM (verificação / instalação) ===");
+        log(LocalizationManager.Get(LocKeys.LogDepsStart));
 
         await CheckExecutableAsync("dotnet", "--version", "SDK .NET (vm-agent, builds)", log, cancellationToken).ConfigureAwait(false);
         await CheckExecutableAsync("python", "--version", "Python (backend)", log, cancellationToken).ConfigureAwait(false);
@@ -31,18 +33,18 @@ public static class ProjectDependencyBootstrap
         var backendDir = StartupSequence.FindBackendWorkingDirectory();
         if (string.IsNullOrWhiteSpace(backendDir))
         {
-            log("[AVISO] Pasta 'backend' não encontrada a partir do executável — pip em falta.");
+            log(LocalizationManager.Get(LocKeys.LogBackendNotFound));
         }
         else
         {
-            log($"[OK] Pasta backend: {backendDir}");
+            log(LocalizationManager.Format(LocKeys.LogBackendOk, backendDir));
             try
             {
                 await StartupSequence.EnsureBackendPythonDependenciesAsync(backendDir, log).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                log($"[ERRO] Dependências Python (pip): {ex.Message}");
+                log(LocalizationManager.Format(LocKeys.LogBackendPipError, ex.Message));
             }
 
             await CheckPythonImportAsync(backendDir, "import fastapi, uvicorn", "FastAPI / uvicorn", log, cancellationToken).ConfigureAwait(false);
@@ -52,18 +54,18 @@ public static class ProjectDependencyBootstrap
         var frontendDir = StartupSequence.FindFrontendWorkingDirectory();
         if (string.IsNullOrWhiteSpace(frontendDir))
         {
-            log("[AVISO] Pasta 'frontend' não encontrada — npm em falta.");
+            log(LocalizationManager.Get(LocKeys.LogFrontendNotFound));
         }
         else
         {
-            log($"[OK] Pasta frontend: {frontendDir}");
+            log(LocalizationManager.Format(LocKeys.LogFrontendOk, frontendDir));
             try
             {
                 await StartupSequence.EnsureFrontendNpmDependenciesAsync(frontendDir, log).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                log($"[ERRO] Dependências npm: {ex.Message}");
+                log(LocalizationManager.Format(LocKeys.LogFrontendNpmError, ex.Message));
             }
         }
 
@@ -72,22 +74,21 @@ public static class ProjectDependencyBootstrap
         var osc = SandboxHostDependencies.FindOscdimgPath();
         if (!string.IsNullOrWhiteSpace(osc))
         {
-            log($"[OK] oscdimg.exe (Windows ADK): {osc}");
+            log(LocalizationManager.Format(LocKeys.LogOscdimgOk, osc));
         }
         else
         {
-            log("[AVISO] oscdimg.exe em falta — necessário para criar ISO com autounattend (VM). " +
-                "Instale o Windows ADK (Deployment Tools) ou aceite a instalação quando abrir análise na VM.");
+            log(LocalizationManager.Get(LocKeys.LogOscdimgMissing));
         }
 
         var hypervScripts = FindHyperVSandboxScriptsDirectory();
         if (!string.IsNullOrWhiteSpace(hypervScripts))
         {
-            log($"[OK] scripts/hyperv-sandbox: {hypervScripts}");
+            log(LocalizationManager.Format(LocKeys.LogHypervScriptsOk, hypervScripts));
         }
         else
         {
-            log("[AVISO] scripts/hyperv-sandbox não encontrado — análise VM Hyper-V pode falhar.");
+            log(LocalizationManager.Get(LocKeys.LogHypervScriptsMissing));
         }
 
         try
@@ -96,7 +97,7 @@ public static class ProjectDependencyBootstrap
         }
         catch (Exception ex)
         {
-            log($"[AVISO] Java JDK: {ex.Message}");
+            log(LocalizationManager.Format(LocKeys.LogJavaWarning, ex.Message));
         }
 
         try
@@ -105,7 +106,7 @@ public static class ProjectDependencyBootstrap
         }
         catch (Exception ex)
         {
-            log($"[AVISO] ILSpy CLI: {ex.Message}");
+            log(LocalizationManager.Format(LocKeys.LogIlspyWarning, ex.Message));
         }
 
         try
@@ -114,10 +115,10 @@ public static class ProjectDependencyBootstrap
         }
         catch (Exception ex)
         {
-            log($"[AVISO] Ghidra: {ex.Message}");
+            log(LocalizationManager.Format(LocKeys.LogGhidraWarning, ex.Message));
         }
 
-        log("[INFO] === Fim dependências; a abrir serviços nas portas 8000 e 8080 ===");
+        log(LocalizationManager.Get(LocKeys.LogDepsEnd));
     }
 
     private static string? FindHyperVSandboxScriptsDirectory()
@@ -147,20 +148,19 @@ public static class ProjectDependencyBootstrap
             {
                 var psi = new ProcessStartInfo
                 {
-                    FileName = fileName,
+                    FileName = ProcessOutputEncoding.ResolveExecutable(fileName),
                     Arguments = arguments,
                     UseShellExecute = false,
                     CreateNoWindow = true,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
-                    StandardOutputEncoding = Encoding.UTF8,
-                    StandardErrorEncoding = Encoding.UTF8
                 };
+                ProcessOutputEncoding.ApplyConsole(psi);
 
                 using var proc = Process.Start(psi);
                 if (proc is null)
                 {
-                    log($"[ERRO] {label}: não foi possível iniciar '{fileName}'.");
+                    log(LocalizationManager.Format(LocKeys.LogExecFailed, label, fileName));
                     return;
                 }
 
@@ -171,23 +171,26 @@ public static class ProjectDependencyBootstrap
 
                 if (proc.ExitCode == 0)
                 {
-                    var oneLine = string.Join(" ", stdout.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)).Trim();
+                    var oneLine = ProcessOutputEncoding.NormalizeForDisplay(
+                        string.Join(" ", stdout.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)).Trim());
                     if (oneLine.Length > 120)
                         oneLine = oneLine[..120] + "…";
-                    log(string.IsNullOrEmpty(oneLine) ? $"[OK] {label}" : $"[OK] {label}: {oneLine}");
+                    log(string.IsNullOrEmpty(oneLine)
+                        ? LocalizationManager.Format(LocKeys.LogExecOk, label)
+                        : LocalizationManager.Format(LocKeys.LogExecOkDetail, label, oneLine));
                 }
                 else
                 {
-                    var detail = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
-                    detail = detail.Trim();
+                    var detail = ProcessOutputEncoding.NormalizeForDisplay(
+                        string.IsNullOrWhiteSpace(stderr) ? stdout : stderr).Trim();
                     if (detail.Length > 200)
                         detail = detail[..200] + "…";
-                    log($"[ERRO] {label}: '{fileName}' saiu com código {proc.ExitCode}. {detail}");
+                    log(LocalizationManager.Format(LocKeys.LogExecExitCode, label, fileName, proc.ExitCode, detail));
                 }
             }
             catch (Exception ex)
             {
-                log($"[ERRO] {label}: {ex.Message}");
+                log(LocalizationManager.Format(LocKeys.LogExecError, label, ex.Message));
             }
         }, cancellationToken).ConfigureAwait(false);
     }
@@ -212,14 +215,14 @@ public static class ProjectDependencyBootstrap
                     CreateNoWindow = true,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
-                    StandardOutputEncoding = Encoding.UTF8,
-                    StandardErrorEncoding = Encoding.UTF8
                 };
+                ProcessOutputEncoding.ApplyUtf8(psi);
+                ProcessOutputEncoding.ApplyPythonUtf8Environment(psi);
 
                 using var proc = Process.Start(psi);
                 if (proc is null)
                 {
-                    log($"[ERRO] {label}: não foi possível executar python.");
+                    log(LocalizationManager.Format(LocKeys.LogPythonFailed, label));
                     return;
                 }
 
@@ -229,23 +232,23 @@ public static class ProjectDependencyBootstrap
 
                 if (proc.ExitCode == 0)
                 {
-                    log($"[OK] {label}");
+                    log(LocalizationManager.Format(LocKeys.LogPythonOk, label));
                 }
                 else
                 {
-                    var err = stderr.Trim();
+                    var err = ProcessOutputEncoding.NormalizeForDisplay(stderr).Trim();
                     if (err.Length > 220)
                         err = err[..220] + "…";
-                    log($"[AVISO] {label}: falhou (código {proc.ExitCode}). {err}");
+                    log(LocalizationManager.Format(LocKeys.LogPythonCheckFailed, label, proc.ExitCode, err));
                     if (importStatement.Contains("yara", StringComparison.OrdinalIgnoreCase))
                     {
-                        log("[INFO] YARA: instale a biblioteca nativa (Windows) além do pip — ver README do projeto.");
+                        log(LocalizationManager.Get(LocKeys.LogYaraNativeHint));
                     }
                 }
             }
             catch (Exception ex)
             {
-                log($"[AVISO] {label}: {ex.Message}");
+                log(LocalizationManager.Format(LocKeys.LogExecError, label, ex.Message));
             }
         }, cancellationToken).ConfigureAwait(false);
     }
@@ -265,43 +268,42 @@ public static class ProjectDependencyBootstrap
                     CreateNoWindow = true,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
-                    StandardOutputEncoding = Encoding.UTF8,
-                    StandardErrorEncoding = Encoding.UTF8
                 };
+                ProcessOutputEncoding.ApplyWindowsAnsi(psi);
 
                 using var proc = Process.Start(psi);
                 if (proc is null)
                 {
-                    log("[AVISO] Hyper-V: não foi possível executar PowerShell.");
+                    log(LocalizationManager.Get(LocKeys.LogHypervPsFailed));
                     return;
                 }
 
-                var stdout = proc.StandardOutput.ReadToEnd().Trim();
+                var stdout = ProcessOutputEncoding.NormalizeForDisplay(proc.StandardOutput.ReadToEnd()).Trim();
                 proc.WaitForExit(120_000);
                 cancellationToken.ThrowIfCancellationRequested();
 
                 if (proc.ExitCode != 0)
                 {
-                    log("[AVISO] Hyper-V: não foi possível ler o estado (executar como Administrador?).");
+                    log(LocalizationManager.Get(LocKeys.LogHypervStateFailed));
                     return;
                 }
 
                 if (string.Equals(stdout, "Enabled", StringComparison.OrdinalIgnoreCase))
                 {
-                    log("[OK] Hyper-V (Microsoft-Hyper-V): Enabled");
+                    log(LocalizationManager.Get(LocKeys.LogHypervEnabled));
                 }
                 else if (string.IsNullOrWhiteSpace(stdout))
                 {
-                    log("[AVISO] Hyper-V: estado desconhecido (edição Windows Home não inclui Hyper-V?).");
+                    log(LocalizationManager.Get(LocKeys.LogHypervUnknown));
                 }
                 else
                 {
-                    log($"[AVISO] Hyper-V: estado '{stdout}' — necessário Enabled para VM local (reinício após Enable-WindowsOptionalFeature).");
+                    log(LocalizationManager.Format(LocKeys.LogHypervState, stdout));
                 }
             }
             catch (Exception ex)
             {
-                log($"[AVISO] Hyper-V: {ex.Message}");
+                log(LocalizationManager.Format(LocKeys.LogHypervError, ex.Message));
             }
         }, cancellationToken).ConfigureAwait(false);
     }

@@ -21,6 +21,6 @@ python ..\..\scripts\ci\sync_diagrams_to_report.py --check   # equivalente CI
 
 `fig-5-1-web-upload.png` · `fig-5-2-web-results.png` · `fig-5-3-wpf-dashboard.png` · `fig-5-4-hyperv-vm.png`
 
-O PDF compila sem eles (`\IfFileExists` no `main.tex`).
+Capturas devem reflectir o layout actual (tema Signal no WPF, UI bilíngue na web). O PDF compila sem eles (`\IfFileExists` no `main.tex`).
 
 Detalhe: [`docs/diagrams/README.md`](../../docs/diagrams/README.md).

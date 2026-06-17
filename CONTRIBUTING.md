@@ -36,21 +36,30 @@ python relatório/imagens/render_plantuml.py
 python scripts/ci/check_md_links.py
 ```
 
-CI completo: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (inclui job `diagrams` para PNG vs fonte).
+CI completo: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (inclui job `diagrams`, cobertura, `pip-audit`, `gitleaks`, Playwright E2E).
+
+### Pre-commit (opcional)
+
+```bash
+pip install pre-commit
+pre-commit install
+pre-commit run --all-files
+```
 
 ## Convenções de código
 
 | Área | Convenção |
 |------|-----------|
 | **Python** | Ver `backend/`; testes com pytest; locks em `requirements*.lock` |
-| **TypeScript** | `strict` no frontend; testes Vitest em `frontend/src/test/` |
-| **C# / .NET** | Solução `RatAnalyzer.sln`; MVVM no WPF; testes xUnit em `vm-agent/VmAgent.Tests/`, `wpf-gui/RatAnalyzer.Desktop.Tests/` e `benign-vm-test/BenignVmTest.Tests/` |
+| **TypeScript** | `strict` no frontend; testes Vitest em `frontend/src/test/`; novas strings de UI em `src/i18n/messages.ts` (PT + EN) |
+| **C# / .NET** | Solução `RatAnalyzer.sln`; MVVM no WPF; strings de UI em `wpf-gui/Localization/`; testes xUnit |
 | **PowerShell** | UTF-8 BOM, CRLF, mensagens em PT - [`docs/ps1-scripts.md`](docs/ps1-scripts.md) |
 | **Documentação** | Markdown em PT; ortografia atual (ex.: `atual`, `ativa`, `artefato`, `seção`) |
 
 ## Documentação
 
 - Alterações de arquitetura: atualizar README do componente + [`docs/README.md`](docs/README.md) se aplicável.
+- Textos visíveis ao utilizador: manter paridade PT/EN — ver [`docs/i18n.md`](docs/i18n.md).
 - Diagramas: editar **apenas** [`docs/diagrams/`](docs/diagrams/). Mapeamento canónico em
   [`scripts/ci/diagram_sources.py`](scripts/ci/diagram_sources.py) (`docs/diagrams/` → `relatório/imagens/fig-4-*.png`).
   Validar: `python scripts/ci/sync_diagrams_to_report.py --check` (CI job `diagrams`). Regenerar PNG:

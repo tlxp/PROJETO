@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using RatAnalyzer.Desktop.Helpers;
 using RatAnalyzer.Desktop.Infrastructure;
+using RatAnalyzer.Desktop.Localization;
 
 namespace RatAnalyzer.Desktop.Bootstrap;
 
@@ -39,32 +40,32 @@ public static class StartupSequence
         }
         catch (Exception ex)
         {
-            Log($"[AVISO] Fase de dependências: {ex.Message}");
+            Log(LocalizationManager.Format(LocKeys.LogDepsPhaseWarning, ex.Message));
         }
 
         using var client = new HttpClient();
         // Paralelizar: backend e frontend são independentes (porta 8000 vs 8080).
         var backendTask = Task.Run(async () =>
         {
-            addLog?.Invoke("[INFO] A verificar backend em http://localhost:8000 ...");
+            addLog?.Invoke(LocalizationManager.Get(LocKeys.LogBackendChecking));
             var backendAlreadyRunning = await IsBackendUpAsync(client);
             if (!backendAlreadyRunning)
             {
-                addLog?.Invoke("[INFO] Backend não encontrado. A iniciar servidor uvicorn...");
+                addLog?.Invoke(LocalizationManager.Get(LocKeys.LogBackendStarting));
                 await StartBackendAsync(client, addLog);
-                addLog?.Invoke("[OK] Backend iniciado com sucesso em http://localhost:8000.");
+                addLog?.Invoke(LocalizationManager.Get(LocKeys.LogBackendStarted));
             }
             else
             {
-                addLog?.Invoke("[OK] Backend já se encontra em execução.");
+                addLog?.Invoke(LocalizationManager.Get(LocKeys.LogBackendAlreadyRunning));
             }
         });
 
         var frontendTask = Task.Run(async () =>
         {
-            addLog?.Invoke("[INFO] A verificar dev server do frontend...");
+            addLog?.Invoke(LocalizationManager.Get(LocKeys.LogFrontendChecking));
             await EnsureFrontendRunningAsync(addLog);
-            addLog?.Invoke("[OK] Frontend pronto.");
+            addLog?.Invoke(LocalizationManager.Get(LocKeys.LogFrontendReady));
         });
 
         await Task.WhenAll(backendTask, frontendTask);
@@ -127,16 +128,16 @@ public static class StartupSequence
         }
         else if (File.Exists(reqPath))
         {
-            addLog?.Invoke("[AVISO] requirements.lock em falta — a usar requirements.txt (menos reproduzível).");
+            addLog?.Invoke(LocalizationManager.Get(LocKeys.LogReqLockMissing));
             pipArgs = "-m pip install -r requirements.txt --disable-pip-version-check -q";
         }
         else
         {
-            addLog?.Invoke("[AVISO] Ficheiros requirements.lock / requirements.txt não encontrados; a saltar pip install.");
+            addLog?.Invoke(LocalizationManager.Get(LocKeys.LogReqFilesMissing));
             return;
         }
 
-        addLog?.Invoke("[INFO] A garantir dependências Python (pip)…");
+        addLog?.Invoke(LocalizationManager.Get(LocKeys.LogPipEnsure));
 
         await Task.Run(async () =>
         {
@@ -149,9 +150,9 @@ public static class StartupSequence
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding = Encoding.UTF8
             };
+            ProcessOutputEncoding.ApplyUtf8(psi);
+            ProcessOutputEncoding.ApplyPythonUtf8Environment(psi);
 
             using var proc = Process.Start(psi);
             if (proc is null)
@@ -171,14 +172,15 @@ public static class StartupSequence
 
             if (proc.ExitCode != 0)
             {
-                var detail = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
+                var detail = ProcessOutputEncoding.NormalizeForDisplay(
+                    string.IsNullOrWhiteSpace(stderr) ? stdout : stderr);
                 var trimmed = detail.Length > 2000 ? detail[..2000] + "…" : detail;
                 throw new InvalidOperationException(
                     $"pip install falhou (código {proc.ExitCode}).\n{trimmed}");
             }
         });
 
-        addLog?.Invoke("[OK] Dependências Python verificadas/instaladas.");
+        addLog?.Invoke(LocalizationManager.Get(LocKeys.LogPipOk));
     }
 
     /// <summary>
@@ -191,22 +193,21 @@ public static class StartupSequence
             return;
         }
 
-        addLog?.Invoke("[INFO] node_modules incompletos ou em falta. A executar npm install…");
+        addLog?.Invoke(LocalizationManager.Get(LocKeys.LogNpmInstall));
 
         await Task.Run(async () =>
         {
             var psi = new ProcessStartInfo
             {
                 FileName = "cmd.exe",
-                Arguments = "/c npm install --no-fund --no-audit --loglevel=error",
+                Arguments = ProcessOutputEncoding.CmdUtf8Command("npm install --no-fund --no-audit --loglevel=error"),
                 WorkingDirectory = frontendDir,
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding = Encoding.UTF8
             };
+            ProcessOutputEncoding.ApplyUtf8(psi);
 
             using var proc = Process.Start(psi);
             if (proc is null)
@@ -227,7 +228,8 @@ public static class StartupSequence
 
             if (proc.ExitCode != 0)
             {
-                var detail = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
+                var detail = ProcessOutputEncoding.NormalizeForDisplay(
+                    string.IsNullOrWhiteSpace(stderr) ? stdout : stderr);
                 var trimmed = detail.Length > 2000 ? detail[..2000] + "…" : detail;
                 throw new InvalidOperationException(
                     $"npm install falhou (código {proc.ExitCode}).\n{trimmed}");
@@ -240,7 +242,7 @@ public static class StartupSequence
                 "npm install concluíu mas vite não aparece em node_modules. Verifique package.json.");
         }
 
-        addLog?.Invoke("[OK] Dependências npm instaladas.");
+        addLog?.Invoke(LocalizationManager.Get(LocKeys.LogNpmOk));
     }
 
     internal static async Task StartBackendAsync(HttpClient client, Action<string>? addLog = null)
@@ -275,6 +277,8 @@ public static class StartupSequence
 
             InheritParentEnvironment(psi);
             PropagateBackendSecrets(psi, addLog);
+            AppConstants.PropagateLanguageEnvironment(psi);
+            ProcessOutputEncoding.ApplyPythonUtf8Environment(psi);
 
             var javaHome = JavaDependencyHelper.ResolveJavaHomeForBackend();
             if (!string.IsNullOrWhiteSpace(javaHome))
@@ -384,7 +388,7 @@ public static class StartupSequence
             var psi = new ProcessStartInfo
             {
                 FileName = "cmd.exe",
-                Arguments = "/c npm run dev",
+                Arguments = ProcessOutputEncoding.CmdUtf8Command("npm run dev"),
                 WorkingDirectory = frontendDir,
                 UseShellExecute = false,
                 CreateNoWindow = true
@@ -392,6 +396,7 @@ public static class StartupSequence
 
             InheritParentEnvironment(psi);
             PropagateFrontendSecrets(psi);
+            AppConstants.PropagateLanguageEnvironment(psi);
 
             _managedFrontendProcess = Process.Start(psi);
         }
@@ -473,9 +478,7 @@ public static class StartupSequence
 
         if ((requireToken || production) && string.IsNullOrWhiteSpace(AppConstants.BackendApiToken))
         {
-            addLog?.Invoke(
-                "[AVISO] Modo produção/estrito activo mas RATANALYZER_API_TOKEN não definido — " +
-                "o backend pode recusar arrancar. Veja docs/production-secrets.md.");
+            addLog?.Invoke(LocalizationManager.Get(LocKeys.LogProdTokenWarning));
         }
     }
 

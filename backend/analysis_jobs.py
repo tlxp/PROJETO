@@ -16,6 +16,7 @@ from modules.pseudo_c_highlighter import realign_flagged_functions_for_payload
 from rat_analyzer import RATAnalyzer
 from vm_orchestrator import run_dynamic_analysis
 import job_store
+from i18n import current_lang, t
 from pipeline_version import compute_pipeline_version
 from task_queue import is_queue_enabled, get_queue
 from upload_security import resolve_safe_path, sanitize_upload_filename
@@ -453,13 +454,13 @@ def get_job_payload(job_id: str) -> Optional[dict]:
         disasm = last.get("disassembly_file")
         il_code = _read_file_safe(disasm, errors="replace") if disasm else ""
         if not il_code:
-            il_code = "# Nenhum bytecode/assembly disponível para este ficheiro."
+            il_code = t("no_bytecode", current_lang())
 
         target_file = last.get("target_file") or ""
         file_name = Path(target_file).name if target_file else "output"
 
         static_result = {
-            "report": report_content or "# Relatório não gerado.",
+            "report": report_content or t("report_not_generated", current_lang()),
             "cCode": summarized_c,
             "ilCode": il_code,
             "fileName": file_name,
@@ -554,11 +555,11 @@ def _run_static(job: AnalysisJob) -> AnalysisResult:
         if disasm:
             il_code = _read_file_safe(disasm, errors="replace")
         if not il_code:
-            il_code = "# Nenhum bytecode/assembly disponível para este ficheiro."
+            il_code = t("no_bytecode", current_lang())
     else:
-        report_content = "# Relatório não gerado."
-        c_code = "# Código não disponível."
-        il_code = "# Bytecode não disponível."
+        report_content = t("report_not_generated", current_lang())
+        c_code = t("code_not_available", current_lang())
+        il_code = t("bytecode_not_available", current_lang())
 
     summarized_c, flagged_functions = summarize_c_code_payload(
         c_code, flagged_indicators, flagged_functions

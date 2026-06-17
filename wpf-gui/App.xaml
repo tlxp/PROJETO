@@ -3,51 +3,102 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-        <!-- Paleta de cores base -->
-        <Color x:Key="Color.PrimaryBackground">#020617</Color>
-        <Color x:Key="Color.Surface">#030712</Color>
-        <Color x:Key="Color.SurfaceAlt">#111827</Color>
-        <Color x:Key="Color.Border">#1F2937</Color>
-        <Color x:Key="Color.TextPrimary">#E5E7EB</Color>
-        <Color x:Key="Color.TextSecondary">#9CA3AF</Color>
-        <Color x:Key="Color.TextMuted">#6B7280</Color>
-        <Color x:Key="Color.Accent">#2563EB</Color>
-        <Color x:Key="Color.AccentSoft">#1D4ED8</Color>
-        <Color x:Key="Color.Success">#22C55E</Color>
-        <Color x:Key="Color.Danger">#EF4444</Color>
+        <!-- Paleta "Signal" — obsidian + teal -->
+        <Color x:Key="Color.PrimaryBackground">#09090B</Color>
+        <Color x:Key="Color.Surface">#111113</Color>
+        <Color x:Key="Color.SurfaceAlt">#1A1A1F</Color>
+        <Color x:Key="Color.SurfaceElevated">#222228</Color>
+        <Color x:Key="Color.Border">#2E2E36</Color>
+        <Color x:Key="Color.BorderSubtle">#1F1F26</Color>
+        <Color x:Key="Color.TextPrimary">#FAFAFA</Color>
+        <Color x:Key="Color.TextSecondary">#A1A1AA</Color>
+        <Color x:Key="Color.TextMuted">#71717A</Color>
+        <Color x:Key="Color.Accent">#2DD4BF</Color>
+        <Color x:Key="Color.AccentSoft">#14B8A6</Color>
+        <Color x:Key="Color.AccentGlow">#2DD4BF</Color>
+        <Color x:Key="Color.Success">#34D399</Color>
+        <Color x:Key="Color.Warning">#FBBF24</Color>
+        <Color x:Key="Color.Danger">#FB7185</Color>
+        <Color x:Key="Color.Terminal">#6EE7B7</Color>
 
-        <!-- Brushes semânticos -->
         <SolidColorBrush x:Key="PrimaryBackgroundBrush" Color="{StaticResource Color.PrimaryBackground}" />
         <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource Color.Surface}" />
         <SolidColorBrush x:Key="SurfaceAltBrush" Color="{StaticResource Color.SurfaceAlt}" />
+        <SolidColorBrush x:Key="SurfaceElevatedBrush" Color="{StaticResource Color.SurfaceElevated}" />
         <SolidColorBrush x:Key="BorderBrushBase" Color="{StaticResource Color.Border}" />
+        <SolidColorBrush x:Key="BorderSubtleBrush" Color="{StaticResource Color.BorderSubtle}" />
         <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource Color.TextPrimary}" />
         <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource Color.TextSecondary}" />
         <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource Color.TextMuted}" />
         <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource Color.Accent}" />
         <SolidColorBrush x:Key="AccentSoftBrush" Color="{StaticResource Color.AccentSoft}" />
         <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource Color.Success}" />
+        <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource Color.Warning}" />
         <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource Color.Danger}" />
+        <SolidColorBrush x:Key="TerminalBrush" Color="{StaticResource Color.Terminal}" />
 
-        <!-- Sistema de corner radius -->
-        <CornerRadius x:Key="Radius.Small">6</CornerRadius>
-        <CornerRadius x:Key="Radius.Medium">10</CornerRadius>
+        <!-- Fundo com grelha subtil (cores literais — StaticResource falha dentro de DrawingBrush) -->
+        <DrawingBrush x:Key="GridBackgroundBrush"
+                      TileMode="Tile"
+                      Viewport="0,0,24,24"
+                      ViewportUnits="Absolute"
+                      Stretch="None">
+            <DrawingBrush.Drawing>
+                <GeometryDrawing>
+                    <GeometryDrawing.Geometry>
+                        <RectangleGeometry Rect="0,0,24,24" />
+                    </GeometryDrawing.Geometry>
+                    <GeometryDrawing.Brush>
+                        <SolidColorBrush Color="#09090B" />
+                    </GeometryDrawing.Brush>
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#141418" Thickness="0.5" />
+                    </GeometryDrawing.Pen>
+                </GeometryDrawing>
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
+
+        <!-- Gradientes -->
+        <LinearGradientBrush x:Key="AccentGradientBrush" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#2DD4BF" Offset="0" />
+            <GradientStop Color="#14B8A6" Offset="1" />
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="SurfaceGradientBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#16161A" Offset="0" />
+            <GradientStop Color="#111113" Offset="1" />
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="TopBarGradientBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#121214" Offset="0" />
+            <GradientStop Color="#09090B" Offset="1" />
+        </LinearGradientBrush>
+
+        <!-- Raios -->
+        <CornerRadius x:Key="Radius.Small">8</CornerRadius>
+        <CornerRadius x:Key="Radius.Medium">12</CornerRadius>
         <CornerRadius x:Key="Radius.Large">16</CornerRadius>
-        <CornerRadius x:Key="Radius.XLarge">18</CornerRadius>
+        <CornerRadius x:Key="Radius.XLarge">20</CornerRadius>
+        <CornerRadius x:Key="Radius.Pill">999</CornerRadius>
 
-        <!-- Sistema de sombras -->
+        <!-- Sombras -->
         <DropShadowEffect x:Key="Shadow.Medium"
                           Color="#000000"
-                          BlurRadius="18"
-                          Opacity="0.35"
+                          BlurRadius="24"
+                          Opacity="0.45"
                           ShadowDepth="0" />
         <DropShadowEffect x:Key="Shadow.Accent"
-                          Color="#1D4ED8"
-                          BlurRadius="20"
-                          Opacity="0.35"
+                          Color="#2DD4BF"
+                          BlurRadius="28"
+                          Opacity="0.22"
                           ShadowDepth="0" />
+        <DropShadowEffect x:Key="Shadow.Soft"
+                          Color="#000000"
+                          BlurRadius="12"
+                          Opacity="0.3"
+                          ShadowDepth="2" />
 
-        <!-- Tipografia base -->
+        <!-- Tipografia -->
         <Style TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
             <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
@@ -56,18 +107,34 @@
         </Style>
 
         <Style x:Key="TitleTextBlock" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
-            <Setter Property="FontSize" Value="22" />
+            <Setter Property="FontSize" Value="24" />
             <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
 
         <Style x:Key="SubtitleTextBlock" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
             <Setter Property="FontSize" Value="13" />
             <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+            <Setter Property="LineHeight" Value="20" />
         </Style>
 
         <Style x:Key="MutedTextBlock" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
             <Setter Property="FontSize" Value="11" />
             <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}" />
+        </Style>
+
+        <Style x:Key="SectionLabelTextBlock" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+        </Style>
+
+        <!-- Cartão base -->
+        <Style x:Key="CardBorderStyle" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource SurfaceGradientBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrushBase}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{StaticResource Radius.Large}" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
         </Style>
 
         <!-- Botões -->
@@ -76,7 +143,8 @@
             <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrushBase}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="Padding" Value="14,8" />
+            <Setter Property="FontSize" Value="12" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="SnapsToDevicePixels" Value="True" />
             <Setter Property="Cursor" Value="Hand" />
@@ -90,22 +158,23 @@
                                 CornerRadius="{StaticResource Radius.Small}">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}"
                                               SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Root" Property="Background" Value="#151C2A" />
+                                <Setter TargetName="Root" Property="Background" Value="{StaticResource SurfaceElevatedBrush}" />
                                 <Setter TargetName="Root" Property="BorderBrush" Value="{StaticResource AccentSoftBrush}" />
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Root" Property="Background" Value="#0B1120" />
+                                <Setter TargetName="Root" Property="Background" Value="#0E0E12" />
                                 <Setter TargetName="Root" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
                                 <Setter TargetName="Root" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.45" />
+                                <Setter Property="Opacity" Value="0.4" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -116,15 +185,55 @@
         <Style x:Key="ModernButtonStyle" TargetType="Button" BasedOn="{StaticResource BaseButtonStyle}" />
 
         <Style x:Key="AccentButtonStyle" TargetType="Button" BasedOn="{StaticResource BaseButtonStyle}">
-            <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+            <Setter Property="Background" Value="{StaticResource AccentGradientBrush}" />
             <Setter Property="BorderBrush" Value="{StaticResource AccentSoftBrush}" />
+            <Setter Property="Foreground" Value="#042F2E" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{StaticResource Radius.Small}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}"
+                                              SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Opacity" Value="0.92" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Root" Property="Opacity" Value="0.82" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
-        <!-- Botões da janela (minimizar/fechar) -->
+        <Style x:Key="DangerButtonStyle" TargetType="Button" BasedOn="{StaticResource BaseButtonStyle}">
+            <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
+            <Setter Property="BorderBrush" Value="#4C1D2E" />
+            <Setter Property="Background" Value="#1A0F14" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="BorderBrush" Value="{StaticResource DangerBrush}" />
+                    <Setter Property="Background" Value="#220F18" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Botões da janela -->
         <Style x:Key="WindowControlButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
@@ -139,18 +248,101 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Root" Property="Background" Value="#111827" />
+                                <Setter TargetName="Root" Property="Background" Value="{StaticResource SurfaceAltBrush}" />
+                                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Root" Property="Background" Value="#020617" />
-                            </Trigger>
-                            <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Root" Property="BorderBrush" Value="{StaticResource AccentSoftBrush}" />
+                                <Setter TargetName="Root" Property="Background" Value="{StaticResource SurfaceBrush}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <Style x:Key="WindowCloseButtonStyle" TargetType="Button" BasedOn="{StaticResource WindowControlButtonStyle}">
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Inputs (apenas propriedades — templates custom quebram PasswordBox/TextBox) -->
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrushBase}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="10,7" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="CaretBrush" Value="{StaticResource AccentBrush}" />
+            <Setter Property="SelectionBrush" Value="#332DD4BF" />
+        </Style>
+
+        <Style TargetType="PasswordBox">
+            <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrushBase}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="10,7" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="CaretBrush" Value="{StaticResource AccentBrush}" />
+        </Style>
+
+        <Style TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <StackPanel Orientation="Horizontal">
+                            <Border x:Name="Box"
+                                    Width="16" Height="16"
+                                    Margin="0,0,8,0"
+                                    CornerRadius="4"
+                                    Background="{StaticResource SurfaceBrush}"
+                                    BorderBrush="{StaticResource BorderBrushBase}"
+                                    BorderThickness="1"
+                                    VerticalAlignment="Center">
+                                <TextBlock x:Name="CheckMark"
+                                           Text="✓"
+                                           FontSize="10"
+                                           FontWeight="Bold"
+                                           Foreground="{StaticResource AccentBrush}"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           Visibility="Collapsed" />
+                            </Border>
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Box" Property="Background" Value="#142E2B" />
+                                <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                <Setter TargetName="CheckMark" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource AccentSoftBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ProgressBar">
+            <Setter Property="Height" Value="6" />
+            <Setter Property="Background" Value="{StaticResource SurfaceAltBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+
+        <Style TargetType="Separator">
+            <Setter Property="Background" Value="{StaticResource BorderSubtleBrush}" />
+            <Setter Property="Height" Value="1" />
+            <Setter Property="Margin" Value="0,16" />
         </Style>
     </Application.Resources>
 </Application>

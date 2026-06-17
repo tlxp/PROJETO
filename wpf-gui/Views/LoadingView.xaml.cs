@@ -4,6 +4,8 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using RatAnalyzer.Desktop.Bootstrap;
+using RatAnalyzer.Desktop.Infrastructure;
+using RatAnalyzer.Desktop.Localization;
 
 namespace RatAnalyzer.Desktop.Views;
 
@@ -33,11 +35,11 @@ public partial class LoadingView : UserControl
         }
         catch (Exception ex)
         {
-            AddLog("[ERRO] Falha no arranque do ambiente.");
+            AddLog(LocalizationManager.Get(LocKeys.MsgStartupFailed));
             AddLog(ex.Message);
             MessageBox.Show(
-                ex.Message + "\n\nPode iniciar manualmente o backend (pasta 'backend') e o frontend (pasta 'frontend').",
-                "Erro ao iniciar ambiente",
+                LocalizationManager.Format(LocKeys.MsgStartupFailedDetail, ex.Message),
+                LocalizationManager.Get(LocKeys.MsgStartupFailedTitle),
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
         }
@@ -47,7 +49,8 @@ public partial class LoadingView : UserControl
 
     private void AddLog(string message)
     {
-        Application.Current.Dispatcher.Invoke(() => SystemLogs.Add(message));
+        Application.Current.Dispatcher.Invoke(() =>
+            SystemLogs.Add(ProcessOutputEncoding.NormalizeForDisplay(message)));
     }
 }
 

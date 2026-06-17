@@ -34,7 +34,8 @@ recebe relatórios detalhados a partir de um único ecossistema de ferramentas.
 1. **Arrastar** um ficheiro (`.exe`, `.dll`, `.cs`, etc.) para a interface (web ou desktop WPF).
 2. **Escolher** o tipo de análise: **Estática**, **Dinâmica** ou **Ambas**.
 3. **Consultar** os resultados: código descompilado (C#/pseudo-C), relatório estático, relatório
-   comportamental da VM, scores e indicadores, com explicações assistidas por IA.
+   comportamental da VM, scores e indicadores, com explicações assistidas por IA. A interface está
+   disponível em **português** e **inglês** (WPF, web e fallbacks da API) — ver [`docs/i18n.md`](docs/i18n.md).
 
 | Fluxo | O que faz |
 |-------|-----------|
@@ -63,7 +64,10 @@ recebe relatórios detalhados a partir de um único ecossistema de ferramentas.
 ```
 PROJETO/
 ├── backend/                 # API FastAPI + pipeline de análise (Python)
-│   ├── api.py               #   Endpoints /api/analyze, /api/analyze_stream, /api/analysis
+│   ├── api.py               #   Entrada uvicorn (app factory)
+│   ├── app_factory.py       #   Criação FastAPI, middleware, routers
+│   ├── routers/             #   analyze, jobs, health, storage
+│   ├── i18n.py              #   Mensagens PT/EN (API e fallbacks de relatório)
 │   ├── analysis_jobs.py     #   Jobs static | dynamic | both
 │   ├── config.py            #   Configuração central (paths, DB, DATA_DIR)
 │   ├── vm_orchestrator.py   #   Orquestração da análise dinâmica (escolhe driver)
@@ -169,7 +173,10 @@ em `DATA_DIR/reports/`.
 | `RATANALYZER_API_TOKEN` | Backend / WPF / frontend | Se definido, **todos** os endpoints de upload (`/api/analyze`, `/api/analysis`, storage) exigem header `X-API-Token`. No frontend use `VITE_API_TOKEN`. |
 | `RATANALYZER_MAX_UPLOAD_MB` | Backend | Limite de upload (default **100** MB). |
 | `RATANALYZER_MAX_WORKERS` | Backend | Workers de análise em paralelo (default **2**). |
+| `RATANALYZER_RATE_LIMIT_UPLOADS_PER_MIN` | Backend | Limite de uploads por IP/minuto (default **60**). |
 | `RATANALYZER_CORS_ORIGINS` | Backend | Origens CORS permitidas (default inclui `localhost:8080`). |
+| `RATANALYZER_LANG` | Backend / WPF | Idioma dos fallbacks da API (`pt` \| `en`; default `pt`). |
+| `VITE_DEFAULT_LOCALE` | Frontend / WPF | Idioma inicial da SPA quando não há `?lang=` nem `localStorage`. |
 | `VM_AGENT_TOKEN` | vm-agent + backend | **Obrigatório** no arranque do agent (exceto dev com `VM_AGENT_ALLOW_INSECURE=1`). Header `X-Agent-Token`. |
 | `PROJETOVM_GuestPassword` | Scripts Hyper-V | **Obrigatório** (exceto dev com `PROJETOVM_ALLOW_INSECURE_DEFAULTS=1`). |
 | `PROJETOVM_BasePath` | Scripts Hyper-V / WPF | Pasta raiz do sandbox (default `D:\PROJETOVM`). |
@@ -180,7 +187,7 @@ em `DATA_DIR/reports/`.
 
 ## Testes e CI
 
-Comandos e convenções: [`CONTRIBUTING.md`](CONTRIBUTING.md). CI: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (66 pytest · 37 Vitest · 48 xUnit · PowerShell UTF-8 · diagramas).
+Comandos e convenções: [`CONTRIBUTING.md`](CONTRIBUTING.md). CI: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (**84** pytest · **56** Vitest · **54** xUnit · Playwright E2E · cobertura · `pip-audit` · `gitleaks` · PowerShell UTF-8 · diagramas).
 
 ---
 
@@ -261,6 +268,7 @@ FAQ: [`docs/faq.md`](docs/faq.md) · diagnóstico Caminho B: [`scripts/hyperv-sa
 
 **Roadmap**
 - [x] Explicações assistidas por IA no frontend (Google Gemini - opcional, client-side)
+- [x] Interface bilíngue PT/EN (WPF, frontend web, fallbacks da API) — [`docs/i18n.md`](docs/i18n.md)
 - [ ] Integração com IDA (Ghidra já integrado)
 - [ ] Deobfuscação avançada
 - [ ] Telemetria dinâmica avançada no vm-agent (Sysmon/ETW/hooking) e enriquecimento de `dynamicReport`

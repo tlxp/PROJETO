@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using RatAnalyzer.Desktop.Localization;
 using RatAnalyzer.Desktop.ViewModels;
 
 namespace RatAnalyzer.Desktop.Views;
@@ -14,6 +15,9 @@ public partial class MainDashboardView : UserControl
         _viewModel = new MainDashboardViewModel(new MainDashboardDialogsHost(this));
         DataContext = _viewModel;
     }
+
+    private void ChangeLanguageButton_Click(object sender, RoutedEventArgs e) =>
+        AppNavigation.RequestLanguagePicker?.Invoke();
 
     private void FileDropArea_Drop(object sender, DragEventArgs e)
     {

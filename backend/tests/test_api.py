@@ -30,7 +30,7 @@ class FakeAnalyzer:
 
 @pytest.fixture()
 def fake_pipeline(monkeypatch):
-    monkeypatch.setattr(api, "RATAnalyzer", FakeAnalyzer)
+    monkeypatch.setattr("routers.analyze.RATAnalyzer", FakeAnalyzer)
 
 
 class TestAnalyzeUpload:

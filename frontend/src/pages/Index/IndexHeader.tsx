@@ -1,17 +1,21 @@
 import { Terminal } from "lucide-react";
+import { useI18n } from "@/i18n";
 
-const IndexHeader = () => (
-  <header className="border-b border-border bg-card/80 backdrop-blur-sm">
-    <div className="container flex items-center gap-3 py-4">
-      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 glow-primary">
-        <Terminal className="h-5 w-5 text-primary" />
+const IndexHeader = () => {
+  const { t } = useI18n();
+  return (
+    <header className="border-b border-border bg-card/80 backdrop-blur-sm">
+      <div className="container flex items-center gap-3 py-4">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 glow-primary">
+          <Terminal className="h-5 w-5 text-primary" />
+        </div>
+        <div>
+          <h1 className="font-mono text-lg font-bold text-foreground tracking-tight">{t("appTitle")}</h1>
+          <p className="text-[11px] text-muted-foreground">{t("appSubtitle")}</p>
+        </div>
       </div>
-      <div>
-        <h1 className="font-mono text-lg font-bold text-foreground tracking-tight">RAT Analyzer</h1>
-        <p className="text-[11px] text-muted-foreground">Análise estática de executáveis e DLLs</p>
-      </div>
-    </div>
-  </header>
-);
+    </header>
+  );
+};
 
 export default IndexHeader;

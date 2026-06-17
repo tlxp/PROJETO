@@ -1,5 +1,6 @@
 using System.Threading.Tasks;
 using System.Windows;
+using RatAnalyzer.Desktop.Localization;
 using RatAnalyzer.Desktop.ViewModels;
 
 namespace RatAnalyzer.Desktop.Views;
@@ -11,6 +12,7 @@ public partial class StorageMaintenanceWindow : Window
     public StorageMaintenanceWindow()
     {
         InitializeComponent();
+        WindowLocalization.BindTitle(this, () => UiStrings.Instance.StorageWindowTitle);
         _viewModel = new StorageMaintenanceViewModel(new StorageMaintenanceDialogsHost(this));
         _viewModel.RequestClose += Close;
         DataContext = _viewModel;

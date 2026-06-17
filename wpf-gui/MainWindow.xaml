@@ -5,79 +5,29 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:views="clr-namespace:RatAnalyzer.Desktop.Views"
         mc:Ignorable="d"
-        Title="RAT Analyzer - Sandbox"
-        Width="1050"
-        Height="680"
+        Title="RAT Analyzer - VM Sandbox"
+        Width="1080"
+        Height="700"
+        MinWidth="900"
+        MinHeight="600"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource PrimaryBackgroundBrush}"
         Foreground="{StaticResource TextPrimaryBrush}"
-        WindowStyle="None"
+        WindowStyle="SingleBorderWindow"
         ResizeMode="CanResizeWithGrip">
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="38" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
+    <Border Margin="20"
+            CornerRadius="{StaticResource Radius.XLarge}"
+            BorderBrush="{StaticResource BorderBrushBase}"
+            BorderThickness="1">
+        <Border.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Color="#131316" Offset="0" />
+                <GradientStop Color="#0D0D10" Offset="1" />
+            </LinearGradientBrush>
+        </Border.Background>
 
-        <!-- Barra superior -->
-        <Border Grid.Row="0"
-                BorderBrush="{StaticResource BorderBrushBase}"
-                BorderThickness="0,0,0,1"
-                MouseDown="TopBar_MouseDown">
-            <Border.Background>
-                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                    <GradientStop Color="#020617" Offset="0" />
-                    <GradientStop Color="#030712" Offset="1" />
-                </LinearGradientBrush>
-            </Border.Background>
-            <DockPanel LastChildFill="True" Margin="8,0">
-                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
-                    <Ellipse Width="10" Height="10" Fill="#FCA5A5" Margin="0,0,4,0" />
-                    <Ellipse Width="10" Height="10" Fill="#FBBF24" Margin="0,0,4,0" />
-                    <Ellipse Width="10" Height="10" Fill="#6EE7B7" />
-                </StackPanel>
-                <TextBlock Text="RAT Analyzer – VM Sandbox"
-                           VerticalAlignment="Center"
-                           Style="{StaticResource SubtitleTextBlock}"
-                           FontSize="13"
-                           Margin="12,0,0,0" />
-                <StackPanel Orientation="Horizontal"
-                            DockPanel.Dock="Right"
-                            VerticalAlignment="Center"
-                            Margin="0,0,4,0">
-                    <Button Width="26"
-                            Height="20"
-                            Margin="0,0,4,0"
-                            Click="MinimizeButton_Click"
-                            Style="{StaticResource WindowControlButtonStyle}">
-                        <TextBlock Text="─" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </Button>
-                    <Button Width="26"
-                            Height="20"
-                            Click="CloseButton_Click"
-                            Style="{StaticResource WindowControlButtonStyle}">
-                        <TextBlock Text="✕"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   Foreground="{StaticResource DangerBrush}" />
-                    </Button>
-                </StackPanel>
-            </DockPanel>
-        </Border>
-
-        <!-- Conteúdo principal com cartão subtil -->
-        <Border Grid.Row="1"
-                Margin="16"
-                CornerRadius="{StaticResource Radius.XLarge}"
-                Background="{StaticResource SurfaceBrush}"
-                BorderBrush="{StaticResource BorderBrushBase}"
-                BorderThickness="1"
-                Effect="{StaticResource Shadow.Medium}">
-
-            <Grid Margin="16">
-                <ContentControl x:Name="ContentHost" />
-            </Grid>
-        </Border>
-    </Grid>
+        <Grid Margin="20">
+            <ContentControl x:Name="ContentHost" />
+        </Grid>
+    </Border>
 </Window>
-

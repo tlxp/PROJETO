@@ -215,11 +215,13 @@ Implementação: `wpf-gui/Helpers/DownloadIntegrity.cs` (testado em `RatAnalyzer
 | Uploads | `test_upload_security.py` | idem |
 | vm-agent auth + storage | `VmAgent.Tests` (30 testes xUnit) | idem |
 | WPF integridade | `RatAnalyzer.Desktop.Tests` (12 testes) | idem |
-| Locks Python | `diff` de `requirements*.lock` | idem |
+| Locks Python | `diff` de `requirements*.lock` + `pip-audit` | idem |
+| Segredos no Git | `gitleaks` | job `security` |
+| Frontend E2E | Playwright (`e2e/upload.spec.ts`) | job `frontend-e2e` |
 | Scripts PS1 | UTF-8 + validação de sintaxe | idem |
 | Documentação `.md` | Links internos + ortografia PT | `scripts/ci/check_md_links.py` |
 
-Contagens atuais: **66 pytest · 37 Vitest · 48 xUnit** (ver [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)).
+Contagens atuais: **84 pytest · 56 Vitest · 48 xUnit** (ver [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)).
 
 ---
 
@@ -248,6 +250,7 @@ Use antes de cada deploy ou demonstração com amostras reais:
 | [`../backend/README.md`](../backend/README.md) | Endpoints e variáveis do backend |
 | [`../vm-agent/README.md`](../vm-agent/README.md) | Segurança do agent na VM |
 | [`../wpf-gui/README.md`](../wpf-gui/README.md) | Credenciais guest e tokens WPF |
+| [`i18n.md`](i18n.md) | Idiomas PT/EN (sem impacto em isolamento; preferência de UI) |
 | [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | Regras para contribuidores |
 
 ---

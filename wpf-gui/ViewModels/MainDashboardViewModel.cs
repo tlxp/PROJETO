@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using RatAnalyzer.Desktop.Infrastructure;
+using RatAnalyzer.Desktop.Localization;
 using RatAnalyzer.Desktop.Services;
 
 namespace RatAnalyzer.Desktop.ViewModels;
@@ -163,13 +164,13 @@ public sealed class MainDashboardViewModel : ViewModelBase
     {
         if (string.IsNullOrEmpty(_selectedFilePath))
         {
-            _dialogs.ShowInfo("Nenhum ficheiro selecionado.");
+            _dialogs.ShowInfo(LocalizationManager.Get(LocKeys.MsgNoFile));
             return;
         }
 
         IsStaticAnalysisBusy = true;
         ResetStaticProgress();
-        StaticStatusText = "A preparar ambiente de análise estática...";
+        StaticStatusText = LocalizationManager.Get(LocKeys.MsgStaticPrep);
         ShowStaticStatus = true;
         ShowStaticProgress = true;
         StaticProgressIndeterminate = true;
@@ -195,8 +196,8 @@ public sealed class MainDashboardViewModel : ViewModelBase
                 progressPct,
                 onJobIdKnown: knownJobId =>
                 {
-                    _lastResultsUrl = $"{AppConstants.FrontendUrl}/analysis/{Uri.EscapeDataString(knownJobId)}";
-                    StaticJobIdText = $"Job ID: {knownJobId}";
+                    _lastResultsUrl = AppConstants.BuildFrontendUrl($"/analysis/{Uri.EscapeDataString(knownJobId)}");
+                    StaticJobIdText = LocalizationManager.Format(LocKeys.MsgJobIdFormat, knownJobId);
                     StaticJobUrlText = _lastResultsUrl;
                     ShowStaticJobDetails = true;
                     ShowOpenResults = true;
@@ -213,12 +214,12 @@ public sealed class MainDashboardViewModel : ViewModelBase
             _lastStaticJobId = jobId;
             _lastStaticFilePath = _selectedFilePath;
 
-            StaticStatusText = "Análise estática concluída. A abrir resultados no navegador...";
+            StaticStatusText = LocalizationManager.Get(LocKeys.MsgStaticDone);
             StaticProgressIndeterminate = false;
             StaticProgressValue = 100;
 
-            _lastResultsUrl = $"{AppConstants.FrontendUrl}/analysis/{Uri.EscapeDataString(jobId)}";
-            StaticJobIdText = $"Job ID: {jobId}";
+            _lastResultsUrl = AppConstants.BuildFrontendUrl($"/analysis/{Uri.EscapeDataString(jobId)}");
+            StaticJobIdText = LocalizationManager.Format(LocKeys.MsgJobIdFormat, jobId);
             StaticJobUrlText = _lastResultsUrl;
             ShowStaticJobDetails = true;
             ShowOpenResults = true;
@@ -230,16 +231,16 @@ public sealed class MainDashboardViewModel : ViewModelBase
             catch (Exception ex)
             {
                 _dialogs.ShowWarning(
-                    $"Análise concluída, mas não foi possível abrir o navegador automaticamente.\n\n{ex.Message}",
-                    "RAT Analyzer");
+                    LocalizationManager.Format(LocKeys.MsgBrowserFailed, ex.Message),
+                    LocalizationManager.Get(LocKeys.AppTitle));
             }
         }
         catch (Exception ex)
         {
-            StaticStatusText = "Falha na análise estática.";
+            StaticStatusText = LocalizationManager.Get(LocKeys.MsgStaticFailed);
             StaticProgressIndeterminate = false;
             StaticProgressValue = 0;
-            _dialogs.ShowError(ex.Message, "Erro na análise estática");
+            _dialogs.ShowError(ex.Message, LocalizationManager.Get(LocKeys.MsgStaticErrorTitle));
         }
         finally
         {
@@ -251,13 +252,13 @@ public sealed class MainDashboardViewModel : ViewModelBase
     {
         if (string.IsNullOrEmpty(_selectedFilePath))
         {
-            _dialogs.ShowInfo("Nenhum ficheiro selecionado.");
+            _dialogs.ShowInfo(LocalizationManager.Get(LocKeys.MsgNoFile));
             return;
         }
 
         if (!System.IO.File.Exists(_selectedFilePath))
         {
-            _dialogs.ShowWarning("O ficheiro selecionado já não existe no disco.", "RAT Analyzer");
+            _dialogs.ShowWarning(LocalizationManager.Get(LocKeys.MsgFileMissing), LocalizationManager.Get(LocKeys.AppTitle));
             return;
         }
 
@@ -302,7 +303,7 @@ public sealed class MainDashboardViewModel : ViewModelBase
     {
         if (string.IsNullOrWhiteSpace(_lastResultsUrl))
         {
-            _dialogs.ShowInfo("Ainda não existe nenhum job de análise concluído para abrir no navegador.");
+            _dialogs.ShowInfo(LocalizationManager.Get(LocKeys.MsgNoResults));
             return;
         }
 
@@ -313,8 +314,8 @@ public sealed class MainDashboardViewModel : ViewModelBase
         catch (Exception ex)
         {
             _dialogs.ShowWarning(
-                $"Não foi possível abrir a página de resultados no navegador.\n\n{ex.Message}",
-                "RAT Analyzer");
+                LocalizationManager.Format(LocKeys.MsgResultsBrowserFailed, ex.Message),
+                LocalizationManager.Get(LocKeys.AppTitle));
         }
     }
 
@@ -327,8 +328,8 @@ public sealed class MainDashboardViewModel : ViewModelBase
         catch (Exception ex)
         {
             _dialogs.ShowWarning(
-                $"Não foi possível abrir a janela de manutenção.\n\n{ex.Message}",
-                "RAT Analyzer");
+                LocalizationManager.Format(LocKeys.MsgMaintenanceFailed, ex.Message),
+                LocalizationManager.Get(LocKeys.AppTitle));
         }
     }
 

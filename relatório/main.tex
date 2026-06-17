@@ -251,9 +251,11 @@ Os objectivos principais do projecto são:
           dinâmica (\texttt{static}, \texttt{dynamic} ou \texttt{both}).
     \item Implementar uma \textbf{interface web} (React + Vite + TypeScript) com zona de
           \emph{drag-and-drop}, streaming de progresso, visualização de relatórios, pseudo-C
-          (Ghidra) e IL (.NET), e assistente Gemini para explicar excertos de código C.
+          (Ghidra) e IL (.NET), assistente Gemini para explicar excertos de código C, e suporte
+          bilíngue (português/inglês).
     \item Disponibilizar uma \textbf{aplicação desktop WPF} (.NET~8) como ponto de entrada
-          alternativo, incluindo bootstrap de dependências e integração com a sandbox Hyper-V.
+          alternativo, incluindo bootstrap de dependências, escolha de idioma persistente e
+          integração com a sandbox Hyper-V.
     \item Construir um \textbf{agente VM} (Minimal API .NET) e scripts PowerShell para execução
           isolada de amostras e recolha de telemetria comportamental.
     \item Definir um \textbf{modelo de scoring} (0--100) que agregue múltiplos indicadores
@@ -777,9 +779,12 @@ A classe \texttt{RATAnalyzer} (\texttt{backend/rat\_analyzer.py}) orquestra o pi
     \item Geração do relatório (\texttt{report\_generator.py}).
 \end{enumerate}
 
-A API FastAPI (\texttt{backend/api.py}) expõe endpoints REST documentados em OpenAPI
-(\texttt{/docs}). A Tabela~\ref{tab:api-endpoints} resume os principais contratos HTTP; todos os
-endpoints de análise e armazenamento exigem \texttt{X-API-Token} excepto \texttt{/api/health}.
+A API FastAPI (\texttt{backend/api.py} via \texttt{app\_factory.py}) expõe endpoints REST
+documentados em OpenAPI (\texttt{/docs}), organizados em \texttt{routers/} (\texttt{analyze},
+\texttt{jobs}, \texttt{health}, \texttt{storage}). Mensagens de fallback e erros legíveis ao
+utilizador são localizadas (PT/EN) via \texttt{i18n.py} e \texttt{RATANALYZER\_LANG}. A
+Tabela~\ref{tab:api-endpoints} resume os principais contratos HTTP; todos os endpoints de
+análise e armazenamento exigem \texttt{X-API-Token} excepto \texttt{/api/health}.
 
 \begin{table}[H]
     \centering
@@ -793,10 +798,12 @@ endpoints de análise e armazenamento exigem \texttt{X-API-Token} excepto \textt
         POST & \texttt{/api/analyze\_stream} & Análise estática com streaming NDJSON \\
         POST & \texttt{/api/analysis} & Criar job (\texttt{static|dynamic|both}) \\
         POST & \texttt{/api/analysis/upload\_static} & Publicar resultado estático num job existente \\
+        POST & \texttt{/api/analysis/upload\_dynamic} & Publicar relatório VM (Caminho B) no mesmo \texttt{jobId} \\
         GET & \texttt{/api/analysis/\{job\_id\}} & Estado e artefatos do job \\
         GET & \texttt{/api/analysis/\{job\_id\}/artifacts/obfuscated\_snippets} & Excertos ofuscados (texto) \\
         GET & \texttt{/api/analyses} & Listagem de jobs recentes \\
-        GET & \texttt{/api/health} & \emph{Health check} (sem token) \\
+        GET & \texttt{/api/health} & \emph{Health check} enriquecido (sem token) \\
+        GET & \texttt{/metrics} & Métricas Prometheus (contadores em memória) \\
         POST & \texttt{/api/storage/cleanup|archive|purge} & Gestão de \texttt{DATA\_DIR} \\
         \bottomrule
     \end{tabular}
@@ -838,8 +845,10 @@ async def create_analysis(
 A página \texttt{Index.tsx} orquestra upload (\texttt{FileDropZone}), streaming
 (\texttt{useAnalysisStream}) e visualização (\texttt{AnalysisResultsView}) com três painéis:
 relatório, pseudo-C e IL. Hooks com \texttt{AbortController} cancelam pedidos pendentes ao
-navegar ou re-analisar. Quando disponíveis, as Figuras~\ref{fig:web-upload} e~\ref{fig:web-results}
-ilustram a zona de upload e os resultados com score e painéis de código.
+navegar ou re-analisar. O módulo \texttt{src/i18n/} fornece interface em português ou inglês:
+resolução por \texttt{?lang=}, \texttt{localStorage} e \texttt{VITE\_DEFAULT\_LOCALE}; os pedidos
+\texttt{apiFetch} enviam \texttt{Accept-Language}. Quando disponíveis, as Figuras~\ref{fig:web-upload}
+e~\ref{fig:web-results} ilustram a zona de upload e os resultados com score e painéis de código.
 
 \IfFileExists{imagens/fig-5-1-web-upload.png}{%
 \begin{figure}[H]
@@ -886,8 +895,17 @@ serviço externo escolhido pelo utilizador.
 \texttt{RatAnalyzer.Desktop} implementa MVVM: \texttt{MainDashboardViewModel} para análise
 estática via browser; \texttt{VmAnalysisViewModel} para sandbox Hyper-V via
 \texttt{04-Run-Sample.ps1}. O serviço \texttt{VmSandboxService} gere credenciais guest e paths
-(\texttt{PROJETOVM\_BasePath}). A Figura~\ref{fig:wpf-dashboard} mostra o ecrã principal da
-aplicação desktop (quando disponível).
+(\texttt{PROJETOVM\_BasePath}).
+
+No primeiro arranque, \texttt{LanguageSelectionView} permite escolher português ou inglês;
+a preferência persiste em \texttt{\%LOCALAPPDATA\%\\RatAnalyzer\\ui-settings.json}
+(\texttt{UserSettingsStore}). O catálogo \texttt{Localization/} traduz a UI, diálogos e logs de
+arranque visíveis em \texttt{LoadingView}. Ao publicar resultados, o WPF abre o browser com
+\texttt{?lang=} e propaga \texttt{RATANALYZER\_LANG} e \texttt{VITE\_DEFAULT\_LOCALE} aos
+processos backend e frontend. A saída de processos externos (pip, npm, PowerShell) é normalizada
+por \texttt{ProcessOutputEncoding} para evitar caracteres corrompidos na consola de logs.
+
+A Figura~\ref{fig:wpf-dashboard} mostra o ecrã principal da aplicação desktop (quando disponível).
 
 \IfFileExists{imagens/fig-5-3-wpf-dashboard.png}{%
 \begin{figure}[H]
@@ -1002,10 +1020,19 @@ repositório apenas para referência. Detalhe técnico: \texttt{SERIAL\_REPORT\_
     \item Instalar dependências: \texttt{pip install --require-hashes -r backend/requirements.lock} e
           \texttt{npm i} em \texttt{frontend/}.
     \item Arrancar backend: \texttt{uvicorn api:app --host 127.0.0.1 --port 8000}.
-    \item Arrancar frontend: \texttt{npm run dev} (porta 8080).
+    \item Arrancar frontend: \texttt{npm run dev} (porta 8080); opcional \texttt{?lang=en} na URL.
     \item Arrastar \texttt{.exe}/\texttt{.dll} para a zona de upload; consultar resultados.
     \item No painel \emph{Código C}, usar o ícone Gemini para explicar o excerto visível
           (API key própria ou modo demonstração).
+\end{enumerate}
+
+\subsection{Aplicação desktop WPF}
+
+\begin{enumerate}
+    \item Executar \texttt{dotnet run --project wpf-gui} \textbf{como Administrador}.
+    \item Escolher idioma (primeiro arranque) e aguardar o arranque de backend/frontend.
+    \item Arrastar amostra no dashboard; escolher análise estática ou comportamental em VM.
+    \item Consultar resultados no browser (\texttt{/analysis/\{jobId\}?lang=...}).
 \end{enumerate}
 
 \subsection{Sandbox Hyper-V}
@@ -1033,14 +1060,13 @@ python rat_analyzer.py caminho/amostra.exe -o reports/ -v
         \toprule
         \textbf{Componente} & \textbf{Framework} & \textbf{Testes} \\
         \midrule
-        Backend & pytest + httpx & 63 \\
-        Frontend & Vitest & 34+ \\
-        .NET & dotnet build (CI) & Compilação Release \\
+        Backend & pytest + httpx & 84 \\
+        Frontend & Vitest & 56 \\
+        Frontend E2E & Playwright & Fluxo upload/análise \\
+        .NET & xUnit (vm-agent, WPF, benign-vm-test) & 54 \\
         YARA & pytest (compilação regras) & Integrado \\
         PowerShell & CI encoding + sintaxe & Scripts \texttt{hyperv-sandbox/} \\
-        vm-agent & xUnit (\texttt{VmAgent.Tests}) & 30 \\
-        WPF & xUnit (\texttt{RatAnalyzer.Desktop.Tests}) & 12 \\
-        Diagramas & \texttt{render\_plantuml.py --check} & 10 figuras cap.~4 \\
+        Diagramas & \texttt{sync\_diagrams\_to\_report.py --check} & 10 figuras cap.~4 \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -1057,11 +1083,13 @@ A documentação técnica está versionada no repositório Git:
 \begin{itemize}
     \item \texttt{README.md} --- visão geral, início rápido e tabela de escolha dos caminhos A/B.
     \item \texttt{docs/README.md} --- índice da documentação.
-    \item \texttt{docs/diagrams/} --- fonte única PlantUML; PNG em \texttt{relatório/imagens/fig-4-*.png} via \texttt{render\_plantuml.py}.
+    \item \texttt{docs/i18n.md} --- internacionalização PT/EN (WPF, web, API).
+    \item \texttt{docs/diagrams/} --- fonte única PlantUML; PNG em \texttt{relatório/imagens/fig-4-*.png}.
     \item \texttt{docs/SEGURANCA.md} --- arquitectura de segurança, zonas de confiança e checklist.
+    \item \texttt{docs/adr/} --- Architecture Decision Records (routers, observabilidade, etc.).
     \item \texttt{docs/sandbox-hyperv-setup.md} --- guia Caminho A (vm-agent + Hyper-V).
     \item \texttt{docs/production-secrets.md} --- segredos, modo produção e checklist de deploy.
-    \item \texttt{docs/AUDITORIA.md} --- auditoria de segurança e qualidade (Jun 2026).
+    \item \texttt{CHANGELOG.md} --- histórico de alterações do repositório.
     \item \texttt{docs/faq.md} --- perguntas frequentes e resolução de problemas comuns.
     \item \texttt{CONTRIBUTING.md} --- convenções, testes automatizados e contribuição.
     \item \texttt{scripts/hyperv-sandbox/TROUBLESHOOTING.md} --- diagnóstico operacional da sandbox.

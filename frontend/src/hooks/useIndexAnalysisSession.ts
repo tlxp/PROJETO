@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ApiError, isAbortError } from "@/lib/api";
+import { getT } from "@/i18n";
 import {
   areAnalysisResultsEquivalent,
   buildAnalysisResultFromJob,
@@ -125,7 +126,7 @@ export function useIndexAnalysisSession() {
           typeof root.fileName === "string" ? root.fileName : undefined
         );
         if (!chosen) {
-          setError("Nenhum resultado disponível para o job externo.");
+          setError(getT("noExternalResult"));
           return;
         }
 
@@ -134,7 +135,7 @@ export function useIndexAnalysisSession() {
         setCurrentJobId(jobId);
       } catch (e) {
         if (cancelled || isAbortError(e)) return;
-        setError(e instanceof Error ? e.message : "Erro ao carregar resultados externos.");
+        setError(e instanceof Error ? e.message : getT("loadExternalError"));
       } finally {
         if (!cancelled && analyzeRunRef.current === runId) {
           setIsAnalyzing(false);
@@ -195,7 +196,7 @@ export function useIndexAnalysisSession() {
     (jobId: string, job: Record<string, unknown>, fallbackFileName?: string) => {
       const chosen = buildAnalysisResultFromJob(job, fallbackFileName);
       if (!chosen) {
-        throw new Error("Nenhum resultado disponível na análise.");
+        throw new Error(getT("noAnalysisResult"));
       }
       setCurrentJobId(jobId);
       navigate(ROUTES.analysis(jobId), { replace: false });
@@ -238,7 +239,7 @@ export function useIndexAnalysisSession() {
           } catch (e) {
             if (isAbortError(e)) return;
             const message =
-              e instanceof Error ? e.message : "Falha ao registar o resultado estático no backend.";
+              e instanceof Error ? e.message : getT("staticRegisterFailed");
             setAnalysisLogs((prev) => [...prev, message]);
           }
         }
@@ -269,9 +270,9 @@ export function useIndexAnalysisSession() {
     } catch (e) {
       if (!isCurrent() || isAbortError(e)) return;
       if (e instanceof ApiError && e.status === 404) {
-        setError("Job de análise não encontrado.");
+        setError(getT("jobNotFound"));
       } else {
-        setError(e instanceof Error ? e.message : "Erro ao analisar o ficheiro.");
+        setError(e instanceof Error ? e.message : getT("analyzeFileError"));
       }
     } finally {
       if (isCurrent()) {

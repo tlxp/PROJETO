@@ -2,9 +2,12 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:RatAnalyzer.Desktop.Views"
+        xmlns:loc="clr-namespace:RatAnalyzer.Desktop.Localization"
         Title="Manutenção de armazenamento"
-        Width="760"
-        Height="520"
+        Width="780"
+        Height="540"
+        MinWidth="640"
+        MinHeight="460"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource PrimaryBackgroundBrush}"
         Foreground="{StaticResource TextPrimaryBrush}"
@@ -13,125 +16,160 @@
     <Window.Resources>
         <local:InverseBoolConverter x:Key="InverseBool" />
     </Window.Resources>
-    <Grid Margin="16">
+    <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Margin="0,0,0,12">
-            <TextBlock Text="Manutenção / Limpeza" Style="{StaticResource TitleTextBlock}" />
-            <TextBlock Text="Estimativa e limpeza segura de dados temporários e artefatos antigos."
+        <StackPanel Grid.Row="0" Margin="0,0,0,16">
+            <TextBlock Text="{Binding Source={x:Static loc:UiStrings.Instance}, Path=StorageSection}"
+                       Style="{StaticResource SectionLabelTextBlock}"
+                       Margin="0,0,0,6" />
+            <TextBlock Text="{Binding Source={x:Static loc:UiStrings.Instance}, Path=StorageTitle}"
+                       Style="{StaticResource TitleTextBlock}"
+                       FontSize="22" />
+            <TextBlock Text="{Binding Source={x:Static loc:UiStrings.Instance}, Path=StorageSubtitle}"
                        Style="{StaticResource SubtitleTextBlock}"
-                       Margin="0,4,0,0"/>
+                       Margin="0,6,0,0" />
         </StackPanel>
 
         <Border Grid.Row="1"
-                Background="{StaticResource SurfaceBrush}"
-                BorderBrush="{StaticResource BorderBrushBase}"
-                BorderThickness="1"
-                CornerRadius="{StaticResource Radius.Medium}">
+                Style="{StaticResource CardBorderStyle}">
             <ScrollViewer VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled"
-                          Padding="14">
+                          Padding="18">
                 <StackPanel>
-                    <StackPanel Orientation="Vertical">
-                        <TextBlock Text="Espaço atual (estimativa)" FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding EstimateText}"
-                                   Margin="0,6,0,0"
-                                   Foreground="{StaticResource TextSecondaryBrush}"
-                                   TextWrapping="Wrap"/>
-                        <TextBlock Text="{Binding PathsText}"
-                                   Margin="0,6,0,0"
-                                   Foreground="{StaticResource TextMutedBrush}"
-                                   TextWrapping="Wrap"/>
-                        <Button Content="Recalcular estimativa"
-                                Margin="0,10,0,0"
-                                Width="190"
-                                Style="{StaticResource ModernButtonStyle}"
-                                Command="{Binding RefreshEstimateCommand}"
-                                IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}"/>
-                    </StackPanel>
+                    <!-- Estimativa -->
+                    <Border Padding="16"
+                            CornerRadius="{StaticResource Radius.Medium}"
+                            Background="#0A0A0C"
+                            BorderBrush="{StaticResource BorderSubtleBrush}"
+                            BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock Text="{Binding Source={x:Static loc:UiStrings.Instance}, Path=StorageEstimateTitle}"
+                                       FontWeight="SemiBold"
+                                       FontSize="13" />
+                            <TextBlock Text="{Binding EstimateText}"
+                                       Margin="0,8,0,0"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding PathsText}"
+                                       Margin="0,6,0,0"
+                                       Style="{StaticResource MutedTextBlock}"
+                                       TextWrapping="Wrap" />
+                            <Button Content="{Binding Source={x:Static loc:UiStrings.Instance}, Path=StorageRefreshEstimate}"
+                                    Margin="0,12,0,0"
+                                    Width="190"
+                                    HorizontalAlignment="Left"
+                                    Style="{StaticResource ModernButtonStyle}"
+                                    Command="{Binding RefreshEstimateCommand}"
+                                    IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}" />
+                        </StackPanel>
+                    </Border>
 
-                    <Separator Margin="0,14,0,14" Background="{StaticResource BorderBrushBase}" />
+                    <Separator />
 
-                    <StackPanel>
-                        <TextBlock Text="Limpeza segura (soft) do histórico de jobs" FontWeight="SemiBold" />
-                        <TextBlock Text="Remove artefatos antigos em disco (sandbox_jobs) para jobs concluídos/falhados, mantendo a base de dados."
-                                   Foreground="{StaticResource TextSecondaryBrush}"
-                                   FontSize="11"
-                                   Margin="0,4,0,8"
-                                   TextWrapping="Wrap"/>
+                    <!-- Limpeza soft -->
+                    <Border Padding="16"
+                            CornerRadius="{StaticResource Radius.Medium}"
+                            Background="#0A0A0C"
+                            BorderBrush="{StaticResource BorderSubtleBrush}"
+                            BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock Text="{Binding Source={x:Static loc:UiStrings.Instance}, Path=StorageSoftTitle}"
+                                       FontWeight="SemiBold"
+                                       FontSize="13" />
+                            <TextBlock Text="{Binding Source={x:Static loc:UiStrings.Instance}, Path=StorageSoftDesc}"
+                                       Style="{StaticResource MutedTextBlock}"
+                                       Margin="0,6,0,12"
+                                       TextWrapping="Wrap" />
+                            <WrapPanel>
+                                <TextBlock Text="{Binding Source={x:Static loc:UiStrings.Instance}, Path=StorageKeepRecent}" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="12" />
+                                <TextBox Width="70" Text="{Binding KeepMostRecent, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="{Binding Source={x:Static loc:UiStrings.Instance}, Path=StorageKeepDays}" VerticalAlignment="Center" Margin="16,0,8,0" FontSize="12" />
+                                <TextBox Width="70" Text="{Binding RetentionDays, UpdateSourceTrigger=PropertyChanged}" />
+                            </WrapPanel>
+                            <Button Content="{Binding Source={x:Static loc:UiStrings.Instance}, Path=StorageCleanupNow}"
+                                    Margin="0,12,0,0"
+                                    Width="140"
+                                    HorizontalAlignment="Left"
+                                    Style="{StaticResource ModernButtonStyle}"
+                                    Command="{Binding RunCleanupCommand}"
+                                    IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}" />
+                        </StackPanel>
+                    </Border>
 
-                        <WrapPanel>
-                            <TextBlock Text="Reter últimos:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <TextBox Width="70" Text="{Binding KeepMostRecent, UpdateSourceTrigger=PropertyChanged}" />
-                            <TextBlock Text="  |  Reter por dias:" VerticalAlignment="Center" Margin="12,0,8,0"/>
-                            <TextBox Width="70" Text="{Binding RetentionDays, UpdateSourceTrigger=PropertyChanged}" />
-                        </WrapPanel>
+                    <Separator />
 
-                        <Button Content="Limpar agora"
-                                Margin="0,10,0,0"
-                                Width="140"
-                                Style="{StaticResource ModernButtonStyle}"
-                                Command="{Binding RunCleanupCommand}"
-                                IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}"/>
-                    </StackPanel>
+                    <!-- Arquivo frio -->
+                    <Border Padding="16"
+                            CornerRadius="{StaticResource Radius.Medium}"
+                            Background="#0A0A0C"
+                            BorderBrush="{StaticResource BorderSubtleBrush}"
+                            BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock Text="{Binding Source={x:Static loc:UiStrings.Instance}, Path=StorageArchiveTitle}"
+                                       FontWeight="SemiBold"
+                                       FontSize="13" />
+                            <TextBlock Text="{Binding Source={x:Static loc:UiStrings.Instance}, Path=StorageArchiveDesc}"
+                                       Style="{StaticResource MutedTextBlock}"
+                                       Margin="0,6,0,12"
+                                       TextWrapping="Wrap" />
+                            <WrapPanel>
+                                <TextBlock Text="{Binding Source={x:Static loc:UiStrings.Instance}, Path=StorageArchiveDays}" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="12" />
+                                <TextBox Width="70" Text="{Binding ArchiveDays, UpdateSourceTrigger=PropertyChanged}" />
+                            </WrapPanel>
+                            <Button Content="{Binding Source={x:Static loc:UiStrings.Instance}, Path=StorageArchiveNow}"
+                                    Margin="0,12,0,0"
+                                    Width="150"
+                                    HorizontalAlignment="Left"
+                                    Style="{StaticResource ModernButtonStyle}"
+                                    Command="{Binding RunArchiveCommand}"
+                                    IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}" />
+                        </StackPanel>
+                    </Border>
 
-                    <Separator Margin="0,14,0,14" Background="{StaticResource BorderBrushBase}" />
+                    <Separator />
 
-                    <StackPanel>
-                        <TextBlock Text="Arquivo frio (compressão)" FontWeight="SemiBold" />
-                        <TextBlock Text="Zipa out/ em out.zip para jobs antigos e remove a pasta original (recuperação continua possível)."
-                                   Foreground="{StaticResource TextSecondaryBrush}"
-                                   FontSize="11"
-                                   Margin="0,4,0,8"
-                                   TextWrapping="Wrap"/>
-                        <WrapPanel>
-                            <TextBlock Text="Arquivar com mais de (dias):" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <TextBox Width="70" Text="{Binding ArchiveDays, UpdateSourceTrigger=PropertyChanged}" />
-                        </WrapPanel>
-                        <Button Content="Arquivar agora"
-                                Margin="0,10,0,0"
-                                Width="150"
-                                Style="{StaticResource ModernButtonStyle}"
-                                Command="{Binding RunArchiveCommand}"
-                                IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}"/>
-                    </StackPanel>
-
-                    <Separator Margin="0,14,0,14" Background="{StaticResource BorderBrushBase}" />
-
-                    <StackPanel>
-                        <TextBlock Text="Limpeza completa" FontWeight="SemiBold" />
-                        <TextBlock Text="Apaga histórico local, amostras, relatórios, descompilados e caches temporários de análise em %LOCALAPPDATA%\RatAnalyzer (mantém a pasta Ghidra se existir — instalação usada no arranque). Esta ação é irreversível para os dados de análise."
-                                   Foreground="{StaticResource TextSecondaryBrush}"
-                                   FontSize="11"
-                                   Margin="0,4,0,8"
-                                   TextWrapping="Wrap"/>
-                        <Button Content="Limpeza completa"
-                                Margin="0,4,0,0"
-                                Width="180"
-                                Foreground="{StaticResource DangerBrush}"
-                                BorderBrush="{StaticResource DangerBrush}"
-                                Style="{StaticResource ModernButtonStyle}"
-                                Command="{Binding RunFullPurgeCommand}"
-                                IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}"/>
-                    </StackPanel>
+                    <!-- Limpeza completa -->
+                    <Border Padding="16"
+                            CornerRadius="{StaticResource Radius.Medium}"
+                            Background="#140A0E"
+                            BorderBrush="#3D1A24"
+                            BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock Text="{Binding Source={x:Static loc:UiStrings.Instance}, Path=StoragePurgeTitle}"
+                                       FontWeight="SemiBold"
+                                       FontSize="13"
+                                       Foreground="{StaticResource DangerBrush}" />
+                            <TextBlock Text="{Binding Source={x:Static loc:UiStrings.Instance}, Path=StoragePurgeDesc}"
+                                       Style="{StaticResource MutedTextBlock}"
+                                       Margin="0,6,0,12"
+                                       TextWrapping="Wrap" />
+                            <Button Content="{Binding Source={x:Static loc:UiStrings.Instance}, Path=StoragePurgeNow}"
+                                    Width="180"
+                                    HorizontalAlignment="Left"
+                                    Style="{StaticResource DangerButtonStyle}"
+                                    Command="{Binding RunFullPurgeCommand}"
+                                    IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}" />
+                        </StackPanel>
+                    </Border>
 
                     <TextBlock Text="{Binding StatusText}"
-                               Margin="0,14,0,0"
-                               Foreground="{StaticResource TextMutedBrush}"
-                               TextWrapping="Wrap"/>
+                               Margin="0,16,0,0"
+                               Style="{StaticResource MutedTextBlock}"
+                               TextWrapping="Wrap" />
                 </StackPanel>
             </ScrollViewer>
         </Border>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-            <Button Content="Fechar"
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+            <Button Content="{Binding Source={x:Static loc:UiStrings.Instance}, Path=CommonClose}"
                     Width="120"
                     Style="{StaticResource ModernButtonStyle}"
-                    Command="{Binding CloseCommand}"/>
+                    Command="{Binding CloseCommand}" />
         </StackPanel>
     </Grid>
 </Window>

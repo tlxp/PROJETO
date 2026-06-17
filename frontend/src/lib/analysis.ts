@@ -3,6 +3,7 @@
  * Partilhada entre a página principal, hooks de streaming/polling e o explorador de xrefs.
  */
 
+import { getT } from "@/i18n";
 import { apiFetchJson } from "./api";
 import { escapeRegex, isValidIdentifier } from "./identifiers";
 
@@ -332,7 +333,10 @@ export function compareAnalysisScores(
 const VM_REPORT_SEP_EQ = "=".repeat(80);
 const VM_REPORT_SEP_MAJOR = "-".repeat(80);
 const VM_REPORT_SEP_RESUMO = "-".repeat(40);
-const VM_REPORT_TITLE = "RELATÓRIO DE ANÁLISE COMPORTAMENTAL — VM SANDBOX";
+
+function vmReportTitle() {
+  return getT("reportTitleVm");
+}
 
 type VmReportMeta = {
   dataHora?: string;
@@ -623,16 +627,16 @@ function buildVmResumoLines(
 ): string[] {
   const counts = override ?? extractVmBehaviorCounts(allBodyLines);
   return [
-    "RESUMO",
+    getT("reportResumo"),
     VM_REPORT_SEP_RESUMO,
-    `  Ficheiros: ${counts.files}  |  Processos: ${counts.processes}  |  Registo: ${counts.registry}  |  Rede: ${counts.network}`,
+    `  ${getT("reportFiles")}: ${counts.files}  |  ${getT("reportProcesses")}: ${counts.processes}  |  ${getT("reportRegistry")}: ${counts.registry}  |  ${getT("reportNetwork")}: ${counts.network}`,
     "",
   ];
 }
 
 function buildVmFileInfoLines(meta: VmReportMeta): string[] {
   const lines: string[] = [];
-  appendVmMajorSection(lines, "INFORMAÇÕES DO FICHEIRO");
+  appendVmMajorSection(lines, getT("reportFileInfo"));
   const content: string[] = [];
   if (meta.amostra) {
     const name = meta.amostra.replace(/^.*[\\/]/, "");
@@ -642,14 +646,14 @@ function buildVmFileInfoLines(meta: VmReportMeta): string[] {
   if (meta.hash) content.push(`SHA256: ${meta.hash}`);
   if (meta.inicio) content.push(`Início da análise: ${meta.inicio}`);
   if (meta.fim) content.push(`Fim da análise: ${meta.fim}`);
-  if (content.length === 0) content.push("N/D");
+  if (content.length === 0) content.push(getT("reportNd"));
   lines.push(...content, "");
   return lines;
 }
 
 function buildVmScoreLines(scoring: VmScoringBlock): string[] {
   const lines: string[] = [];
-  appendVmMajorSection(lines, "SCORE DE RISCO");
+  appendVmMajorSection(lines, getT("reportRiskScore"));
   if (scoring.score) lines.push(scoring.score);
   if (scoring.scoreRaw) lines.push(scoring.scoreRaw);
   if (scoring.nivel) lines.push(scoring.nivel);
@@ -657,14 +661,9 @@ function buildVmScoreLines(scoring: VmScoringBlock): string[] {
   const uniqueNotes = [...new Set(scoring.notes)];
   lines.push(...uniqueNotes);
   if (!scoring.score && !scoring.scoreRaw && !scoring.nivel && scoring.notes.length === 0) {
-    lines.push("N/D");
+    lines.push(getT("reportNd"));
   }
-  lines.push(
-    "",
-    "O score reflecte o comportamento observado na sandbox: processos, registo, rede, ficheiros e persistência.",
-    "Amostras não executadas ou com timeout ficam marcadas como inconclusivas.",
-    ""
-  );
+  lines.push("", getT("reportRiskExplain"), getT("reportRiskInconclusive"), "");
   return lines;
 }
 
@@ -675,7 +674,7 @@ function buildStaticStyleVmReport(parts: {
   allBodyLines: string[];
   resumoOverride?: { files: number; processes: number; registry: number; network: string };
 }): string {
-  const out: string[] = [VM_REPORT_SEP_EQ, VM_REPORT_TITLE, VM_REPORT_SEP_EQ];
+  const out: string[] = [VM_REPORT_SEP_EQ, vmReportTitle(), VM_REPORT_SEP_EQ];
   if (parts.meta.dataHora) out.push(`Data/Hora: ${parts.meta.dataHora}`);
   out.push("");
   out.push(...buildVmResumoLines(parts.allBodyLines, parts.resumoOverride));
@@ -799,7 +798,7 @@ function normalizeFormattedVmReport(text: string): string {
       continue;
     }
     if (/^RELATÓRIO DE ANÁLISE/i.test(t)) {
-      out.push(VM_REPORT_TITLE);
+      out.push(vmReportTitle());
       continue;
     }
     if (isVmScoringSectionTitle(t)) continue;

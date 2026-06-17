@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using RatAnalyzer.Desktop.Bootstrap;
 using RatAnalyzer.Desktop.Infrastructure;
+using RatAnalyzer.Desktop.Localization;
 
 namespace RatAnalyzer.Desktop.Services;
 
@@ -34,7 +35,7 @@ public sealed class DynamicAnalysisService
         using var client = CreateClient();
         await EnsureBackendRunningAsync(client, progress, cancellationToken).ConfigureAwait(false);
 
-        progress?.Report("A registar análise dinâmica em curso no backend...");
+        progress?.Report(LocalizationManager.Get(LocKeys.LogDynamicRegister));
 
         var payload = new DynamicUploadPayload
         {
@@ -65,7 +66,7 @@ public sealed class DynamicAnalysisService
         using var client = CreateClient();
         await EnsureBackendRunningAsync(client, progress, cancellationToken).ConfigureAwait(false);
 
-        progress?.Report("A enviar relatório da VM para o frontend...");
+        progress?.Report(LocalizationManager.Get(LocKeys.LogDynamicPublish));
 
         var payload = new DynamicUploadPayload
         {
@@ -121,6 +122,7 @@ public sealed class DynamicAnalysisService
     {
         var client = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
         AppConstants.ApplyAdminToken(client);
+        AppConstants.ApplyLanguageHeader(client);
         return client;
     }
 
@@ -132,7 +134,7 @@ public sealed class DynamicAnalysisService
         if (await IsBackendUpAsync(client, cancellationToken).ConfigureAwait(false))
             return;
 
-        progress?.Report("A iniciar servidor backend (uvicorn)...");
+        progress?.Report(LocalizationManager.Get(LocKeys.LogBackendServiceStart));
         await StartupSequence.StartBackendAsync(client).ConfigureAwait(false);
     }
 

@@ -1,0 +1,20 @@
+[run]
+source = .
+omit =
+    */tests/*
+    gui/*
+    worker.py
+    rat_analyzer_gui.py
+    scripts/*
+    modules/ghidra_decompiler.py
+    modules/dotnet_decompiler.py
+    modules/native_disassembly.py
+    rat_analyzer.py
+    clean.py
+    vm_drivers/hyperv.py
+    vm_drivers/proxmox.py
+
+[report]
+fail_under = 45
+show_missing = true
+skip_covered = false

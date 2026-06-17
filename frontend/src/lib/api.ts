@@ -58,6 +58,8 @@ export function readErrorDetail(res: Response, fallbackText: string): Promise<st
     .then((msg: ErrorResponse) => stringifyDetail(msg?.detail) || fallbackText);
 }
 
+import { getAcceptLanguage, getT } from "@/i18n";
+
 export function apiUrl(path: string): string {
   return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
 }
@@ -79,7 +81,7 @@ export async function apiFetch(path: string, options: ApiFetchOptions = {}): Pro
   const timer =
     timeoutMs > 0
       ? setTimeout(
-          () => controller.abort(new DOMException("Timeout ao contactar a API.", "TimeoutError")),
+          () => controller.abort(new DOMException(getT("apiTimeout"), "TimeoutError")),
           timeoutMs
         )
       : null;
@@ -93,6 +95,9 @@ export async function apiFetch(path: string, options: ApiFetchOptions = {}): Pro
   const headers = new Headers(init.headers);
   if (API_TOKEN && !headers.has("X-API-Token")) {
     headers.set("X-API-Token", API_TOKEN);
+  }
+  if (!headers.has("Accept-Language")) {
+    headers.set("Accept-Language", getAcceptLanguage());
   }
 
   try {

@@ -1,4 +1,5 @@
 using System.Windows;
+using RatAnalyzer.Desktop.Localization;
 
 namespace RatAnalyzer.Desktop.Views;
 
@@ -7,6 +8,7 @@ public partial class VmGuestCredentialsWindow : Window
     public VmGuestCredentialsWindow(string defaultUsername)
     {
         InitializeComponent();
+        WindowLocalization.BindTitle(this, () => UiStrings.Instance.CredentialsWindowTitle);
         UserTextBox.Text = string.IsNullOrWhiteSpace(defaultUsername) ? "analyst" : defaultUsername;
         Loaded += (_, _) => PasswordBox.Focus();
     }
@@ -22,8 +24,8 @@ public partial class VmGuestCredentialsWindow : Window
         if (string.IsNullOrWhiteSpace(UserTextBox.Text))
         {
             MessageBox.Show(this,
-                "Indique o nome de utilizador que existe (ou vai existir) na VM.",
-                "Conta na VM",
+                LocalizationManager.Get(LocKeys.MsgCredentialsUserRequired),
+                UiStrings.Instance.CredentialsWindowTitle,
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             UserTextBox.Focus();
@@ -33,8 +35,8 @@ public partial class VmGuestCredentialsWindow : Window
         if (string.IsNullOrEmpty(PasswordBox.Password))
         {
             MessageBox.Show(this,
-                "Indique a palavra-passe da conta na VM.",
-                "Conta na VM",
+                LocalizationManager.Get(LocKeys.MsgCredentialsPasswordRequired),
+                UiStrings.Instance.CredentialsWindowTitle,
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             PasswordBox.Focus();

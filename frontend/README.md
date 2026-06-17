@@ -14,6 +14,7 @@ Documentação geral: [`docs/README.md`](../docs/README.md) · Segurança: [`doc
 - **Assistência Gemini** *(opcional)* - Explicar excertos de pseudo-C com Google Gemini (API key no browser)
 - **Trechos ofuscados** - Visualizar ficheiros de excertos obfuscados/deobfuscados quando o backend os gera
 - **Acesso por link** - `/analysis/{jobId}` (permalink canónico); polling em tempo real enquanto a VM corre
+- **Idiomas PT/EN** - UI, erros e labels de relatório; sincronizado com o WPF via `?lang=` e `VITE_DEFAULT_LOCALE` — [`docs/i18n.md`](../docs/i18n.md)
 
 ## Requisitos
 
@@ -39,9 +40,23 @@ Crie `.env` na raiz de `frontend` (base: `.env.example`). Quando o backend exige
 ```env
 VITE_API_URL=http://127.0.0.1:8000
 VITE_API_TOKEN=seu-token
+VITE_DEFAULT_LOCALE=pt
 ```
 
-Em produção: `VITE_API_URL`, `VITE_API_TOKEN` e `npm run build` - ver [`docs/production-secrets.md`](../docs/production-secrets.md).
+`VITE_DEFAULT_LOCALE` (`pt` \| `en`) define o idioma quando não há `?lang=` na URL nem valor em `localStorage`. O WPF propaga este valor ao arrancar `npm run dev`.
+
+Em produção: `VITE_API_URL`, `VITE_API_TOKEN`, `VITE_DEFAULT_LOCALE` e `npm run build` - ver [`docs/production-secrets.md`](../docs/production-secrets.md).
+
+## Internacionalização
+
+| Mecanismo | Descrição |
+|-----------|-----------|
+| `?lang=pt\|en` | Parâmetro na URL (prioridade máxima) |
+| `localStorage` (`ratanalyzer-lang`) | Persistência no browser |
+| `VITE_DEFAULT_LOCALE` | Fallback do dev server / build |
+| `Accept-Language` | Enviado em todos os pedidos `apiFetch` |
+
+Código: `src/i18n/` (`messages.ts`, `context.tsx`, `useI18n`, `getT`). Detalhes: [`docs/i18n.md`](../docs/i18n.md).
 
 ## Assistência Gemini (opcional)
 
@@ -72,6 +87,8 @@ Implementação: `src/lib/gemini.ts`, `src/lib/geminiApiKey.ts`, `src/components
 | `npm run preview` | Pré-visualizar build de produção |
 | `npm run lint` | Verificação ESLint |
 | `npm run test` | Testes unitários (Vitest) |
+| `npm run test:coverage` | Testes com cobertura (threshold em `vitest.config.ts`) |
+| `npm run test:e2e` | Testes E2E (Playwright) |
 | `npm run test:watch` | Testes em modo watch |
 
 ## Tecnologias
@@ -86,6 +103,7 @@ Implementação: `src/lib/gemini.ts`, `src/lib/geminiApiKey.ts`, `src/components
 ```
 frontend/
 ├── src/
+│   ├── i18n/                   # PT/EN: messages, I18nProvider, useI18n, getT
 │   ├── routes.ts               # Rotas canónicas da SPA (ROUTE_PATTERNS + helpers ROUTES.*)
 │   ├── App.tsx                 # Router — usa ROUTE_PATTERNS
 │   ├── lib/

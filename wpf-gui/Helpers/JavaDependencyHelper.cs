@@ -9,6 +9,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 
+using RatAnalyzer.Desktop.Infrastructure;
+
 namespace RatAnalyzer.Desktop.Helpers;
 
 /// <summary>
@@ -244,9 +246,8 @@ internal static class JavaDependencyHelper
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding = Encoding.UTF8
             };
+            ProcessOutputEncoding.ApplyConsole(psi);
             if (File.Exists(fileNameOrCommand))
                 psi.FileName = Path.GetFullPath(fileNameOrCommand);
 
@@ -404,14 +405,13 @@ internal static class JavaDependencyHelper
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding = Encoding.UTF8
             };
+            ProcessOutputEncoding.ApplyConsole(psi);
             using var proc = Process.Start(psi);
             if (proc is null)
                 return (-1, "", "Process.Start devolveu null.");
-            var stdout = proc.StandardOutput.ReadToEnd();
-            var stderr = proc.StandardError.ReadToEnd();
+            var stdout = ProcessOutputEncoding.NormalizeForDisplay(proc.StandardOutput.ReadToEnd());
+            var stderr = ProcessOutputEncoding.NormalizeForDisplay(proc.StandardError.ReadToEnd());
             proc.WaitForExit(600_000);
             ct.ThrowIfCancellationRequested();
             return (proc.ExitCode, stdout, stderr);

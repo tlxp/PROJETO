@@ -423,7 +423,7 @@ public sealed class VmAnalysisViewModel : ViewModelBase
                 _cts.Token).ConfigureAwait(true);
 
             _activeJobId = jobId;
-            var resultsUrl = $"{AppConstants.FrontendUrl}/analysis/{Uri.EscapeDataString(jobId)}";
+            var resultsUrl = AppConstants.BuildFrontendUrl($"/analysis/{Uri.EscapeDataString(jobId)}");
             AppendLine($"[*] Relatório publicado no backend. URL: {resultsUrl}", withTimestamp: true);
             StatusText = "Concluído — relatório disponível no frontend.";
 
@@ -446,7 +446,8 @@ public sealed class VmAnalysisViewModel : ViewModelBase
     {
         void DoAppend()
         {
-            var text = withTimestamp ? $"[{DateTime.Now:HH:mm:ss}] {line}" : line;
+            var lineText = ProcessOutputEncoding.NormalizeForDisplay(line);
+            var text = withTimestamp ? $"[{DateTime.Now:HH:mm:ss}] {lineText}" : lineText;
             _logBuilder.AppendLine(text);
             if (_logBuilder.Length > MaxLogChars)
             {

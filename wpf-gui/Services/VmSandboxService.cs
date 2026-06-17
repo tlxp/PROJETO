@@ -7,6 +7,8 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
+using RatAnalyzer.Desktop.Infrastructure;
+
 namespace RatAnalyzer.Desktop.Services;
 
 public sealed record SetupPreflight(string VmName, bool VmExists, string VhdPath, bool VhdExists);
@@ -52,9 +54,8 @@ public static class VmSandboxService
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8
         };
+        ProcessOutputEncoding.ApplyWindowsAnsi(psi);
         ApplyGuestCredentials(psi, guestCredentials);
         psi.ArgumentList.Add("-NoLogo");
         psi.ArgumentList.Add("-NoProfile");
@@ -74,12 +75,12 @@ public static class VmSandboxService
         process.OutputDataReceived += (_, e) =>
         {
             if (!string.IsNullOrEmpty(e.Data))
-                onLine(e.Data);
+                onLine(ProcessOutputEncoding.NormalizeForDisplay(e.Data));
         };
         process.ErrorDataReceived += (_, e) =>
         {
             if (!string.IsNullOrEmpty(e.Data))
-                onLine("[stderr] " + e.Data);
+                onLine(ProcessOutputEncoding.NormalizeForDisplay("[stderr] " + e.Data));
         };
 
         process.Start();
@@ -179,9 +180,8 @@ public static class VmSandboxService
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     CreateNoWindow = true,
-                    StandardOutputEncoding = Encoding.UTF8,
-                    StandardErrorEncoding = Encoding.UTF8
                 };
+                ProcessOutputEncoding.ApplyWindowsAnsi(psi);
                 ApplyGuestCredentials(psi, guestCredentials);
 
                 using var process = new Process { StartInfo = psi };

@@ -2,9 +2,12 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:views="clr-namespace:RatAnalyzer.Desktop.Views"
+        xmlns:loc="clr-namespace:RatAnalyzer.Desktop.Localization"
         Title="Análise comportamental em VM"
-        Width="900"
-        Height="620"
+        Width="920"
+        Height="640"
+        MinWidth="700"
+        MinHeight="480"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource PrimaryBackgroundBrush}"
         ResizeMode="CanResizeWithGrip"
@@ -13,7 +16,7 @@
         <views:BoolToVisibilityConverter x:Key="BoolToVis" />
         <views:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis" />
     </Window.Resources>
-    <Grid Margin="16">
+    <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -21,87 +24,99 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0"
-                   Text="Log da análise em tempo real (comandos e saída da VM)"
-                   Style="{StaticResource SubtitleTextBlock}"
-                   Margin="0,0,0,8" />
+        <StackPanel Grid.Row="0" Margin="0,0,0,14">
+            <TextBlock Text="{Binding Source={x:Static loc:UiStrings.Instance}, Path=VmSection}"
+                       Style="{StaticResource SectionLabelTextBlock}"
+                       Margin="0,0,0,6" />
+            <TextBlock Text="{Binding Source={x:Static loc:UiStrings.Instance}, Path=VmLogTitle}"
+                       FontSize="18"
+                       FontWeight="SemiBold" />
+            <TextBlock Text="{Binding Source={x:Static loc:UiStrings.Instance}, Path=VmLogSubtitle}"
+                       Style="{StaticResource SubtitleTextBlock}"
+                       Margin="0,4,0,0" />
+        </StackPanel>
 
         <Border Grid.Row="1"
-                BorderBrush="{StaticResource BorderBrushBase}"
+                CornerRadius="{StaticResource Radius.Medium}"
+                BorderBrush="#1A1A22"
                 BorderThickness="1"
-                CornerRadius="{StaticResource Radius.Small}"
-                Background="#0a0f1a"
-                Padding="8">
+                Background="#060608">
             <ScrollViewer x:Name="TerminalScrollViewer"
                           VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Auto"
-                          Padding="4">
+                          Padding="14,10">
                 <TextBlock Text="{Binding LogText}"
                            TextWrapping="NoWrap"
-                           FontFamily="Consolas"
+                           FontFamily="Cascadia Mono, Consolas, Courier New"
                            FontSize="12"
-                           Foreground="{StaticResource TextPrimaryBrush}"
-                           Padding="4"
+                           Foreground="{StaticResource TerminalBrush}"
+                           Opacity="0.9"
+                           Padding="2"
                            VerticalAlignment="Top"
                            HorizontalAlignment="Left" />
             </ScrollViewer>
         </Border>
 
         <ProgressBar Grid.Row="2"
-                     Height="6"
-                     Margin="0,8,0,0"
+                     Margin="0,12,0,0"
                      IsIndeterminate="True"
                      Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
 
-        <Grid Grid.Row="3" Margin="0,12,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+        <Border Grid.Row="3"
+                Margin="0,16,0,0"
+                Padding="14,12"
+                CornerRadius="{StaticResource Radius.Medium}"
+                Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderSubtleBrush}"
+                BorderThickness="1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="0" Orientation="Vertical" VerticalAlignment="Center">
-                <TextBlock Text="{Binding StatusText}">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock" BasedOn="{StaticResource MutedTextBlock}">
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsStatusError}" Value="True">
-                                    <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
-                <TextBlock Opacity="0.85"
-                           Margin="0,4,0,0"
-                           Style="{StaticResource MutedTextBlock}"
-                           Text="{Binding TechStatusText}" />
-            </StackPanel>
+                <StackPanel Grid.Column="0" Orientation="Vertical" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding StatusText}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource MutedTextBlock}">
+                                <Setter Property="FontSize" Value="12" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsStatusError}" Value="True">
+                                        <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <TextBlock Margin="0,4,0,0"
+                               Style="{StaticResource MutedTextBlock}"
+                               Text="{Binding TechStatusText}" />
+                </StackPanel>
 
-            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                <Button Content="Abrir logs"
-                        Command="{Binding OpenRunFolderCommand}"
-                        MinWidth="110"
-                        Margin="0,0,8,0"
-                        Padding="12,6"
-                        Style="{StaticResource ModernButtonStyle}" />
-                <Button Content="Abrir relatório"
-                        Command="{Binding OpenReportCommand}"
-                        MinWidth="130"
-                        Margin="0,0,8,0"
-                        Padding="12,6"
-                        Style="{StaticResource ModernButtonStyle}" />
-                <Button Content="Copiar RunId"
-                        Command="{Binding CopyRunIdCommand}"
-                        MinWidth="130"
-                        Margin="0,0,8,0"
-                        Padding="12,6"
-                        Style="{StaticResource ModernButtonStyle}" />
-                <Button Content="Fechar"
-                        Command="{Binding CloseCommand}"
-                        MinWidth="100"
-                        Padding="12,6"
-                        Style="{StaticResource ModernButtonStyle}" />
-            </StackPanel>
-        </Grid>
+                <WrapPanel Grid.Column="1"
+                           Orientation="Horizontal"
+                           VerticalAlignment="Center">
+                    <Button Content="{Binding Source={x:Static loc:UiStrings.Instance}, Path=VmOpenLogs}"
+                            Command="{Binding OpenRunFolderCommand}"
+                            MinWidth="100"
+                            Margin="0,0,6,0"
+                            Style="{StaticResource ModernButtonStyle}" />
+                    <Button Content="{Binding Source={x:Static loc:UiStrings.Instance}, Path=VmOpenReport}"
+                            Command="{Binding OpenReportCommand}"
+                            MinWidth="120"
+                            Margin="0,0,6,0"
+                            Style="{StaticResource ModernButtonStyle}" />
+                    <Button Content="{Binding Source={x:Static loc:UiStrings.Instance}, Path=VmCopyRunId}"
+                            Command="{Binding CopyRunIdCommand}"
+                            MinWidth="110"
+                            Margin="0,0,6,0"
+                            Style="{StaticResource ModernButtonStyle}" />
+                    <Button Content="{Binding Source={x:Static loc:UiStrings.Instance}, Path=CommonClose}"
+                            Command="{Binding CloseCommand}"
+                            MinWidth="90"
+                            Style="{StaticResource ModernButtonStyle}" />
+                </WrapPanel>
+            </Grid>
+        </Border>
     </Grid>
 </Window>

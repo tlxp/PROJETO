@@ -9,6 +9,17 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "text-summary"],
+      include: ["src/lib/**", "src/hooks/**", "src/components/**"],
+      thresholds: {
+        lines: 25,
+        functions: 25,
+        branches: 20,
+        statements: 25,
+      },
+    },
     // Evita flakiness no Windows/CI (arranque lento do jsdom com paralelismo)
     fileParallelism: false,
     testTimeout: 15_000,

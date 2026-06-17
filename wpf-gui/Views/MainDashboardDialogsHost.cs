@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Security.Principal;
 using System.Windows;
 using System.Windows.Controls;
+using RatAnalyzer.Desktop.Localization;
 using RatAnalyzer.Desktop.Services;
 using RatAnalyzer.Desktop.ViewModels;
 
@@ -20,15 +21,15 @@ internal sealed class MainDashboardDialogsHost : IMainDashboardDialogs
     {
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
-            Title = "Selecionar ficheiro para análise",
-            Filter = "Executáveis e ficheiros|*.exe;*.dll;*.zip|Todos os ficheiros (*.*)|*.*",
+            Title = LocalizationManager.Get(LocKeys.DialogPickFileTitle),
+            Filter = LocalizationManager.Get(LocKeys.DialogPickFileFilter),
             FilterIndex = 1
         };
         return dialog.ShowDialog() == true ? dialog.FileName : null;
     }
 
-    public void ShowInfo(string message, string title = "RAT Analyzer") =>
-        MessageBox.Show(Owner, message, title, MessageBoxButton.OK, MessageBoxImage.Information);
+    public void ShowInfo(string message, string? title = null) =>
+        MessageBox.Show(Owner, message, title ?? LocalizationManager.Get(LocKeys.AppTitle), MessageBoxButton.OK, MessageBoxImage.Information);
 
     public void ShowError(string message, string title) =>
         MessageBox.Show(Owner, message, title, MessageBoxButton.OK, MessageBoxImage.Error);
@@ -52,11 +53,8 @@ internal sealed class MainDashboardDialogsHost : IMainDashboardDialogs
 
     public void ShowAdministratorRequired() =>
         ShowWarning(
-            "Esta operação requer direitos de administrador.\n\n" +
-            "Feche a aplicação e execute-a como Administrador:\n" +
-            "• Clique direito em RatAnalyzer.Desktop.exe → \"Executar como administrador\"\n" +
-            "• Ou abra o PowerShell como Administrador e execute: dotnet run",
-            "Elevação necessária");
+            LocalizationManager.Get(LocKeys.MsgAdminRequired),
+            LocalizationManager.Get(LocKeys.MsgAdminRequiredTitle));
 
     public void OpenVmAnalysis(
         string samplePath,

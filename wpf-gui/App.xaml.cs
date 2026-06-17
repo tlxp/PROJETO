@@ -4,6 +4,7 @@ using System.Security.Principal;
 using System.Windows;
 
 using RatAnalyzer.Desktop.Bootstrap;
+using RatAnalyzer.Desktop.Localization;
 
 namespace RatAnalyzer.Desktop;
 
@@ -18,11 +19,11 @@ public partial class App : Application
     {
         if (!IsRunningAsAdministrator())
         {
+            var settings = Infrastructure.UserSettingsStore.Load();
+            LocalizationManager.Initialize(settings);
             MessageBox.Show(
-                "O RAT Analyzer deve ser executado como Administrador (Hyper-V, scripts PowerShell e outras funcionalidades).\n\n" +
-                "Clique direito em RatAnalyzer.Desktop.exe → \"Executar como administrador\"\n" +
-                "ou abra o PowerShell como Administrador e execute: dotnet run",
-                "Elevação necessária",
+                LocalizationManager.Get(LocKeys.MsgElevationRequired),
+                LocalizationManager.Get(LocKeys.MsgAdminRequiredTitle),
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             Shutdown();

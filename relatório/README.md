@@ -2,7 +2,7 @@
 
 LaTeX do relatório de licenciatura, co-localizado com o código para facilitar entrega e manutenção dos diagramas.
 
-Índice geral: [`docs/README.md`](../docs/README.md) · diagramas fonte: [`docs/diagrams/`](../docs/diagrams/).
+Índice geral: [`docs/README.md`](../docs/README.md) · diagramas fonte: [`docs/diagrams/`](../docs/diagrams/) · i18n: [`docs/i18n.md`](../docs/i18n.md).
 
 ## Estrutura
 
@@ -54,6 +54,19 @@ pdflatex main.tex
 
 | Capítulo | Conteúdo ligado ao repo |
 |----------|-------------------------|
-| 4 — Arquitetura | Diagramas em `docs/diagrams/` |
-| 5 — Implementação | `frontend/`, `backend/`, `wpf-gui/`, sandbox; job unificado estático+VM via `upload_dynamic` |
-| Segurança | [`docs/SEGURANCA.md`](../docs/SEGURANCA.md) |
+| 4 — Arquitetura | Diagramas em `docs/diagrams/`; routers FastAPI; ADRs em `docs/adr/` |
+| 5 — Implementação | `frontend/` (i18n, Gemini), `backend/` (`routers/`, `i18n.py`), `wpf-gui/` (localização, tema Signal, bootstrap); job unificado estático+VM via `upload_dynamic` |
+| Segurança | [`docs/SEGURANCA.md`](../docs/SEGURANCA.md), [`SECURITY.md`](../SECURITY.md) |
+| Internacionalização | [`docs/i18n.md`](../docs/i18n.md) — WPF + web + fallbacks API |
+
+## Estado da implementação (síntese para revisão do cap. 5)
+
+Funcionalidades recentes que devem reflectir-se no texto do PDF ao recompilar:
+
+- Interface **bilíngue PT/EN** (WPF, SPA React, mensagens de fallback da API).
+- WPF: ecrã de idioma no primeiro arranque, `Localization/`, logs de arranque traduzidos, tema visual renovado.
+- Backend: modularização `app_factory.py` + `routers/`; observabilidade (`/metrics`, rate limit); `i18n.py`.
+- Frontend: módulo `src/i18n/`; Playwright E2E; coluna relatório estático + VM no mesmo `jobId`.
+- CI: 84 pytest, 56 Vitest, 54 xUnit, E2E, cobertura, `pip-audit`, `gitleaks`, validação de diagramas.
+
+Atualize `main.tex` e screenshots `fig-5-*.png` quando o layout da UI mudar significativamente.

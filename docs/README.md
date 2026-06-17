@@ -32,8 +32,10 @@ Os caminhos A e B são **independentes** na orquestração (HTTP vs PsDirect/Cop
 | [`../scripts/hyperv-sandbox/TROUBLESHOOTING.md`](../scripts/hyperv-sandbox/TROUBLESHOOTING.md) | Diagnóstico sandbox (Caminho B) |
 | [`../scripts/hyperv-sandbox/SERIAL_REPORT_PROTOCOL.md`](../scripts/hyperv-sandbox/SERIAL_REPORT_PROTOCOL.md) | Transferência de relatório (PsDirect + SHA256) |
 | [`faq.md`](faq.md) | Perguntas frequentes |
+| [`i18n.md`](i18n.md) | Internacionalização PT/EN (WPF, web, API) |
 | [`ps1-scripts.md`](ps1-scripts.md) | UTF-8 BOM e idioma dos `.ps1` |
 | [`diagrams/README.md`](diagrams/README.md) | Diagramas PlantUML (fonte única) |
+| [`adr/README.md`](adr/README.md) | Architecture Decision Records (ADRs) |
 | [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | Testes, convenções, contribuição |
 | [`../CHANGELOG.md`](../CHANGELOG.md) | Histórico de alterações |
 

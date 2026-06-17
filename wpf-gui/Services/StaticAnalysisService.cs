@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using RatAnalyzer.Desktop.Bootstrap;
 using RatAnalyzer.Desktop.Infrastructure;
+using RatAnalyzer.Desktop.Localization;
 
 namespace RatAnalyzer.Desktop.Services;
 
@@ -36,7 +37,7 @@ public sealed class StaticAnalysisService
         CancellationToken cancellationToken = default)
     {
         if (!File.Exists(filePath))
-            throw new InvalidOperationException("O ficheiro selecionado já não existe no disco.");
+            throw new InvalidOperationException(LocalizationManager.Get(LocKeys.MsgFileMissing));
 
         using var client = CreateClient();
         await EnsureBackendRunningAsync(client, progress, cancellationToken).ConfigureAwait(false);
@@ -44,12 +45,12 @@ public sealed class StaticAnalysisService
         var fileName = Path.GetFileName(filePath);
         var jobId = linkedJobId;
 
-        progress?.Report("A registar análise estática em curso no backend...");
+        progress?.Report(LocalizationManager.Get(LocKeys.LogStaticRegister));
         jobId = await MarkStaticRunningAsync(client, jobId, fileName, 0, progress, cancellationToken)
             .ConfigureAwait(false);
         onJobIdKnown?.Invoke(jobId);
 
-        progress?.Report("A analisar ficheiro (Ghidra / YARA / IL)...");
+        progress?.Report(LocalizationManager.Get(LocKeys.LogStaticAnalyzing));
 
         var lastReportedProgress = -1.0;
         var analyze = await RunAnalyzeStreamAsync(
@@ -67,12 +68,12 @@ public sealed class StaticAnalysisService
             },
             cancellationToken).ConfigureAwait(false);
 
-        progress?.Report("A publicar resultados no backend...");
+        progress?.Report(LocalizationManager.Get(LocKeys.LogStaticPublishing));
 
         jobId = await PublishStaticCompletedAsync(client, jobId, fileName, analyze, cancellationToken)
             .ConfigureAwait(false);
 
-        progress?.Report("Análise estática concluída e registada no backend.");
+        progress?.Report(LocalizationManager.Get(LocKeys.LogStaticDone));
         return jobId;
     }
 
@@ -261,6 +262,7 @@ public sealed class StaticAnalysisService
     {
         var client = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
         AppConstants.ApplyAdminToken(client);
+        AppConstants.ApplyLanguageHeader(client);
         return client;
     }
 
@@ -272,7 +274,7 @@ public sealed class StaticAnalysisService
         if (await IsBackendUpAsync(client, cancellationToken).ConfigureAwait(false))
             return;
 
-        progress?.Report("A iniciar servidor backend (uvicorn)...");
+        progress?.Report(LocalizationManager.Get(LocKeys.LogBackendServiceStart));
         await StartupSequence.StartBackendAsync(client).ConfigureAwait(false);
     }
 

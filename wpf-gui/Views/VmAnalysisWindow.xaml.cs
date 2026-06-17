@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using System.Threading.Tasks;
 using System.Windows;
+using RatAnalyzer.Desktop.Localization;
 using RatAnalyzer.Desktop.Services;
 using RatAnalyzer.Desktop.ViewModels;
 
@@ -22,6 +23,7 @@ public partial class VmAnalysisWindow : Window
         Action<string>? onJobIdKnown = null)
     {
         InitializeComponent();
+        WindowLocalization.BindTitle(this, () => UiStrings.Instance.VmWindowTitle);
 
         _viewModel = new VmAnalysisViewModel(
             samplePath,

@@ -34,6 +34,8 @@
 
 Execute **como Administrador**. Python e Node no PATH para arranque automático do backend/frontend.
 
+**Idioma da interface web** — O WPF abre o browser com `?lang=pt|en`. Para mudar manualmente: `http://localhost:8080/?lang=en`. Ver [`i18n.md`](i18n.md).
+
 ## Dados e testes
 
 - Artefatos: `%LOCALAPPDATA%\RatAnalyzer` (`RATANALYZER_DATA_DIR`).

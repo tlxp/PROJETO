@@ -28,6 +28,9 @@ def _get_driver_name() -> str:
 
 def _build_driver():
     name = _get_driver_name()
+    from vm_drivers import warn_if_experimental
+
+    warn_if_experimental(name)
     if name in ("stub", "safe", "disabled"):
         return StubVMDriver()
 

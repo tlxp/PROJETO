@@ -1,0 +1,44 @@
+# Pre-commit hooks — instalar: pip install pre-commit && pre-commit install
+# https://pre-commit.com
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^relatório/
+      - id: end-of-file-fixer
+        exclude: ^relatório/
+      - id: check-yaml
+      - id: check-added-large-files
+        args: [--maxkb=2048]
+
+  - repo: local
+    hooks:
+      - id: check-md-links
+        name: Validar links Markdown
+        entry: python scripts/ci/check_md_links.py
+        language: system
+        pass_filenames: false
+        files: \.md$
+
+      - id: check-ps1-utf8
+        name: Validar encoding UTF-8 dos scripts PS1
+        entry: python scripts/ci/check_ps1_utf8.py
+        language: system
+        pass_filenames: false
+        files: \.ps1$
+
+      - id: backend-compile
+        name: Compilar módulos Python do backend
+        entry: python -m compileall backend
+        language: system
+        pass_filenames: false
+        files: ^backend/.*\.py$
+
+      - id: frontend-eslint
+        name: ESLint (frontend)
+        entry: bash -c "cd frontend && npm run lint"
+        language: system
+        pass_filenames: false
+        files: ^frontend/src/.*\.(ts|tsx)$

@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import type { useIndexResultsViewModel } from "@/hooks/useIndexResultsViewModel";
 import type { AnalysisResult, ReportCategory } from "@/lib/analysis";
 import { isStaticAnalysisInProgress } from "@/lib/analysis";
+import { useI18n } from "@/i18n";
 import type { StillRunningJob } from "./UploadView";
 import StillRunningNotice from "./StillRunningNotice";
 import ResultsOverview from "./ResultsOverview";
@@ -43,6 +44,7 @@ const AnalysisResultsView = ({
   onChangeCategoryIndex,
   vm,
 }: AnalysisResultsViewProps) => {
+  const { t } = useI18n();
   const staticInProgress = isStaticAnalysisInProgress(result, isAnalyzing);
   const staticProgress = staticInProgress
     ? (ghidraProgress ?? result?.staticProgress ?? null)
@@ -59,7 +61,7 @@ const AnalysisResultsView = ({
         onClick={onClear}
         className="rounded-lg border border-border bg-secondary px-4 py-2 font-mono text-xs text-secondary-foreground transition-colors hover:bg-secondary/80"
       >
-        Nova Análise
+        {t("newAnalysis")}
       </button>
     </div>
 

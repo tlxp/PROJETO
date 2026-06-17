@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { getT } from "@/i18n";
 import { apiFetch } from "@/lib/api";
 import { isValidIdentifier } from "@/lib/identifiers";
 import { openXrefExplorerTab, writeXrefSession } from "@/lib/cCodeXref";
@@ -258,7 +259,7 @@ export function useIndexResultsViewModel({ result, file, currentJobId }: UseInde
     [result?.fileName, file?.name]
   );
 
-  const resultsTitle = result?.fileName ?? file?.name ?? "Resultados";
+  const resultsTitle = result?.fileName ?? file?.name ?? getT("results");
 
   const highlightedLineRange = useMemo(() => {
     if (scrollToLine == null || scrollToLine < 1) return null;
@@ -514,9 +515,9 @@ export function useIndexResultsViewModel({ result, file, currentJobId }: UseInde
   );
 
   const expandedReportTitle = useMemo(() => {
-    if (expandedPanel === "report-vm") return "Relatório VM";
-    if (expandedPanel === "report-static") return "Relatório estático";
-    if (expandedPanel === "report") return "Relatório";
+    if (expandedPanel === "report-vm") return getT("reportVm");
+    if (expandedPanel === "report-static") return getT("reportStatic");
+    if (expandedPanel === "report") return getT("report");
     return "";
   }, [expandedPanel]);
 

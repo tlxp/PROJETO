@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using RatAnalyzer.Desktop.Localization;
 using RatAnalyzer.Desktop.Services;
 
 namespace RatAnalyzer.Desktop.ViewModels;
@@ -12,7 +13,7 @@ public sealed class StorageMaintenanceViewModel : ViewModelBase
 
     private string _estimateText = "";
     private string _pathsText = "";
-    private string _statusText = "A obter estimativa...";
+    private string _statusText = LocalizationManager.Get(LocKeys.StorageStatusLoading);
     private string _keepMostRecent = "200";
     private string _retentionDays = "30";
     private string _archiveDays = "30";

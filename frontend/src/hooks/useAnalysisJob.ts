@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
+import { getT } from "@/i18n";
 import { apiFetchJson } from "@/lib/api";
 
 export const POLL_INTERVAL_MS = 1000;
@@ -21,7 +22,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const onAbort = () => {
       clearTimeout(timer);
-      reject(signal.reason ?? new DOMException("Cancelado.", "AbortError"));
+      reject(signal.reason ?? new DOMException(getT("cancelled"), "AbortError"));
     };
     const timer = setTimeout(() => {
       signal.removeEventListener("abort", onAbort);
@@ -99,10 +100,10 @@ export function useAnalysisJob() {
       signal: AbortSignal,
       onTick?: (status: string, attempt: number, job?: Record<string, unknown>) => void
     ): Promise<PollOutcome> => {
-      let lastStatus = "desconhecido";
+      let lastStatus = getT("unknownStatus");
       for (let attempt = 1; attempt <= POLL_MAX_ATTEMPTS; attempt++) {
         const job = await fetchJob(jobId, signal);
-        lastStatus = typeof job.status === "string" ? job.status : "desconhecido";
+        lastStatus = typeof job.status === "string" ? job.status : getT("unknownStatus");
 
         if (lastStatus === "queued" || lastStatus === "running") {
           onTick?.(lastStatus, attempt, job);
@@ -114,7 +115,7 @@ export function useAnalysisJob() {
           const error =
             typeof job.error === "string" && job.error
               ? job.error
-              : "Análise falhou no backend.";
+              : getT("analysisFailed");
           return { kind: "failed", error };
         }
 
