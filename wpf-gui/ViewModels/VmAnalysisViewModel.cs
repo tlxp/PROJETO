@@ -78,7 +78,7 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
 
         OpenRunFolderCommand = new RelayCommand(OpenRunFolder, () => CanOpenRunFolder);
-        OpenReportCommand = new RelayCommand(OpenReport, () => CanOpenReport);
+        OpenReportCommand = new RelayCommand(() => _ = OpenReportAsync(), () => CanOpenReport);
         CopyRunIdCommand = new RelayCommand(CopyRunId, () => CanCopyRunId);
         CloseCommand = new RelayCommand(() => RequestClose?.Invoke(), () => CanClose);
     }
@@ -427,13 +427,18 @@ public sealed class VmAnalysisViewModel : ViewModelBase
             AppendLine($"[*] Relatório publicado no backend. URL: {resultsUrl}", withTimestamp: true);
             StatusText = "Concluído — relatório disponível no frontend.";
 
-            try
+            // Só abrir automaticamente se a VM foi a primeira análise deste job
+            // (evita 2.ª abertura quando a estática já abriu o mesmo URL).
+            if (string.IsNullOrWhiteSpace(_linkedJobId))
             {
-                _openBrowserUrl?.Invoke(resultsUrl);
-            }
-            catch (Exception ex)
-            {
-                AppendLine($"[AVISO] Não foi possível abrir o navegador automaticamente: {ex.Message}", withTimestamp: true);
+                try
+                {
+                    _openBrowserUrl?.Invoke(resultsUrl);
+                }
+                catch (Exception ex)
+                {
+                    AppendLine($"[AVISO] Não foi possível abrir o navegador automaticamente: {ex.Message}", withTimestamp: true);
+                }
             }
         }
         catch (Exception ex)
@@ -528,17 +533,31 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         catch { /* ignorar */ }
     }
 
-    private void OpenReport()
+    private async Task OpenReportAsync()
     {
         try
         {
-            var p = File.Exists(_expectedReportPath ?? "") ? _expectedReportPath : _expectedReportJsonPath;
-            if (!string.IsNullOrWhiteSpace(p) && File.Exists(p))
-                Process.Start(new ProcessStartInfo { FileName = p, UseShellExecute = true });
-            else if (!string.IsNullOrWhiteSpace(_reportsDir) && Directory.Exists(_reportsDir))
-                Process.Start(new ProcessStartInfo { FileName = _reportsDir, UseShellExecute = true });
+            var jobId = _activeJobId ?? _linkedJobId;
+            if (string.IsNullOrWhiteSpace(jobId) && File.Exists(_expectedReportPath ?? ""))
+                await TryPublishDynamicReportAsync().ConfigureAwait(true);
+
+            jobId = _activeJobId ?? _linkedJobId;
+            if (string.IsNullOrWhiteSpace(jobId))
+            {
+                AppendLine("[AVISO] Relatório local disponível, mas não há jobId para abrir no frontend.", withTimestamp: true);
+                return;
+            }
+
+            var url = AppConstants.BuildFrontendUrl($"/analysis/{Uri.EscapeDataString(jobId)}");
+            if (_openBrowserUrl != null)
+                _openBrowserUrl.Invoke(url);
+            else
+                Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
         }
-        catch { /* ignorar */ }
+        catch (Exception ex)
+        {
+            AppendLine($"[AVISO] Não foi possível abrir o relatório no frontend: {ex.Message}", withTimestamp: true);
+        }
     }
 
     private void CopyRunId()

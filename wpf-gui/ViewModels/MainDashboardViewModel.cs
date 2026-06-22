@@ -201,14 +201,6 @@ public sealed class MainDashboardViewModel : ViewModelBase
                     StaticJobUrlText = _lastResultsUrl;
                     ShowStaticJobDetails = true;
                     ShowOpenResults = true;
-                    try
-                    {
-                        _dialogs.OpenBrowserUrl(_lastResultsUrl);
-                    }
-                    catch
-                    {
-                        /* browser opcional */
-                    }
                 }).ConfigureAwait(true);
 
             _lastStaticJobId = jobId;
@@ -224,15 +216,20 @@ public sealed class MainDashboardViewModel : ViewModelBase
             ShowStaticJobDetails = true;
             ShowOpenResults = true;
 
-            try
+            // Só abrir automaticamente se a estática foi a primeira análise deste job
+            // (evita 2.ª abertura quando a VM já abriu ou quando a VM correr a seguir).
+            if (string.IsNullOrWhiteSpace(linkedJobId))
             {
-                _dialogs.OpenBrowserUrl(_lastResultsUrl);
-            }
-            catch (Exception ex)
-            {
-                _dialogs.ShowWarning(
-                    LocalizationManager.Format(LocKeys.MsgBrowserFailed, ex.Message),
-                    LocalizationManager.Get(LocKeys.AppTitle));
+                try
+                {
+                    _dialogs.OpenBrowserUrl(_lastResultsUrl);
+                }
+                catch (Exception ex)
+                {
+                    _dialogs.ShowWarning(
+                        LocalizationManager.Format(LocKeys.MsgBrowserFailed, ex.Message),
+                        LocalizationManager.Get(LocKeys.AppTitle));
+                }
             }
         }
         catch (Exception ex)
