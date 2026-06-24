@@ -41,7 +41,8 @@ Mapeamento canónico: [`scripts/ci/diagram_sources.py`](../scripts/ci/diagram_so
 
 ## Compilar o PDF
 
-Requisitos: distribuição LaTeX (TeX Live, MiKTeX) com `pdflatex` e `biber`/`bibtex` se usar bibliografia.
+Requisitos: distribuição LaTeX (TeX Live, MiKTeX) com `pdflatex`. A bibliografia usa
+`thebibliography` manual (não requer `biber`).
 
 ```powershell
 cd relatório
@@ -140,7 +141,7 @@ Funcionalidades que devem reflectir-se no texto do PDF (`main.tex`) e nas captur
 | Backend | pytest + httpx | **84** |
 | Frontend | Vitest | **56** |
 | Frontend E2E | Playwright | Fluxo upload/análise |
-| .NET | xUnit (vm-agent, WPF, benign-vm-test, MeuExemplo) | **54** |
+| .NET | xUnit (vm-agent, WPF, benign-vm-test) | **48** |
 | Diagramas | `sync_diagrams_to_report.py --check` | 10 figuras cap. 4 |
 
 **Jobs CI** (`.github/workflows/ci.yml`): `backend`, `frontend`, `frontend-e2e`, `dotnet`, `ps1-encoding`, `md-docs`, `diagrams`, `powershell`, `security` (gitleaks).
@@ -163,4 +164,15 @@ Testes de integração VM (`hyperv`/`proxmox`): opt-in via `RUN_VM_DRIVER_INTEGR
 
 ---
 
-Atualize `main.tex` e screenshots `fig-5-*.png` quando o layout da UI mudar significativamente. O cap. 3 ainda referencia «34+ testes Vitest» — o valor actual é **56** (ver tabela de testes acima).
+Atualize `main.tex` e screenshots `fig-5-*.png` quando o layout da UI mudar significativamente.
+
+## Imagens obrigatórias para entrega final
+
+| Ficheiro | Obrigatório | Conteúdo |
+|----------|-------------|----------|
+| `logo.png` | Sim (capa) | Logótipo UBI ou do projecto |
+| `fig-5-1-web-upload.png` | Sim (cap. 5) | Zona *Drop & Analyze* com tema escuro |
+| `fig-5-2-web-results.png` | Sim (cap. 5) | Score, relatório e painéis pseudo-C/IL |
+| `fig-5-3-wpf-dashboard.png` | Sim (cap. 5) | `MainDashboardView` WPF (tema Signal) |
+| `fig-5-4-hyperv-vm.png` | Sim (cap. 5) | Hyper-V Manager com `MalwareSandbox` / `CleanState` |
+| `fig-4-*.png` | Sim (cap. 4) | Já gerados a partir de PlantUML |

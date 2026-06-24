@@ -1,4 +1,5 @@
-"""Endpoints de manutenção de armazenamento."""
+# --- Módulo: storage ---
+# Endpoints de manutenção de armazenamento.
 
 from __future__ import annotations
 
@@ -18,6 +19,7 @@ logger = logging.getLogger("rat_analyzer_api")
 router = APIRouter(tags=["storage"])
 
 
+# --- Estimativa de espaço em disco por categoria ---
 @router.get("/api/storage/estimate")
 async def storage_estimate() -> dict:
     est = estimate_storage(project_root=config.PROJECT_ROOT)
@@ -40,18 +42,21 @@ async def storage_estimate() -> dict:
     }
 
 
+# --- Limpeza de artefactos antigos (retenção soft) ---
 @router.post("/api/storage/cleanup", dependencies=[Depends(require_api_token)])
 async def storage_cleanup(req: StorageCleanupRequest) -> dict:
     result = cleanup_job_artifacts(req.retentionDays, req.keepMostRecent)
     return {"ok": True, "result": result}
 
 
+# --- Arquivo frio de jobs antigos (zip + remoção de out/) ---
 @router.post("/api/storage/archive", dependencies=[Depends(require_api_token)])
 async def storage_archive(req: StorageArchiveRequest) -> dict:
     result = archive_cold_jobs(req.olderThanDays)
     return {"ok": True, "result": result}
 
 
+# --- Purga completa de storage (bloqueia se jobs em execução) ---
 @router.post("/api/storage/purge", dependencies=[Depends(require_api_token)])
 async def storage_purge() -> dict:
     try:

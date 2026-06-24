@@ -1,3 +1,4 @@
+// --- Módulo: FileDropZone.tsx ---
 import React, { useCallback, useState } from "react";
 import { motion } from "framer-motion";
 import { Upload, FileCode, X } from "lucide-react";
@@ -11,9 +12,10 @@ interface FileDropZoneProps {
 }
 
 const ACCEPTED_EXTENSIONS = [".cs", ".dll", ".exe"];
-/** Alinhado com o limite do backend (RATANALYZER_MAX_UPLOAD_MB, default 100 MB). */
+// *Alinhado com RATANALYZER_MAX_UPLOAD_MB (default 100 MB)*
 export const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
 
+// --- Zona de arrastar/selecionar ficheiro para análise ---
 const FileDropZone: React.FC<FileDropZoneProps> = ({ onFileLoaded, currentFile, onClear }) => {
   const { t } = useI18n();
   const [isDragging, setIsDragging] = useState(false);

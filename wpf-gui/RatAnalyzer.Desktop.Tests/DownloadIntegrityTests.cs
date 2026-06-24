@@ -1,8 +1,10 @@
+﻿// --- Módulo: DownloadIntegrityTests.cs ---
 using RatAnalyzer.Desktop.Helpers;
 using Xunit;
 
 namespace RatAnalyzer.Desktop.Tests;
 
+// --- Testes de verificação SHA-256 e parsing de assets GitHub ---
 public sealed class DownloadIntegrityTests
 {
     [Fact]

@@ -1,14 +1,13 @@
-﻿param(
+﻿# --- Script: SandboxCommon.psm1 ---
+param(
     [switch] $DryRun
 )
 
 $script:SandboxGuestFileCopyMode = $null
 
-# As funções deste módulo estão organizadas em ficheiros temáticos dentro da
-# subpasta .\SandboxCommon\. São carregadas via dot-sourcing (mesma scope do
-# módulo), pelo que continuam a partilhar $script:DryRun / $script:SandboxGuestFileCopyMode
-# e a ser exportadas por Export-ModuleMember. A ordem abaixo replica a ordem
-# original das funções no ficheiro único anterior.
+# --- Carregamento modular das funções partilhadas ---
+# *As funções estão organizadas em ficheiros temáticos dentro de .\SandboxCommon\.*
+# *São carregadas via dot-sourcing (mesma scope do módulo), partilhando $script:DryRun.*
 $script:SandboxCommonPartsDir = Join-Path $PSScriptRoot 'SandboxCommon'
 $sandboxCommonParts = @(
     'Logging.ps1',         # Get-LogTimestamp, Write-LogHost, Write-LogWarning, Write-SandboxLog, Write-SandboxJsonLog

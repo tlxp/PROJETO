@@ -1,3 +1,4 @@
+﻿// --- Módulo: MainDashboardDialogsHost.cs ---
 using System;
 using System.Diagnostics;
 using System.Security.Principal;
@@ -9,6 +10,7 @@ using RatAnalyzer.Desktop.ViewModels;
 
 namespace RatAnalyzer.Desktop.Views;
 
+// --- Implementação WPF de IMainDashboardDialogs (diálogos e navegação) ---
 internal sealed class MainDashboardDialogsHost : IMainDashboardDialogs
 {
     private readonly UserControl _view;
@@ -17,6 +19,7 @@ internal sealed class MainDashboardDialogsHost : IMainDashboardDialogs
 
     private Window? Owner => Window.GetWindow(_view);
 
+    // --- Abre diálogo de seleção de ficheiro para análise ---
     public string? PickAnalysisFile()
     {
         var dialog = new Microsoft.Win32.OpenFileDialog
@@ -37,6 +40,7 @@ internal sealed class MainDashboardDialogsHost : IMainDashboardDialogs
     public void ShowWarning(string message, string title) =>
         MessageBox.Show(Owner, message, title, MessageBoxButton.OK, MessageBoxImage.Warning);
 
+    // --- Verifica elevação de administrador (necessária para Hyper-V) ---
     public bool IsAdministrator()
     {
         try
@@ -56,6 +60,7 @@ internal sealed class MainDashboardDialogsHost : IMainDashboardDialogs
             LocalizationManager.Get(LocKeys.MsgAdminRequired),
             LocalizationManager.Get(LocKeys.MsgAdminRequiredTitle));
 
+    // --- Abre janela de análise VM após resolver credenciais ---
     public void OpenVmAnalysis(
         string samplePath,
         bool runFirstTimeSetup,
@@ -80,6 +85,7 @@ internal sealed class MainDashboardDialogsHost : IMainDashboardDialogs
         vmWindow.Show();
     }
 
+    // --- Obtém credenciais da VM: env, sessão ou diálogo modal ---
     private VmGuestCredentials? ResolveGuestCredentials()
     {
         var fromEnv = VmGuestCredentialStore.TryFromEnvironment();

@@ -1,3 +1,6 @@
+# --- Módulo: storage_maintenance ---
+# Estimativa, limpeza, arquivo frio e leitura de artefactos em sandbox_jobs.
+
 from __future__ import annotations
 
 import shutil
@@ -12,10 +15,12 @@ import config
 import job_store
 
 
+# --- Helper interno: utc now ---
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# --- Helper interno: parse iso ---
 def _parse_iso(ts: str) -> Optional[datetime]:
     if not ts:
         return None
@@ -25,6 +30,7 @@ def _parse_iso(ts: str) -> Optional[datetime]:
         return None
 
 
+# --- Helper interno: dir size bytes ---
 def _dir_size_bytes(path: Path) -> int:
     total = 0
     try:
@@ -44,6 +50,7 @@ def _dir_size_bytes(path: Path) -> int:
 
 
 @dataclass
+# --- Classe Storage Estimate ---
 class StorageEstimate:
     sandbox_jobs_bytes: int = 0
     reports_bytes: int = 0
@@ -54,6 +61,7 @@ class StorageEstimate:
     frontend_dist_bytes: int = 0
 
     @property
+# --- Total bytes ---
     def total_bytes(self) -> int:
         return (
             self.sandbox_jobs_bytes
@@ -65,12 +73,8 @@ class StorageEstimate:
         )
 
 
+# --- Estima espaço em disco por categoria (build/caches no repo; outputs em DATA_DIR) ---
 def estimate_storage(project_root: Path) -> StorageEstimate:
-    """
-    Estima espaço em disco por categoria.
-
-    Nota: categorias de build/caches vivem no repo; outputs vivem em config.DATA_DIR.
-    """
     project_root = Path(project_root).resolve()
     return StorageEstimate(
         sandbox_jobs_bytes=_dir_size_bytes(Path(config.SANDBOX_JOBS_DIR)),
@@ -85,11 +89,8 @@ def estimate_storage(project_root: Path) -> StorageEstimate:
     )
 
 
+# --- Retenção soft: apaga artefatos pesados de jobs antigos finalizados (mantém DB) ---
 def cleanup_job_artifacts(retention_days: int, max_count: int) -> dict:
-    """
-    Retenção 'soft' para sandbox_jobs: apaga apenas artefatos pesados em disco
-    de jobs antigos (COMPLETED/FAILED). Mantém DB.
-    """
     retention_days = max(0, int(retention_days))
     max_count = max(1, int(max_count))
     now = _utc_now()
@@ -155,6 +156,7 @@ def cleanup_job_artifacts(retention_days: int, max_count: int) -> dict:
     return {"deletedJobs": deleted, "freedBytes": freed_bytes, "keptMostRecent": max_count, "retentionDays": retention_days}
 
 
+# --- Helper interno: zip dir ---
 def _zip_dir(src_dir: Path, zip_path: Path, *, exclude_globs: Iterable[str] = ()) -> None:
     src_dir = Path(src_dir)
     zip_path = Path(zip_path)
@@ -171,11 +173,8 @@ def _zip_dir(src_dir: Path, zip_path: Path, *, exclude_globs: Iterable[str] = ()
             zf.write(p, arcname=rel_str)
 
 
+# --- Arquivo frio: zip de out/ para out.zip e remove pasta (mantém DB) ---
 def archive_cold_jobs(older_than_days: int) -> dict:
-    """
-    Arquivo 'frio' de jobs antigos: zip de sandbox_jobs/<job_id>/out para out.zip e remove out/.
-    Mantém DB e marca paths no registo.
-    """
     older_than_days = max(1, int(older_than_days))
     now = _utc_now()
     items = job_store.list_jobs(limit=5000, offset=0)
@@ -225,11 +224,8 @@ def archive_cold_jobs(older_than_days: int) -> dict:
     return {"archivedJobs": archived, "freedBytes": freed_bytes, "olderThanDays": older_than_days}
 
 
+# --- Purga completa de sandbox_jobs, reports e decompiled; recria DB vazia ---
 def purge_all_storage() -> dict:
-    """
-    Limpeza completa: remove todo o conteúdo de sandbox_jobs, reports e decompiled
-    em DATA_DIR e recria a base de dados vazia.
-    """
     targets = [
         Path(config.SANDBOX_JOBS_DIR),
         Path(config.REPORTS_DIR),
@@ -263,12 +259,8 @@ def purge_all_storage() -> dict:
     }
 
 
+# --- Leitura de artefacto texto: out/ normal ou out.zip (caminho relativo a out/) ---
 def read_text_artifact_from_job(job_id: str, relative_path: str) -> Optional[str]:
-    """
-    Leitura transparente de artefatos texto dentro de sandbox_jobs/<job_id>:
-      - se out/ existir: lê do ficheiro normal
-      - se out.zip existir: lê do zip (caminho relativo a out/)
-    """
     base_dir = Path(config.SANDBOX_JOBS_DIR) / job_id
     out_dir = base_dir / "out"
     target = out_dir / relative_path

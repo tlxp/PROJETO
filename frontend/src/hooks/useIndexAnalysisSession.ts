@@ -1,3 +1,4 @@
+// --- Módulo: useIndexAnalysisSession.ts ---
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ApiError, isAbortError } from "@/lib/api";
@@ -15,9 +16,8 @@ import { ROUTES } from "@/routes";
 import type { StillRunningJob } from "@/pages/Index/UploadView";
 import { MOCK_DEMO_RESULT } from "@/pages/Index/mockDemo";
 
-/**
- * Estado e orquestração de análise da página Index (upload, streaming, jobs, job externo).
- */
+// --- Estado e orquestração de análise na página Index ---
+// *Upload, streaming estático, jobs assíncronos e carregamento por jobId externo*
 export function useIndexAnalysisSession() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -67,6 +67,7 @@ export function useIndexAnalysisSession() {
     navigate(ROUTES.home, { replace: true });
   }, [navigate, stream, cancelJob]);
 
+  // --- Carrega job externo a partir de URL (?jobId= ou /analysis/:jobId) ---
   useEffect(() => {
     const params = new URLSearchParams(location.search ?? "");
     const jobIdFromQuery = params.get("jobId");
@@ -149,7 +150,8 @@ export function useIndexAnalysisSession() {
     };
   }, [location.search, currentJobId, jobIdFromPath, navigate, beginSession, pollJob]);
 
-  /** Atualiza resultados em tempo real enquanto o job evolui (ex.: VM a correr após estática). */
+  // --- Polling leve para atualizar resultados enquanto o job evolui ---
+  // *Ex.: VM a correr após análise estática*
   useEffect(() => {
     if (!currentJobId || !showResults) return;
 
@@ -184,6 +186,7 @@ export function useIndexAnalysisSession() {
     };
   }, [currentJobId, showResults, fetchJob]);
 
+  // --- Carrega layout de demonstração sem backend ---
   const loadMockDemo = useCallback(() => {
     setFile(null);
     setAnalysisResult(MOCK_DEMO_RESULT);
@@ -192,6 +195,7 @@ export function useIndexAnalysisSession() {
     setIsMockDemo(true);
   }, []);
 
+  // --- Finaliza job com sucesso e navega para /analysis/:jobId ---
   const finishJobOutcome = useCallback(
     (jobId: string, job: Record<string, unknown>, fallbackFileName?: string) => {
       const chosen = buildAnalysisResultFromJob(job, fallbackFileName);
@@ -206,6 +210,7 @@ export function useIndexAnalysisSession() {
     [navigate]
   );
 
+  // --- Dispara análise (estática via stream ou dinâmica via job) ---
   const handleAnalyze = useCallback(async () => {
     if (!file) return;
     const runId = ++analyzeRunRef.current;

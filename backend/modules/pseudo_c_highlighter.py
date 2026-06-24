@@ -1,14 +1,11 @@
-"""
-Extrai indicadores que deram flag no RAT Analyzer para destacar no pseudo-C.
-Usado para realçar no código decompilado (Ghidra) as partes que acionaram
-deteções (YARA, análise estática, deobfuscação).
-"""
+# --- Módulo: pseudo_c_highlighter ---
+# Extrai indicadores com flag e realça funções suspeitas no pseudo-C (Ghidra).
 
 from typing import Dict, List, Set, Any, Tuple
 
 
+# --- Filtra strings impróprias para highlight ---
 def _is_safe_for_highlight(s: str, min_len: int = 3, max_len: int = 120) -> bool:
-    """Filtra strings impróprias para highlight (binárias, muito curtas/longas)."""
     if not s or not isinstance(s, str):
         return False
     s = s.strip()
@@ -21,15 +18,12 @@ def _is_safe_for_highlight(s: str, min_len: int = 3, max_len: int = 120) -> bool
     return True
 
 
+# --- Extrai indicadores com flag para destacar no pseudo-C ---
 def extract_flagged_indicators(analysis_results: Dict) -> List[str]:
-    """
-    Extrai todos os indicadores que deram flag para destacar no pseudo-C.
-    :param analysis_results: Resultados da análise (static_analysis, yara_matches, deobfuscation)
-    :return: Lista de strings únicas a realçar
-    """
     seen: Set[str] = set()
     indicators: List[str] = []
 
+# --- Add ---
     def add(s: str) -> None:
         if _is_safe_for_highlight(s) and s not in seen:
             seen.add(s)
@@ -75,14 +69,8 @@ def extract_flagged_indicators(analysis_results: Dict) -> List[str]:
     return indicators
 
 
+# --- Heurística para extrair funções do pseudo-C (name, startLine, endLine) ---
 def _parse_pseudo_c_functions(c_source: str) -> List[Dict[str, Any]]:
-    """
-    Heurística para extrair funções do pseudo-C da Ghidra.
-
-    Devolve uma lista de:
-      { "name": str, "startLine": int, "endLine": int }
-    com linhas 1-based.
-    """
     import re
 
     lines = c_source.split("\n")
@@ -142,6 +130,7 @@ def _parse_pseudo_c_functions(c_source: str) -> List[Dict[str, Any]]:
         re.IGNORECASE,
     )
 
+# --- Helper interno: is ignorable between sig and brace ---
     def _is_ignorable_between_sig_and_brace(raw: str) -> bool:
         t = (raw or "").strip()
         if not t:
@@ -150,8 +139,9 @@ def _parse_pseudo_c_functions(c_source: str) -> List[Dict[str, Any]]:
             return True
         return False
 
+# --- Helper interno: expand start with banner ---
     def _expand_start_with_banner(func_name: str, start_line: int) -> int:
-        """Inclui a linha de banner da Ghidra, quando existir imediatamente acima."""
+        # *Inclui linha de banner da Ghidra imediatamente acima da assinatura*
         if start_line <= 1:
             return start_line
         # Olhar 1-2 linhas acima da assinatura (alguns dumps têm uma linha vazia extra).
@@ -235,20 +225,17 @@ def _parse_pseudo_c_functions(c_source: str) -> List[Dict[str, Any]]:
     return results
 
 
+# --- Helper interno: stable func id ---
 def _stable_func_id(name: str, start_line: int, end_line: int) -> str:
     return f"{name}:{int(start_line)}-{int(end_line)}"
 
 
+# --- Score de função por matches de indicadores e padrões (keylog, rede, etc.) ---
 def _score_function_by_indicators(
     func_name: str,
     body_text: str,
     indicators: List[str],
 ) -> Dict[str, Any]:
-    """
-    Pipeline de deteção de funções suspeitas:
-      - atribui score por matches (import/indicadores) e padrões (keylogging, persistência, rede, I/O)
-      - devolve razões e severidade (CRÍTICO/ALTO/MÉDIO/BAIXO)
-    """
     name = (func_name or "").strip()
     text = body_text or ""
     inds = [i for i in indicators if isinstance(i, str) and i.strip()]
@@ -370,28 +357,12 @@ def _score_function_by_indicators(
     }
 
 
+# --- Lista funções suspeitas com score a partir do pseudo-C e indicadores ---
 def build_flagged_functions(
     c_source: str,
     analysis_results: Dict,
     flagged_indicators: List[str] | None = None,
 ) -> List[Dict[str, Any]]:
-    """
-    Constrói uma lista de funções suspeitas com base em:
-      - static_analysis["suspicious_functions"]
-      - static_analysis["suspicious_imports"]
-      - indicadores extraídos (YARA, C2, etc.) => flagged_indicators
-
-    Output:
-      [
-        {
-          "name": "suspicious_function",
-          "startLine": 120,
-          "endLine": 180,
-          "indicators": ["CreateFileA", "WriteFile"],
-        },
-        ...
-      ]
-    """
     functions = _parse_pseudo_c_functions(c_source)
     if not functions:
         return []
@@ -403,6 +374,7 @@ def build_flagged_functions(
 
     lines = c_source.split("\n")
 
+# --- Helper interno: function body ---
     def _function_body(func: Dict[str, Any]) -> Tuple[str, List[str]]:
         start = max(1, int(func.get("startLine", 1)))
         end = max(start, int(func.get("endLine", start)))
@@ -480,14 +452,11 @@ def build_flagged_functions(
     return flagged_funcs
 
 
+# --- Re-alinha funções suspeitas ao pseudo-C truncado enviado ao frontend ---
 def realign_flagged_functions_for_payload(
     c_code: str,
     flagged_functions: List[Dict[str, Any]] | None,
 ) -> List[Dict[str, Any]]:
-    """
-    Re-alinha funções suspeitas ao texto de pseudo-C efectivamente enviado ao frontend.
-    Útil quando o payload já foi truncado mas os ranges ainda referem o ficheiro completo.
-    """
     if not c_code or not flagged_functions:
         return []
 

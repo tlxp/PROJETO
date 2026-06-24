@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Compat: use relatório/imagens/render_plantuml.py --check ou render direto."""
+# --- Módulo: sync_diagrams_to_report ---
+# --- Compat: delega para relatório/imagens/render_plantuml.py (--check ou render) ---
 from __future__ import annotations
 
 import subprocess

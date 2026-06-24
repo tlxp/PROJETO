@@ -1,3 +1,4 @@
+' --- Diagrama: sequência Caminho B (PowerShell / PsDirect) ---
 @startuml
 title Sequência — Caminho B (PowerShell / PsDirect + SHA256)
 autonumber
@@ -18,6 +19,7 @@ PS -> GUEST : copiar amostra +\nscripts (PsDirect)
 
 PS -> ANALYSIS : Invoke-Command\nRun-MalwareAnalysis.ps1
 ANALYSIS -> ANALYSIS : monitorizar\nficheiros · registry · rede
+' *Ficheiro de conclusão com hash SHA256*
 ANALYSIS -> GUEST : gravar C:\analysis.txt\n+ guest_analysis_done.txt\n(SHA256)
 
 loop PhaseE-WaitReport
@@ -27,6 +29,7 @@ end
 PS -> GUEST : Copy-SandboxVMFileFromGuest\n(PsDirect ou Copy-VMFile)
 GUEST --> PS : analysis_<RunId>.txt
 
+' *Verificação de integridade antes de aceitar relatório*
 PS -> PS : Assert-SandboxCopiedReportHash\n(comparar SHA256)
 alt hash inválido
   PS -> PS : apagar ficheiro no host

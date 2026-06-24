@@ -1,10 +1,14 @@
+// --- Módulo: SampleStorageTests.cs ---
+
 using VmAgent.Services;
 using Xunit;
 
 namespace VmAgent.Tests;
 
+// --- Testes do armazenamento seguro de amostras ---
 public sealed class SampleStorageTests
 {
+    // --- Nomes inválidos ou com path traversal devem ser rejeitados ---
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
@@ -20,6 +24,7 @@ public sealed class SampleStorageTests
         Assert.False(string.IsNullOrWhiteSpace(error));
     }
 
+    // --- Nome válido deve resolver dentro da pasta samples ---
     [Fact]
     public void TryResolveTargetPath_ValidName_ReturnsPathInsideSamplesDirectory()
     {

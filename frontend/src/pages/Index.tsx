@@ -1,3 +1,4 @@
+// --- Módulo: Index.tsx ---
 import { AnimatePresence } from "framer-motion";
 import { useCallback } from "react";
 import { useIndexAnalysisSession } from "@/hooks/useIndexAnalysisSession";
@@ -7,6 +8,7 @@ import IndexHeader from "./Index/IndexHeader";
 import AnalysisResultsView from "./Index/AnalysisResultsView";
 import SnippetModal from "./Index/SnippetModal";
 
+// --- Página principal: upload e resultados de análise ---
 const Index = () => {
   const session = useIndexAnalysisSession();
   const resultsVm = useIndexResultsViewModel({

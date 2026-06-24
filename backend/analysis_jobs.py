@@ -1,3 +1,6 @@
+# --- Módulo: analysis_jobs ---
+# --- Gestão de jobs de análise estática/dinâmica (memória + SQLite) ---
+
 from __future__ import annotations
 
 import enum
@@ -22,12 +25,14 @@ from task_queue import is_queue_enabled, get_queue
 from upload_security import resolve_safe_path, sanitize_upload_filename
 
 
+# --- Tipos de análise suportados ---
 class AnalysisType(str, enum.Enum):
     STATIC = "static"
     DYNAMIC = "dynamic"
     BOTH = "both"
 
 
+# --- Estados possíveis de um job ---
 class JobStatus(str, enum.Enum):
     QUEUED = "queued"
     RUNNING = "running"
@@ -35,9 +40,9 @@ class JobStatus(str, enum.Enum):
     FAILED = "failed"
 
 
+# --- Resultado serializável enviado ao frontend ---
 @dataclass
 class AnalysisResult:
-    # Campos comuns ao que o frontend já espera
     report: str = ""
     cCode: str = ""
     ilCode: str = ""
@@ -45,19 +50,16 @@ class AnalysisResult:
     riskScore: int = 0
     riskLevel: str = ""
     flaggedIndicators: list[str] = field(default_factory=list)
-    # Novo: funções marcadas como suspeitas, com ranges exatos no pseudo-C.
     flaggedFunctions: list[dict] = field(default_factory=list)
-    # Trechos obfuscados extraídos (caminhos para ficheiros)
     obfuscatedSnippetsFile: str = ""
     obfuscatedSnippetsDeobfuscatedFile: str = ""
-    # Número de indicadores de ofuscação (para mostrar botões "Ver trechos" mesmo sem ficheiros)
     obfuscationIndicatorCount: int = 0
 
-    # Campos extra para futura extensão
     dynamicReport: Optional[dict] = None
     dynamicSummary: Optional[str] = None
 
 
+# --- Job de análise com caminhos, estado e resultados ---
 @dataclass
 class AnalysisJob:
     id: str
@@ -74,6 +76,7 @@ class AnalysisJob:
     static_result: Optional[AnalysisResult] = None
     dynamic_result: Optional[AnalysisResult] = None
 
+# --- To dict ---
     def to_dict(self) -> dict:
         return {
             "id": self.id,
@@ -89,16 +92,16 @@ _JOBS: Dict[str, AnalysisJob] = {}
 _JOBS_LOCK = threading.Lock()
 _LOGGER = logging.getLogger("rat_analyzer_jobs")
 
-# Limites de tamanho para o código C enviado ao frontend
-MAX_CCODE_CHARS: int = 200_000  # ~200 KB de pseudo-C no payload
-CCODE_WINDOW_RADIUS: int = 40   # ±40 linhas em volta de cada indicador
+# *Limites de tamanho para o pseudo-C enviado ao frontend*
+MAX_CCODE_CHARS: int = 200_000
+CCODE_WINDOW_RADIUS: int = 40
 
-# Pool partilhado para jobs em modo local (threads). max_workers configurável
-# via RATANALYZER_MAX_WORKERS (default 2) para limitar análises concorrentes.
+# *Pool partilhado para jobs locais; max_workers via RATANALYZER_MAX_WORKERS (default 2)*
 _EXECUTOR: Optional[ThreadPoolExecutor] = None
 _EXECUTOR_LOCK = threading.Lock()
 
 
+# --- Obtém ou cria o ThreadPoolExecutor partilhado ---
 def _get_executor() -> ThreadPoolExecutor:
     global _EXECUTOR
     with _EXECUTOR_LOCK:
@@ -112,12 +115,14 @@ def _get_executor() -> ThreadPoolExecutor:
         return _EXECUTOR
 
 
+# --- Helper interno: ensure jobs dir ---
 def _ensure_jobs_dir() -> Path:
     base = config.SANDBOX_JOBS_DIR
     base.mkdir(parents=True, exist_ok=True)
     return base
 
 
+# --- Create job ---
 def create_job(file_name: str, contents: bytes, analysis_type: AnalysisType) -> AnalysisJob:
     # Defesa em profundidade: mesmo que a camada API já sanitize, nunca
     # aceitar aqui nomes com separadores/`..`/paths absolutos.
@@ -242,20 +247,14 @@ def create_job(file_name: str, contents: bytes, analysis_type: AnalysisType) -> 
     return job
 
 
+# --- Get job ---
 def get_job(job_id: str) -> Optional[AnalysisJob]:
     with _JOBS_LOCK:
         return _JOBS.get(job_id)
 
 
+# --- Reconstrói AnalysisJob a partir da DB + disco (worker RQ noutro processo) ---
 def _rebuild_job_from_store(job_id: str) -> Optional[AnalysisJob]:
-    """
-    Reconstrói um AnalysisJob a partir da DB + disco.
-
-    Necessário quando _run_job corre num processo diferente do que criou o
-    job (ex.: worker RQ): o dict _JOBS em memória não é partilhado, mas a
-    criação do job persiste analysis_type/file_name na DB e o sample em
-    sandbox_jobs/<job_id>/.
-    """
     try:
         row = job_store.get_job_row(job_id)
     except Exception:
@@ -297,6 +296,7 @@ def _rebuild_job_from_store(job_id: str) -> Optional[AnalysisJob]:
     return job
 
 
+# --- Helper interno: run job ---
 def _run_job(job_id: str) -> None:
     job = get_job(job_id)
     if not job:
@@ -351,14 +351,8 @@ def _run_job(job_id: str) -> None:
         _LOGGER.exception("Job falhou: id=%s type=%s error=%s", job.id, job.analysis_type.value, job.error)
 
 
+# --- Payload do job: memória → DB → reconstrução a partir de last_analysis.json ---
 def get_job_payload(job_id: str) -> Optional[dict]:
-    """
-    Devolve payload do job. Primeiro tenta memória (jobs em execução),
-    depois cai para a DB (histórico). Caso não exista registo em
-    memória/DB (jobs antigos gerados antes da DB, por exemplo), tenta
-    reconstruir um payload mínimo a partir de `last_analysis.json` no
-    diretório sandbox do job.
-    """
     j = get_job(job_id)
     if j:
         _LOGGER.info("get_job_payload: job_id=%s encontrado em memória (status=%s)", job_id, j.status.value)
@@ -498,8 +492,8 @@ def get_job_payload(job_id: str) -> Optional[dict]:
         return None
 
 
+# --- Análise estática via RATAnalyzer ---
 def _run_static(job: AnalysisJob) -> AnalysisResult:
-    """Executa a análise estática reutilizando o RATAnalyzer existente."""
     ext = job.sample_path.suffix.lower()
     analyzer = RATAnalyzer(
         str(job.sample_path),
@@ -580,14 +574,8 @@ def _run_static(job: AnalysisJob) -> AnalysisResult:
     )
 
 
+# --- Análise dinâmica via orquestrador de VMs ---
 def _run_dynamic(job: AnalysisJob) -> AnalysisResult:
-    """
-    Executa a análise dinâmica via orquestrador de VMs.
-
-    A lógica concreta de sandboxing está em vm_orchestrator.run_dynamic_analysis,
-    que atualmente devolve um relatório sintético (stub seguro). Quando a
-    sandbox real estiver ligada, essa função passará a falar com o hypervisor.
-    """
     result = run_dynamic_analysis(job)
     summary = str(result.get("summary", ""))
     dynamic_report = result.get("behavior") or {}
@@ -601,6 +589,7 @@ def _run_dynamic(job: AnalysisJob) -> AnalysisResult:
     )
 
 
+# --- Helper interno: read file safe ---
 def _read_file_safe(path: Optional[str | Path], encoding: str = "utf-8", errors: str = "replace") -> str:
     if not path:
         return ""
@@ -614,8 +603,8 @@ def _read_file_safe(path: Optional[str | Path], encoding: str = "utf-8", errors:
         return ""
 
 
+# --- Normaliza indicadores (trim, remove vazios/duplicados) ---
 def _normalize_indicators(flagged_indicators: Iterable[str]) -> List[str]:
-    """Normaliza a lista de indicadores (trim, remove vazios/duplicados)."""
     seen = set()
     out: List[str] = []
     for raw in flagged_indicators or []:
@@ -627,8 +616,8 @@ def _normalize_indicators(flagged_indicators: Iterable[str]) -> List[str]:
     return out
 
 
+# --- Funde intervalos de linhas 0-based sobrepostos ou adjacentes ---
 def _merge_line_windows(ranges: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
-    """Funde intervalos de linhas 0-based sobrepostos ou adjacentes."""
     if not ranges:
         return []
     ranges.sort()
@@ -644,11 +633,8 @@ def _merge_line_windows(ranges: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
     return merged
 
 
+# --- Janelas de linhas em volta de cada ocorrência de indicador (0-based) ---
 def _build_windows_around_indicators(lines: List[str], indicators: List[str], radius: int) -> List[Tuple[int, int]]:
-    """
-    Devolve intervalos de linhas [start, end] que cobrem janelas em volta de cada ocorrência
-    de qualquer indicador. Usa índices 0-based.
-    """
     n = len(lines)
     ranges: List[Tuple[int, int]] = []
     if n == 0 or not indicators:
@@ -664,6 +650,7 @@ def _build_windows_around_indicators(lines: List[str], indicators: List[str], ra
     return _merge_line_windows(ranges)
 
 
+# --- Janelas em volta de indicadores e funções suspeitas mais graves ---
 def _build_windows_for_payload(
     lines: List[str],
     indicators: List[str],
@@ -671,7 +658,6 @@ def _build_windows_for_payload(
     radius: int,
     max_func_windows: int = 20,
 ) -> List[Tuple[int, int]]:
-    """Janelas em volta de indicadores e das funções suspeitas mais graves."""
     ranges = _build_windows_around_indicators(lines, indicators, radius)
     n = len(lines)
     if n == 0:
@@ -699,12 +685,12 @@ def _build_windows_for_payload(
     return _merge_line_windows(ranges)
 
 
+# --- Re-mapeia startLine/endLine para o pseudo-C resumido ---
 def _remap_flagged_functions_to_summary(
     flagged_functions: Iterable[dict] | None,
     orig_to_new: Dict[int, int],
     total_new_lines: int,
 ) -> List[dict]:
-    """Re-mapeia startLine/endLine para o pseudo-C resumido enviado ao frontend."""
     out: List[dict] = []
     for raw in flagged_functions or []:
         if not isinstance(raw, dict):
@@ -727,8 +713,8 @@ def _remap_flagged_functions_to_summary(
     return out
 
 
+# --- Indica se a UI deve mostrar painel de resumo em vez de pseudo-C/C# ---
 def should_compose_decompilation_fallback(last: dict) -> bool:
-    """Indica se a UI deve mostrar o painel de resumo em vez de pseudo-C/C#."""
     if not last:
         return False
     if (last.get("decompilation_error_summary") or "").strip():
@@ -737,12 +723,8 @@ def should_compose_decompilation_fallback(last: dict) -> bool:
     return bool((ghidra.get("error") or "").strip())
 
 
+# --- Texto do painel quando ILSpy falha mas há fallback Ghidra/assembly ---
 def compose_fallback_descompilation_ccode(last: dict) -> str:
-    """
-    Monta o texto do painel quando não há ficheiro C# nem pseudo-C carregável,
-    mas há resumo de falha ILSpy. Acrescenta o estado do fallback Ghidra para a UI
-    não mostrar só o erro ILSpy (o pipeline corre Ghidra em [7b] quando ILSpy falha).
-    """
     ilspy = (last.get("decompilation_error_summary") or "").strip()
     lines: List[str] = ["# Descompilação para C# / pseudo-C não disponível"]
 
@@ -789,16 +771,13 @@ def compose_fallback_descompilation_ccode(last: dict) -> str:
     return "\n".join(lines)
 
 
+# --- Trunca pseudo-C/C# para payload e re-alinha funções suspeitas ---
 def summarize_c_code_payload(
     c_code: str,
     flagged_indicators: Iterable[str],
     flagged_functions: Iterable[dict] | None = None,
     max_chars: int = MAX_CCODE_CHARS,
 ) -> Tuple[str, List[dict]]:
-    """
-    Trunca o pseudo-C/C# para o payload do job e re-alinha as funções suspeitas
-    às linhas do texto resumido (evita ranges do ficheiro completo no frontend).
-    """
     raw_flagged = [f for f in (flagged_functions or []) if isinstance(f, dict)]
     if not c_code or max_chars <= 0 or len(c_code) <= max_chars:
         return c_code, raw_flagged
@@ -821,6 +800,7 @@ def summarize_c_code_payload(
         for hl in header.splitlines():
             output_lines.append(hl)
 
+# --- Helper interno: current text ---
         def _current_text() -> str:
             return "\n".join(output_lines) + ("\n" if output_lines else "")
 
@@ -853,13 +833,13 @@ def summarize_c_code_payload(
     return summary, _remap_flagged_functions_to_summary(raw_flagged, orig_to_new, len(output_lines))
 
 
+# --- Atalho: devolve apenas o pseudo-C resumido ---
 def summarize_c_code(
     c_code: str,
     flagged_indicators: Iterable[str],
     flagged_functions: Iterable[dict] | None = None,
     max_chars: int = MAX_CCODE_CHARS,
 ) -> str:
-    """Atalho que devolve apenas o pseudo-C resumido."""
     summarized, _ = summarize_c_code_payload(
         c_code, flagged_indicators, flagged_functions, max_chars=max_chars
     )

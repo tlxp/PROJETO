@@ -1,11 +1,7 @@
 #!/usr/bin/env python3
-"""
-Normaliza mensagens PT-PT em .ps1: acentos em palavras comuns e UTF-8 com BOM + CRLF.
-
-Uso (raiz do repo):
-  python scripts/ci/normalize_ps1_pt.py          # aplica
-  python scripts/ci/normalize_ps1_pt.py --check  # só reporta diferenças (exit 1 se houver)
-"""
+# --- Módulo: normalize_ps1_pt ---
+# --- Normaliza mensagens PT-PT em .ps1: acentos e UTF-8 com BOM + CRLF ---
+# *Uso: python scripts/ci/normalize_ps1_pt.py [--check]*
 
 from __future__ import annotations
 

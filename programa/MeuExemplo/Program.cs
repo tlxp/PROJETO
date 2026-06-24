@@ -1,5 +1,4 @@
-// Exemplo educativo para a GUI Tkinter (arrastar Program.cs → compilar → analisar).
-// Não é malware — apenas strings e APIs comuns para experimentar o analisador estático.
+// --- Módulo: Program.cs ---
 
 using System.Net.Http;
 
@@ -8,6 +7,7 @@ Console.WriteLine("RAT Analyzer — MeuExemplo");
 const string demoEndpoint = "https://example.com/api/status";
 Console.WriteLine($"Endpoint de demonstração: {demoEndpoint}");
 
+// *pedido HTTP de demonstração — falha esperada se offline*
 using var client = new HttpClient();
 try
 {

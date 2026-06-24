@@ -1,11 +1,17 @@
+// --- Módulo: AgentTokenMiddleware.cs ---
+
 namespace VmAgent.Security;
+
+// --- Autenticação por token do agente ---
 internal static class AgentTokenMiddleware
 {
+    // --- Lê o token a partir da variável de ambiente ---
     public static string? ResolveTokenFromEnvironment()
     {
         return Environment.GetEnvironmentVariable("VM_AGENT_TOKEN");
     }
 
+    // --- Verifica se o modo inseguro de desenvolvimento está ativo ---
     public static bool IsInsecureDevMode()
     {
         return string.Equals(
@@ -14,6 +20,7 @@ internal static class AgentTokenMiddleware
             StringComparison.Ordinal);
     }
 
+    // --- Valida o token no arranque da aplicação ---
     public static bool ValidateStartupToken(string? agentToken, bool allowInsecure)
     {
         if (!string.IsNullOrWhiteSpace(agentToken))
@@ -21,6 +28,7 @@ internal static class AgentTokenMiddleware
 
         if (!allowInsecure)
         {
+            // *token obrigatório em produção — instruções no stderr*
             Console.Error.WriteLine(
                 "[vm-agent] ERRO: VM_AGENT_TOKEN é obrigatório. " +
                 "Defina VM_AGENT_TOKEN e use bind interno (ex.: http://192.168.100.x:5000). " +
@@ -33,12 +41,14 @@ internal static class AgentTokenMiddleware
         return true;
     }
 
+    // --- Regista o middleware de autenticação por header ---
     public static void UseAgentTokenAuth(this WebApplication app, string? agentToken)
     {
         app.Use(async (context, next) =>
         {
             if (!string.IsNullOrWhiteSpace(agentToken))
             {
+                // *rejeita pedidos sem header X-Agent-Token válido*
                 if (!context.Request.Headers.TryGetValue("X-Agent-Token", out var provided) ||
                     !TokenComparer.FixedTimeEquals(provided.ToString(), agentToken))
                 {

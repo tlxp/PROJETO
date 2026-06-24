@@ -1,7 +1,5 @@
-"""
-Módulo de integração com ILSpy CLI (ILSpyCmd)
-Descompila assemblies .NET (.exe/.dll) para código fonte C#
-"""
+# --- Módulo: dotnet_decompiler ---
+# Integração com ILSpy CLI: descompila assemblies .NET (.exe/.dll) para C#.
 
 import logging
 import os
@@ -17,21 +15,11 @@ import config
 logger = logging.getLogger("rat_analyzer_dotnet_decompiler")
 
 
+# --- Wrapper para ILSpy CLI (ilspycmd / ILSpyCmd) ---
 class DotNetDecompiler:
-    """
-    Wrapper simples para o ILSpy CLI.
 
-    - Recebe o caminho para um .exe/.dll .NET
-    - Chama o ILSpyCmd/ilspycmd
-    - Devolve o diretório com o código C# descompilado
-    """
-
+    # --- ilspy_path: ILSpyCmd.exe ou 'ilspycmd'; output_root: pasta base de saída ---
     def __init__(self, ilspy_path: Optional[str] = None, output_root: str = "decompiled"):
-        """
-        :param ilspy_path: Caminho para ILSpyCmd.exe ou comando 'ilspycmd' no PATH.
-                           Se None, tenta usar a env var ILSPY_CMD_PATH ou 'ilspycmd'.
-        :param output_root: Diretório base onde os códigos descompilados serão guardados.
-        """
         env_path = os.environ.get("ILSPY_CMD_PATH")
         
         # Se um caminho foi fornecido, verificar se existe
@@ -55,8 +43,8 @@ class DotNetDecompiler:
         self.output_root = Path(output_root).resolve()
         self.output_root.mkdir(parents=True, exist_ok=True)
     
+    # --- Procura ILSpy no PATH ou em locais comuns no Windows ---
     def _find_ilspy(self) -> Optional[str]:
-        """Tenta encontrar o ILSpy automaticamente no sistema"""
         # Verificar se está no PATH
         ilspy_in_path = shutil.which("ilspycmd")
         if ilspy_in_path:
@@ -75,8 +63,8 @@ class DotNetDecompiler:
         
         return None
 
+    # --- Verifica disponibilidade do comando ILSpy CLI ---
     def is_available(self) -> bool:
-        """Verifica se o comando ILSpy CLI parece estar disponível."""
         # Verificar se o caminho existe
         if Path(self.ilspy_path).exists():
             return True
@@ -97,8 +85,8 @@ class DotNetDecompiler:
         except (FileNotFoundError, subprocess.TimeoutExpired):
             return False
     
+    # --- Verifica CLR header (assembly .NET válido) ---
     def _is_dotnet_assembly(self, assembly_path: Path) -> bool:
-        """Verifica se o ficheiro é um assembly .NET válido"""
         pe = None
         try:
             pe = pefile.PE(str(assembly_path))
@@ -120,8 +108,8 @@ class DotNetDecompiler:
                     logger.debug("Falha ao fechar pefile em %s", assembly_path, exc_info=True)
 
     @staticmethod
+    # --- Mensagens para PE sem metadados .NET (nativo, AOT) ---
     def _no_managed_metadata_result() -> Dict[str, str]:
-        """Mensagens curtas para PE sem metadados .NET (nativo, AOT, etc.)."""
         error_short = (
             "Este ficheiro não contém metadados .NET (ILSpy não consegue descompilar). "
             "Pode ser: executável nativo (C/C++), ou .NET compilado com Native AOT.\n\n"
@@ -138,8 +126,8 @@ class DotNetDecompiler:
         }
 
     @staticmethod
+    # --- Reduz stderr do ILSpy a uma linha legível ---
     def _summarize_ilspy_error(error_msg: str, returncode: int) -> str:
-        """Reduz stderr do ILSpy a uma linha legível para logs e relatório."""
         lines = [ln.strip() for ln in error_msg.splitlines() if ln.strip()]
         headline = ""
         for ln in lines:
@@ -158,13 +146,8 @@ class DotNetDecompiler:
             return f"ILSpy retornou código {returncode}: {headline}"
         return f"ILSpy retornou código {returncode}."
 
+    # --- Descompila assembly .NET via ILSpy CLI ---
     def decompile(self, assembly_path: str) -> Dict:
-        """
-        Descompila um assembly .NET usando ILSpy CLI.
-
-        :param assembly_path: Caminho para o .exe/.dll .NET
-        :return: dict com informação sobre o processo e o diretório de saída
-        """
         assembly = Path(assembly_path)
         result: Dict = {
             "success": False,
@@ -194,8 +177,9 @@ class DotNetDecompiler:
             result["error"] = meta["error_short"]
             return result
 
+# --- Helper interno: write erro pasta ---
         def _write_erro_pasta(msg: str) -> None:
-            """Escreve um ficheiro na pasta de saída para não ficar vazia e explicar o erro."""
+            # *Ficheiro na pasta de saída explica o erro quando descompilação falha*
             try:
                 (output_dir / "_erro_descompilacao.txt").write_text(
                     "Descompilação não concluída.\n\n" + msg,
@@ -351,8 +335,8 @@ class DotNetDecompiler:
                 logger.debug("Falha ao escrever erro ILSpy (inesperado) em %s", output_dir, exc_info=True)
             return result
     
+    # --- Consolida todos os ficheiros .cs num único ficheiro ---
     def _consolidate_cs_files(self, cs_files: list, output_file: Path):
-        """Consolida todos os ficheiros .cs num único ficheiro"""
         with open(output_file, 'w', encoding='utf-8') as out:
             out.write(f"// Código C# descompilado consolidado\n")
             out.write(f"// Total de ficheiros: {len(cs_files)}\n\n")

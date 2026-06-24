@@ -1,7 +1,10 @@
-﻿# 7) Aguardar relatório via cópia guest->host (PsDirect / Copy-VMFile)
+﻿# --- Script: PhaseE-WaitReport.ps1 ---
+# --- Espera activa pelo relatório do guest ---
+
 Write-LogHost "      A aguardar relatório (cópia guest->host, timeout: ${reportTimeoutSeconds}s)..."
 Add-LogLine -Path $HostLogPath -Value "Report wait begin: analysisSuccess=$analysisSuccess"
 
+# --- Variáveis de controlo do ciclo de espera ---
 $waitSec = $reportTimeoutSeconds
 $guestDonePath = "$VMScriptsPath\guest_analysis_done.txt"
 $guestReportPath = "C:\analysis.txt"
@@ -20,6 +23,7 @@ $guestState = $null
 $waitAbortedEarly = $false
 $waitAbortReason = ""
 
+# --- Função auxiliar: tentar copiar relatório do guest ---
 function Try-PullGuestReport {
     param(
         [bool] $AllowPartial,
@@ -59,11 +63,14 @@ function Try-PullGuestReport {
     return $false
 }
 
+# --- Ciclo principal de espera ---
 if ($waitSec -gt 0) {
     $waitDeadline = (Get-Date).AddSeconds($waitSec)
     $lastStatusLog = Get-Date
     while (-not $reportReceived -and (Get-Date) -lt $waitDeadline) {
         $nowUtc = [DateTime]::UtcNow
+
+        # --- Diagnóstico periódico do estado da análise no guest ---
         if ($cred -is [pscredential] -and ($nowUtc - $lastGuestDiagUtc).TotalSeconds -ge $guestDiagIntervalSeconds) {
             $lastGuestDiagUtc = $nowUtc
             try {
@@ -80,6 +87,7 @@ if ($waitSec -gt 0) {
                     $reportUnchangedSince = $null
                 }
 
+                # *deteta relatório estagnado (bytes inalterados)*
                 if ($guestState.reportBytes -eq $lastReportBytes) {
                     if ($guestState.reportBytes -gt 0 -and -not $reportUnchangedSince) {
                         $reportUnchangedSince = Get-Date
@@ -100,6 +108,7 @@ if ($waitSec -gt 0) {
             }
         }
 
+        # --- Aborto antecipado: análise nunca arrancou no guest ---
         if ($analysisSuccess -and $detachedAnalysisPid -gt 0 -and (Get-Date) -gt $launchNoLifeDeadline) {
             $noLife = $guestState -and (-not $guestPidSeenRunning) -and ($guestState.reportBytes -le 0) -and (-not $guestState.doneFile)
             if ($noLife) {
@@ -112,6 +121,7 @@ if ($waitSec -gt 0) {
             }
         }
 
+        # --- Aborto antecipado: lançamento falhou no host ---
         if (-not $analysisSuccess) {
             Write-LogWarning "      Lançamento da análise falhou no host. A abortar espera."
             Add-LogLine -Path $HostLogPath -Value "Early abort: host launch failed"
@@ -120,6 +130,7 @@ if ($waitSec -gt 0) {
             break
         }
 
+        # --- Deteção de análise parada ou estagnada no guest ---
         $guestInactiveLongEnough = ($guestPidDeadSince -and ((Get-Date) - $guestPidDeadSince).TotalSeconds -ge $guestPidDeadGraceSeconds)
         $reportFrozenLongEnough = ($reportUnchangedSince -and ((Get-Date) - $reportUnchangedSince).TotalSeconds -ge $guestStallAbortSeconds)
         $guestDeadLongEnough = ($guestPidDeadSince -and ((Get-Date) - $guestPidDeadSince).TotalSeconds -ge $guestStallAbortSeconds)
@@ -130,6 +141,7 @@ if ($waitSec -gt 0) {
 
         if ($guestAnalysisStalled) {
             $stallDetail = "pid morto/inactivo há $([int]((Get-Date) - $guestPidDeadSince).TotalSeconds)s, relatório=$($guestState.reportBytes) bytes, sem REPORT_END;"
+            # *tenta recuperar relatório parcial antes de abortar*
             if ($guestState.reportBytes -gt 200) {
                 if (Try-PullGuestReport -AllowPartial:$true -Reason "análise parada no guest ($stallDetail)") {
                     $reportReceived = $true
@@ -143,6 +155,7 @@ if ($waitSec -gt 0) {
             break
         }
 
+        # --- Tentativa periódica de copiar relatório quando o guest termina ---
         $guestLikelyCrashed = $guestInactiveLongEnough -and (
             $guestState.doneFile -or
             (-not [string]::IsNullOrWhiteSpace($guestState.crashLogTail))
@@ -171,6 +184,7 @@ if ($waitSec -gt 0) {
             }
         }
 
+        # --- Heartbeat de progresso a cada 15 segundos ---
         if (((Get-Date) - $lastStatusLog).TotalSeconds -ge 15) {
             $remain = [int]($waitDeadline - (Get-Date)).TotalSeconds
             Write-LogHost "      [WAIT] resto~${remain}s doneFile=$($guestState.doneFile) reportBytes=$($guestState.reportBytes)"
@@ -181,6 +195,7 @@ if ($waitSec -gt 0) {
         Start-Sleep -Seconds 2
     }
 
+    # --- Última tentativa antes de declarar timeout ---
     if (-not $reportReceived -and (Try-PullGuestReport -AllowPartial:$true -Reason "última tentativa antes de timeout")) {
         $reportReceived = $true
     }

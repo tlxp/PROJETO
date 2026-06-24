@@ -1,5 +1,8 @@
+// --- Módulo: AgentLimits.cs ---
+
 namespace VmAgent.Configuration;
 
+// --- Limites e constantes do agente ---
 internal static class AgentLimits
 {
     public const long MaxUploadBytes = 200L * 1024 * 1024;

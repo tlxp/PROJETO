@@ -1,6 +1,6 @@
-﻿// Benign VM Test — programa INOFENSIVO para validar a sandbox/relatórios do RAT Analyzer.
-// Ver README.md e BenignVmTestPaths.cs para os caminhos esperados no relatório.
+﻿// --- Módulo: Program.cs ---
 
 using BenignVmTest;
 
+// *ponto de entrada — delega execução ao runner inofensivo*
 return BenignVmTestRunner.Run();

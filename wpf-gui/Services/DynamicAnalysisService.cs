@@ -1,3 +1,4 @@
+﻿// --- Módulo: DynamicAnalysisService.cs ---
 using System;
 using System.IO;
 using System.Net.Http;
@@ -11,7 +12,7 @@ using RatAnalyzer.Desktop.Localization;
 
 namespace RatAnalyzer.Desktop.Services;
 
-/// <summary>Publica relatórios de análise dinâmica (VM Hyper-V) no backend FastAPI.</summary>
+// --- Publica relatórios de análise dinâmica (VM Hyper-V) no backend FastAPI ---
 public sealed class DynamicAnalysisService
 {
     private static readonly JsonSerializerOptions JsonInsensitive = new()
@@ -24,7 +25,7 @@ public sealed class DynamicAnalysisService
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
-    /// <summary>Marca um job existente (ou cria um novo) como análise dinâmica em curso.</summary>
+    // --- Marca um job existente (ou cria um novo) como análise dinâmica em curso ---
     public async Task<string> MarkRunningAsync(
         string? linkedJobId,
         string fileName,
@@ -49,7 +50,7 @@ public sealed class DynamicAnalysisService
         return await PostUploadAsync(client, payload, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Publica o relatório textual transferido da VM e devolve o jobId associado.</summary>
+    // --- Publica o relatório textual transferido da VM e devolve o jobId associado ---
     public async Task<string> PublishReportAsync(
         string? linkedJobId,
         string reportPath,

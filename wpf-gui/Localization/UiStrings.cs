@@ -1,9 +1,10 @@
+﻿// --- Módulo: UiStrings.cs ---
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
 namespace RatAnalyzer.Desktop.Localization;
 
-/// <summary>Strings ligadas ao XAML via {Binding Source={x:Static loc:UiStrings.Instance}, Path=...}</summary>
+// --- Strings ligadas ao XAML via {Binding Source={x:Static loc:UiStrings.Instance}, Path=...} ---
 public sealed class UiStrings : INotifyPropertyChanged
 {
     public static UiStrings Instance { get; } = new();

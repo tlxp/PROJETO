@@ -1,4 +1,7 @@
-# Resumo final
+# --- Script: PhaseG-Summary.ps1 ---
+# Fase G: resumo final após conclusão bem-sucedida do first-time setup.
+
+# --- Resumo final ---
 Write-LogHost ""
 Write-LogHost "=========================================================="
 Write-LogHost "=== Primeira entrada concluida com sucesso. ==="
@@ -8,6 +11,6 @@ Write-LogHost '    Internet:             REMOVIDA (sem adaptadores externos na V
 Write-LogHost '    Sysmon:               INSTALADO (telemetria primária no guest)'
 Write-LogHost ('    Snapshot {0}: CRIADO (VM desligada, isolamento confirmado)' -f $SnapshotName)
 Write-LogHost ""
-# Exemplo abaixo entre aspas simples (evita quebra do parser com maior ou menor nas mensagens).
+# *Próximo passo sugerido: executar amostra na sandbox*
 Write-LogHost '    Proximo passo: .\04-Run-Sample.ps1 -SamplePath C:\caminho\para\amostra.exe'
 Write-LogHost ""

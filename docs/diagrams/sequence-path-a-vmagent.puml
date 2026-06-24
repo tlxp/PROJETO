@@ -1,3 +1,4 @@
+' --- Diagrama: sequência Caminho A (vm-agent HTTP) ---
 @startuml
 title Sequência — Caminho A (vm-agent HTTP)
 autonumber
@@ -18,11 +19,13 @@ API -> DB : create_job (queued)
 API --> FE : jobId
 
 API -> VMO : pipeline dinâmica
+' *Restore snapshot e arranque da VM isolada*
 VMO -> DRV : restore + start VM
 DRV -> HV : Restore-VMSnapshot CleanState
 DRV -> HV : Start-VM
 DRV -> AGENT : GET /health\nX-Agent-Token
 
+' *Ciclo upload → run → report via HTTP*
 DRV -> AGENT : POST /samples/upload
 AGENT --> DRV : sampleId
 

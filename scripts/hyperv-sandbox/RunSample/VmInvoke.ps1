@@ -1,5 +1,6 @@
-# Execução da análise dentro da VM.
-# Carregado via dot-sourcing (mesmo scope).
+# --- Script: VmInvoke.ps1 ---
+# --- Execução da análise destacada dentro da VM ---
+# *carregado via dot-sourcing no mesmo scope do orquestrador*
 #
 # A análise é lançada de forma DESTACADA (Launch-AnalysisDetached.ps1): um processo
 # powershell.exe separado dentro da VM corre Run-MalwareAnalysis.ps1 e o host devolve
@@ -7,6 +8,7 @@
 # (VMBus) mesmo que a sessão caia a meio ("The Hyper-V socket target process has ended.").
 # O relatório é copiado para o host via PsDirect após conclusão no guest.
 
+# --- Função: Start-DetachedAnalysisInVm ---
 function Start-DetachedAnalysisInVm {
     param(
         [string] $VM,
@@ -23,6 +25,7 @@ function Start-DetachedAnalysisInVm {
     $vmLauncherPath = Join-Path $VmScriptDir "Launch-AnalysisDetached.ps1"
     $vmAnalysisPath = Join-Path $VmScriptDir "Run-MalwareAnalysis.ps1"
 
+    # --- Configuração do lançamento ---
     $launchConfig = [ordered]@{
         AnalysisScriptPath = $vmAnalysisPath
         WorkingDirectory   = $VmScriptDir
@@ -39,7 +42,8 @@ function Start-DetachedAnalysisInVm {
     }
     $launchJson = $launchConfig | ConvertTo-Json -Compress
 
-    # Escrever launch_params.json dentro da VM (evita scriptblocks remotos grandes).
+    # --- Escrita de launch_params.json na VM ---
+    # *evita scriptblocks remotos grandes; o launcher lê o JSON localmente*
     Invoke-Command -VMName $VM -Credential $Cred -ScriptBlock {
         param($Path, $Json)
         $dir = Split-Path -Parent $Path
@@ -47,8 +51,8 @@ function Start-DetachedAnalysisInVm {
         Set-Content -LiteralPath $Path -Value $Json -Encoding UTF8
     } -ArgumentList $vmConfigPath, $launchJson -ErrorAction Stop | Out-Null
 
-    # Lançar a análise destacada. Retorna depressa (o launcher só estabiliza o
-    # processo filho ~1s e devolve JSON com o PID destacado).
+    # --- Lançamento destacado ---
+    # *o launcher estabiliza o processo filho ~1s e devolve JSON com o PID*
     $launchOut = Invoke-Command -VMName $VM -Credential $Cred -ScriptBlock {
         param($LauncherPath, $ConfigPath)
         if (-not (Test-Path -LiteralPath $LauncherPath)) {

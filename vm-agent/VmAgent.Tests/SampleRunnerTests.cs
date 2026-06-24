@@ -1,12 +1,17 @@
+// --- Módulo: SampleRunnerTests.cs ---
+
 using VmAgent.Configuration;
 using VmAgent.Models;
 using VmAgent.Services;
 using VmAgent.State;
 using Xunit;
+
 namespace VmAgent.Tests;
 
+// --- Testes do executor de amostras ---
 public sealed class SampleRunnerTests
 {
+    // --- Sem amostra carregada deve devolver BadRequest ---
     [Fact]
     public async Task RunAsync_WithoutSample_ReturnsBadRequest()
     {
@@ -17,6 +22,7 @@ public sealed class SampleRunnerTests
         Assert.Contains("BadRequest", result.GetType().Name, StringComparison.Ordinal);
     }
 
+    // --- Ficheiro inexistente no disco deve devolver BadRequest ---
     [Fact]
     public async Task RunAsync_MissingFileOnDisk_ReturnsBadRequest()
     {
@@ -33,6 +39,7 @@ public sealed class SampleRunnerTests
         Assert.Contains("BadRequest", result.GetType().Name, StringComparison.Ordinal);
     }
 
+    // --- Executa utilitário Windows quando disponível ---
     [Fact]
     public async Task RunAsync_ExecutesWindowsUtility_WhenAvailable()
     {

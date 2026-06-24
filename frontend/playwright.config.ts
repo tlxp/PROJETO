@@ -1,5 +1,7 @@
+// --- Módulo: playwright.config.ts ---
 import { defineConfig, devices } from "@playwright/test";
 
+// --- Configuração dos testes end-to-end (Playwright) ---
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -18,6 +20,7 @@ export default defineConfig({
     },
   ],
   webServer: {
+    // *arranca o dev server Vite antes dos testes e2e*
     command: "npm run dev",
     url: "http://localhost:8080",
     reuseExistingServer: !process.env.CI,

@@ -1,3 +1,4 @@
+﻿// --- Módulo: VmAnalysisDialogsHost.cs ---
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -8,7 +9,7 @@ using RatAnalyzer.Desktop.ViewModels;
 
 namespace RatAnalyzer.Desktop.Views;
 
-/// <summary>Implementação WPF de <see cref="IVmAnalysisDialogs"/> para a janela de análise VM.</summary>
+// --- Implementação WPF de IVmAnalysisDialogs para a janela de análise VM ---
 internal sealed class VmAnalysisDialogsHost : IVmAnalysisDialogs
 {
     private readonly Window _owner;

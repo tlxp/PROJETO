@@ -1,10 +1,12 @@
+﻿// --- Módulo: VmGuestCredentials.cs ---
 using System;
 
 namespace RatAnalyzer.Desktop.Services;
 
+// --- Par utilizador/palavra-passe da VM guest ---
 public sealed record VmGuestCredentials(string Username, string Password);
 
-/// <summary>Credenciais do utilizador Windows na VM guest (sessão ou variáveis de ambiente).</summary>
+// --- Armazena credenciais da VM (env ou sessão da aplicação) ---
 public static class VmGuestCredentialStore
 {
     private static VmGuestCredentials? _session;

@@ -1,4 +1,5 @@
-"""Testes do endpoint /api/analysis/upload_static (running + merge com job VM)."""
+# --- Módulo: test_upload_static_running ---
+# Testes do endpoint /api/analysis/upload_static (running + merge com job VM).
 
 import uuid
 
@@ -9,11 +10,14 @@ import api
 
 
 @pytest.fixture()
+# --- Fixture: cliente HTTP de teste ---
 def client():
     return TestClient(api.app)
 
 
+# --- Testes de UploadStaticRunning ---
 class TestUploadStaticRunning:
+# --- Teste: verifica running em job vm existente ---
     def test_running_em_job_vm_existente(self, client):
         dynamic = client.post(
             "/api/analysis/upload_dynamic",
@@ -44,6 +48,7 @@ class TestUploadStaticRunning:
         assert detail["staticResult"]["staticProgress"] == 12.5
         assert "relatório VM" in detail["dynamicResult"]["dynamicReportText"]
 
+# --- Teste: verifica cria job running sem job id ---
     def test_cria_job_running_sem_job_id(self, client):
         running = client.post(
             "/api/analysis/upload_static",

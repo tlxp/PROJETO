@@ -1,3 +1,7 @@
+﻿// --- Módulo: StartupSequence ---
+// --- Sequência de arranque: backend (uvicorn:8000) e frontend (npm:8080) ---
+// *Processos geridos ficam registados para o ShutdownManager terminar ao fechar*
+
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -11,11 +15,6 @@ using RatAnalyzer.Desktop.Localization;
 
 namespace RatAnalyzer.Desktop.Bootstrap;
 
-/// <summary>
-/// Sequência de arranque do ambiente: verifica/inicia o backend (uvicorn, porta 8000) e o dev server
-/// do frontend (npm run dev, porta 8080), garantindo dependências Python/npm. Os processos arrancados
-/// pelo WPF ficam registados aqui para que o <see cref="ShutdownManager"/> os possa terminar ao fechar.
-/// </summary>
 public static class StartupSequence
 {
     private const string ApiBaseUrl = AppConstants.ApiBaseUrl;
@@ -26,11 +25,7 @@ public static class StartupSequence
     // Dev server do frontend (npm run dev) gerido pelo WPF.
     private static Process? _managedFrontendProcess;
 
-    /// <summary>
-    /// Executa a sequência completa de arranque: verifica/inicia backend (porta 8000),
-    /// verifica/inicia frontend (porta 8080). Usado pela LoadingView
-    /// para que o WPF abra as portas ao iniciar. Ao fechar, ShutdownManager liberta-as.
-    /// </summary>
+    // --- Executa arranque completo (backend + frontend em paralelo) ---
     public static async Task RunFullStartupSequenceAsync(Action<string>? addLog = null)
     {
         void Log(string m) => addLog?.Invoke(m);
@@ -104,19 +99,14 @@ public static class StartupSequence
         return null;
     }
 
-    /// <summary>
-    /// Considera dependências NPM satisfeitas se existir vite em node_modules (necessário para npm run dev).
-    /// Evita correr npm install em cada arranque.
-    /// </summary>
+    // --- Verifica se node_modules tem vite (evita npm install em cada arranque) ---
     private static bool FrontendNodeModulesLooksComplete(string frontendDir)
     {
         var viteDir = Path.Combine(frontendDir, "node_modules", "vite");
         return Directory.Exists(viteDir);
     }
 
-    /// <summary>
-    /// Garante dependências pip do backend (requirements.lock preferido). Se já instaladas, o pip sai rapidamente.
-    /// </summary>
+    // --- Garante dependências pip do backend (requirements.lock preferido) ---
     internal static async Task EnsureBackendPythonDependenciesAsync(string backendDir, Action<string>? addLog)
     {
         var lockPath = Path.Combine(backendDir, "requirements.lock");
@@ -183,9 +173,7 @@ public static class StartupSequence
         addLog?.Invoke(LocalizationManager.Get(LocKeys.LogPipOk));
     }
 
-    /// <summary>
-    /// Corre npm install só se node_modules estiver incompleto (vite em falta).
-    /// </summary>
+    // --- Corre npm install só se node_modules estiver incompleto ---
     internal static async Task EnsureFrontendNpmDependenciesAsync(string frontendDir, Action<string>? addLog)
     {
         if (FrontendNodeModulesLooksComplete(frontendDir))
@@ -448,7 +436,7 @@ public static class StartupSequence
         }
     }
 
-    /// <summary>Copia variáveis de ambiente do processo WPF para processos filhos.</summary>
+    // --- Copia variáveis de ambiente do processo WPF para filhos ---
     private static void InheritParentEnvironment(ProcessStartInfo psi)
     {
         foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
@@ -460,7 +448,7 @@ public static class StartupSequence
         }
     }
 
-    /// <summary>Propaga segredos de produção ao uvicorn (RATANALYZER_* já herdados do pai).</summary>
+    // --- Propaga segredos RATANALYZER_* ao uvicorn filho ---
     private static void PropagateBackendSecrets(ProcessStartInfo psi, Action<string>? addLog)
     {
         var requireToken = string.Equals(
@@ -482,7 +470,7 @@ public static class StartupSequence
         }
     }
 
-    /// <summary>Alinha VITE_API_TOKEN com RATANALYZER_API_TOKEN quando o frontend não define o seu.</summary>
+    // --- Alinha VITE_API_TOKEN com RATANALYZER_API_TOKEN se o frontend não definir ---
     private static void PropagateFrontendSecrets(ProcessStartInfo psi)
     {
         if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("VITE_API_TOKEN")))

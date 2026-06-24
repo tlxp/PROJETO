@@ -1,3 +1,4 @@
+﻿// --- Módulo: VmAnalysisWindow.xaml.cs ---
 using System;
 using System.ComponentModel;
 using System.Threading.Tasks;
@@ -8,6 +9,7 @@ using RatAnalyzer.Desktop.ViewModels;
 
 namespace RatAnalyzer.Desktop.Views;
 
+// --- Janela de análise comportamental em VM com log em tempo real ---
 public partial class VmAnalysisWindow : Window
 {
     private readonly VmAnalysisViewModel _viewModel;
@@ -43,11 +45,13 @@ public partial class VmAnalysisWindow : Window
         Loaded += OnLoaded;
         Closing += (_, e) =>
         {
+            // *Impede fecho acidental enquanto análise decorre*
             if (!_viewModel.TryCancelClose())
                 e.Cancel = true;
         };
     }
 
+    // --- Arranca pipeline VM ao carregar a janela ---
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         await _viewModel.RunAsync();
@@ -59,6 +63,7 @@ public partial class VmAnalysisWindow : Window
             ScrollLogToEnd();
     }
 
+    // --- Auto-scroll do terminal para a última linha ---
     private void ScrollLogToEnd()
     {
         if (TerminalScrollViewer == null)

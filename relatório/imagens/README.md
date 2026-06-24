@@ -36,9 +36,23 @@ python ..\..\scripts\ci\sync_diagrams_to_report.py --check   # equivalente CI (j
 
 O job **`diagrams`** no CI falha se algum PNG estiver em falta ou desatualizado face a `docs/diagrams/`.
 
-## Capítulo 5 — screenshots (opcional)
+## Capítulo 5 — screenshots (obrigatórios para entrega)
 
-O PDF compila sem estes ficheiros (`\IfFileExists` no `main.tex`). Quando existirem, devem reflectir o **layout actual** da aplicação.
+Coloque os PNG nesta pasta. O `main.tex` mostra caixas placeholder até os ficheiros existirem.
+
+| Ficheiro | Como capturar |
+|----------|---------------|
+| `fig-5-1-web-upload.png` | `npm run dev` → `http://localhost:8080` → ecrã inicial com zona *Drop & Analyze*; incluir seletor de idioma ou `?lang=pt` |
+| `fig-5-2-web-results.png` | Após analisar um `.exe` (ex.: `benign-vm-test.exe`): score visível, painel relatório, pseudo-C ou IL; idealmente permalink `/analysis/{jobId}` |
+| `fig-5-3-wpf-dashboard.png` | `dotnet run --project wpf-gui` (admin) → `MainDashboardView` com tema Signal (obsidian + teal) e botão *Idioma* |
+| `fig-5-4-hyperv-vm.png` | Hyper-V Manager → VM `MalwareSandbox` em execução ou parada, snapshot `CleanState` visível no painel Checkpoints |
+
+### Checklist antes de compilar o PDF final
+
+- [ ] `logo.png` na capa (UBI ou identidade visual do projecto)
+- [ ] `fig-5-1` a `fig-5-4` capturados com resolução ≥ 1920 px de largura
+- [ ] Texto legível nas capturas (zoom 100--125 % no browser)
+- [ ] Sem tokens API, passwords ou dados sensíveis visíveis
 
 | Ficheiro | Conteúdo sugerido | Notas para captura |
 |----------|-------------------|-------------------|

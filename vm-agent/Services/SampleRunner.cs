@@ -1,3 +1,5 @@
+// --- Módulo: SampleRunner.cs ---
+
 using System.Diagnostics;
 using System.Text;
 using VmAgent.Configuration;
@@ -6,8 +8,10 @@ using VmAgent.State;
 
 namespace VmAgent.Services;
 
+// --- Executor de amostras na VM ---
 internal static class SampleRunner
 {
+    // --- Executa a amostra carregada e captura stdout/stderr ---
     public static async Task<IResult> RunAsync(
         RunRequest req,
         AnalysisState state,
@@ -18,6 +22,7 @@ internal static class SampleRunner
             return Results.BadRequest(new { detail = "Nenhuma amostra carregada. Chame /api/upload primeiro." });
         }
 
+        // *aplica timeout dentro dos limites configurados*
         var timeoutSeconds = req.TimeoutSeconds > 0 ? req.TimeoutSeconds : AgentLimits.DefaultRunTimeoutSeconds;
         timeoutSeconds = Math.Min(timeoutSeconds, AgentLimits.MaxRunTimeoutSeconds);
 
@@ -43,6 +48,7 @@ internal static class SampleRunner
         var stdout = new StringBuilder();
         var stderr = new StringBuilder();
 
+        // *acumula saída até ao limite máximo de caracteres*
         proc.OutputDataReceived += (_, e) =>
         {
             if (e.Data is not null && stdout.Length < AgentLimits.MaxCapturedOutputChars)
@@ -74,7 +80,7 @@ internal static class SampleRunner
             }
             catch
             {
-                // ignorar falha ao terminar processo após timeout
+                // *ignora falha ao terminar processo após timeout*
             }
 
             state.LastBehavior["status"] = "timeout";

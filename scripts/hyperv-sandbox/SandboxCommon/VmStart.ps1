@@ -1,4 +1,7 @@
-﻿function Test-SandboxVmHostLowMemoryError {
+﻿# --- Script: VmStart.ps1 ---
+
+# --- Deteção de erro de memória insuficiente no host ---
+function Test-SandboxVmHostLowMemoryError {
     param([object] $Err)
     if (-not $Err) { return $false }
     $ex = $null
@@ -16,6 +19,7 @@
         return $false
     }
     $wordPattern = "0x800705AA|0x8007000E|recursos de sistema|insufficient system resources|not enough memory|cannot allocate|mem[óo]ria insuficiente|n[aã]o existe mem[óo]ria|out of memory"
+    # *Percorrer cadeia de exceções internas procurando códigos/mensagens de RAM*
     while ($ex) {
         $m = [string]$ex.Message
         $text += " $m"
@@ -30,6 +34,7 @@
     return $false
 }
 
+# --- Arranque da VM com retry por falta de RAM ---
 function Start-SandboxVM {
     param(
         [string] $VMName,
@@ -61,7 +66,7 @@ function Start-SandboxVM {
                 $firstErr = $_
                 if (-not (Test-SandboxVmHostLowMemoryError $firstErr)) { throw }
 
-                # Best-effort: reduzir StartupBytes (e Minimum se DynamicMemory) e re-tentar.
+                # --- Retry com redução de StartupBytes ---
                 try {
                     $snapMem = Get-VMMemory -VMName $VMName -ErrorAction Stop
                     $originalStartupBytes = [int64]$snapMem.Startup
@@ -138,6 +143,7 @@ function Start-SandboxVM {
                     }
                 }
 
+                # *Restaurar RAM original se todas as tentativas falharam*
                 if (-not $started) {
                     if ($changedStartup -and $null -ne $originalStartupBytes -and $originalStartupBytes -gt 0) {
                         try {
@@ -156,13 +162,13 @@ function Start-SandboxVM {
 
     if ($script:DryRun) { return }
 
-    # Espera pelo arranque: com credenciais usa PowerShell Direct (mesma lógica que -WaitForPowerShellDirect)
+    # --- Espera pelo arranque do guest ---
     $usePsDirect = ($WaitForPowerShellDirect -or $Credential -or ($CredentialCandidates -and $CredentialCandidates.Count -gt 0))
     if ($usePsDirect) {
         if (-not $Credential -and (-not $CredentialCandidates -or $CredentialCandidates.Count -eq 0)) {
             throw "Start-SandboxVM: espera por PowerShell Direct requer -Credential ou -CredentialCandidates (ou use apenas -BootWaitSeconds sem credenciais)."
         }
-        # Espera sem timeout: aguardar indefinidamente até o PowerShell Direct ficar OK.
+        # *Espera sem timeout: aguardar indefinidamente até o PowerShell Direct ficar OK*
         Write-LogHost "A aguardar arranque da VM (PowerShell Direct, verificação a cada 2s, sem timeout)..."
         return (Wait-VMPowerShellDirectReady -VMName $VMName -Credential $Credential -CredentialCandidates $CredentialCandidates -TimeoutSeconds 0 -LogPath $LogPath -LogIntervalSeconds 2)
     }
@@ -171,6 +177,7 @@ function Start-SandboxVM {
     Start-Sleep -Seconds $BootWaitSeconds
 }
 
+# --- Espera pelo Guest Service ficar operacional ---
 function Wait-SandboxGuestServiceReady {
     param(
         [string] $VMName,
@@ -184,7 +191,7 @@ function Wait-SandboxGuestServiceReady {
             $svcName = Get-SandboxGuestServiceName -VMName $VMName
             if (-not $svcName) { return $false }
             $svc = Get-VMIntegrationService -VMName $VMName -Name $svcName -ErrorAction SilentlyContinue
-            # Em alguns hosts, os campos são PrimaryStatusDescription/SecondaryStatusDescription
+            # *Em alguns hosts, os campos são PrimaryStatusDescription/SecondaryStatusDescription*
             $enabled = $svc -and $svc.Enabled
             $ok = $false
             if ($svc) {

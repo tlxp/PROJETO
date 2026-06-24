@@ -1,17 +1,5 @@
-"""
-Driver Proxmox (EXPERIMENTAL — skeleton, não usar em produção).
-
-AVISO: sem guia de configuração, sem testes de integração no CI e sem suporte operacional.
-Para análise dinâmica real, use SANDBOX_VM_DRIVER=hyperv (Caminho A) ou o pipeline PowerShell
-(Caminho B). Ver docs/README.md § Análise dinâmica.
-
-Este driver fala com:
-  - API do Proxmox (rollback snapshot, start VM)
-  - VM Agent (upload/run/report)
-
-Ele é "fail-safe": se faltar configuração ou o agent não responder, devolve erro
-explícito e não tenta "inventar" resultados.
-"""
+# --- Módulo: proxmox ---
+# Driver Proxmox (EXPERIMENTAL): API Proxmox + VM Agent para análise dinâmica.
 
 from __future__ import annotations
 
@@ -28,19 +16,20 @@ if TYPE_CHECKING:
 from .base import DynamicAnalysisOutput
 
 
+# --- Headers de autenticação do VM Agent ---
 def _agent_headers() -> Dict[str, str]:
-    """Header de autenticação do VM agent (env VM_AGENT_TOKEN, opcional)."""
     token = (os.environ.get("VM_AGENT_TOKEN") or "").strip()
     if token:
         return {"X-Agent-Token": token}
     return {}
 
 
+# --- URL-encode de segmento de path da API Proxmox ---
 def _q(value: Any) -> str:
-    """URL-encode de um segmento de path da API Proxmox."""
     return urllib.parse.quote(str(value), safe="")
 
 
+# --- Configuração do driver Proxmox ---
 @dataclass(frozen=True)
 class ProxmoxConfig:
     api_url: str
@@ -51,21 +40,22 @@ class ProxmoxConfig:
     snapshot: str
     agent_base_url: str
 
-    # Execução / timeouts
     http_timeout_seconds: int = 20
-    # Timeout dedicado (mais alto) para operações de snapshot/start.
     vm_op_timeout_seconds: int = 120
     boot_wait_seconds: int = 120
     agent_wait_seconds: int = 120
     dynamic_timeout_seconds: int = 300
 
 
+# --- Driver de análise dinâmica via Proxmox ---
 class ProxmoxVMDriver:
     name = "proxmox"
 
+# --- Helper interno: init   ---
     def __init__(self, cfg: ProxmoxConfig):
         self.cfg = cfg
 
+    # --- Pipeline completo: rollback → start → upload → run → report ---
     def run(self, job: "AnalysisJob") -> DynamicAnalysisOutput:
         self._validate_cfg()
 
@@ -73,31 +63,29 @@ class ProxmoxVMDriver:
         vmid = _q(self.cfg.vmid)
         snapshot = _q(self.cfg.snapshot)
 
-        # 1) Reverter snapshot limpo
+        # *1) Reverter snapshot limpo*
         self._proxmox_post(
             f"/api2/json/nodes/{node}/qemu/{vmid}/snapshot/{snapshot}/rollback",
             json={},
             timeout=self.cfg.vm_op_timeout_seconds,
         )
 
-        # 2) Garantir VM ligada
+        # *2) Garantir VM ligada*
         self._proxmox_post(
             f"/api2/json/nodes/{node}/qemu/{vmid}/status/start",
             json={},
             timeout=self.cfg.vm_op_timeout_seconds,
         )
 
-        # 3) Esperar o boot da VM e que o agent esteja pronto.
-        #    boot_wait_seconds dá tempo ao SO convidado; o polling decorre
-        #    durante esse período (sai mais cedo se o agent responder).
+        # *3) Esperar boot e agent pronto*
         self._wait_for_agent_ready(
             total_wait_seconds=self.cfg.boot_wait_seconds + self.cfg.agent_wait_seconds
         )
 
-        # 4) Upload do sample para o agent
+        # *4) Upload do sample*
         self._agent_upload(job)
 
-        # 5) Executar + recolher relatório
+        # *5) Executar e recolher relatório*
         self._agent_run(timeout_seconds=self.cfg.dynamic_timeout_seconds)
         behavior = self._agent_get_report()
 
@@ -109,6 +97,7 @@ class ProxmoxVMDriver:
 
         return DynamicAnalysisOutput(summary=summary, behavior=behavior if isinstance(behavior, dict) else {"raw": behavior})
 
+    # --- Validação de variáveis de ambiente obrigatórias ---
     def _validate_cfg(self) -> None:
         missing = []
         if not self.cfg.api_url:
@@ -128,12 +117,13 @@ class ProxmoxVMDriver:
         if missing:
             raise ValueError(f"Config Proxmox incompleta. Variáveis em falta: {', '.join(missing)}")
 
+    # --- Headers de autenticação Proxmox API Token ---
     def _proxmox_headers(self) -> Dict[str, str]:
-        # Formato: "PVEAPIToken=USER@REALM!TOKENID=SECRET"
         return {
             "Authorization": f"PVEAPIToken={self.cfg.token_id}={self.cfg.token_secret}",
         }
 
+    # --- POST à API Proxmox ---
     def _proxmox_post(self, path: str, json: Dict[str, Any], timeout: Optional[int] = None) -> Dict[str, Any]:
         url = self.cfg.api_url.rstrip("/") + path
         r = requests.post(
@@ -150,9 +140,11 @@ class ProxmoxVMDriver:
         except Exception:  # noqa: BLE001
             return {"raw": r.text}
 
+    # --- Construção de URL do VM Agent ---
     def _agent_url(self, path: str) -> str:
         return self.cfg.agent_base_url.rstrip("/") + path
 
+    # --- Polling até o VM Agent responder ---
     def _wait_for_agent_ready(self, total_wait_seconds: Optional[int] = None) -> None:
         wait = int(total_wait_seconds if total_wait_seconds is not None else self.cfg.agent_wait_seconds)
         deadline = time.time() + max(1, wait)
@@ -168,6 +160,7 @@ class ProxmoxVMDriver:
             time.sleep(2)
         raise TimeoutError(f"VM agent não ficou pronto a tempo. Último erro: {last_err}")
 
+    # --- Upload da amostra para o VM Agent ---
     def _agent_upload(self, job: "AnalysisJob") -> None:
         with open(job.sample_path, "rb") as f:
             files = {"file": (job.sample_path.name, f, "application/octet-stream")}
@@ -175,12 +168,14 @@ class ProxmoxVMDriver:
         if not r.ok:
             raise RuntimeError(f"Upload para VM agent falhou ({r.status_code}): {r.text[:500]}")
 
+    # --- Pedido de execução no VM Agent ---
     def _agent_run(self, timeout_seconds: int) -> None:
         payload = {"timeoutSeconds": int(timeout_seconds)}
         r = requests.post(self._agent_url("/api/run"), json=payload, headers=_agent_headers(), timeout=self.cfg.http_timeout_seconds)
         if not r.ok:
             raise RuntimeError(f"Execução no VM agent falhou ({r.status_code}): {r.text[:500]}")
 
+    # --- Obtenção do relatório comportamental ---
     def _agent_get_report(self) -> Any:
         r = requests.get(self._agent_url("/api/report"), headers=_agent_headers(), timeout=self.cfg.http_timeout_seconds)
         if not r.ok:
@@ -192,4 +187,3 @@ class ProxmoxVMDriver:
 
 
 __all__ = ["ProxmoxConfig", "ProxmoxVMDriver"]
-

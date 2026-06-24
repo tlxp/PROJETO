@@ -1,10 +1,11 @@
+// --- Módulo: GeminiIcon.tsx ---
 import React from "react";
 
 type GeminiIconProps = {
   className?: string;
 };
 
-/** Símbolo estilizado do Gemini (estrela de quatro pontas). */
+// --- Símbolo estilizado do Gemini (estrela de quatro pontas) ---
 const GeminiIcon: React.FC<GeminiIconProps> = ({ className }) => (
   <svg
     className={className}

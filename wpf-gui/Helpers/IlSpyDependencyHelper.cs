@@ -1,3 +1,4 @@
+﻿// --- Módulo: IlSpyDependencyHelper.cs ---
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -10,21 +11,15 @@ using RatAnalyzer.Desktop.Infrastructure;
 
 namespace RatAnalyzer.Desktop.Helpers;
 
-/// <summary>
-/// Oferece instalação guiada do ILSpy CLI (<c>ilspycmd</c>) quando <c>ILSPY_CMD_PATH</c> / PATH
-/// não resolvem para um executável válido — mesmo fluxo que <see cref="GhidraDependencyHelper"/>.
-/// </summary>
+// --- Oferece instalação guiada do ILSpy CLI quando ILSPY_CMD_PATH / PATH não resolvem ilspycmd ---
 internal static class IlSpyDependencyHelper
 {
     private const string ManualInstallUrl = "https://www.nuget.org/packages/ilspycmd";
 
-    /// <summary>Página oficial do runtime .NET 6 (necessário apenas para ilspycmd 8.x / alguns 9.x).</summary>
+    // --- Página oficial do runtime .NET 6 (necessário apenas para ilspycmd 8.x / alguns 9.x) ---
     private const string DotNet6RuntimeDownloadUrl = "https://dotnet.microsoft.com/download/dotnet/6.0";
 
-    /// <summary>
-    /// Versões do pacote NuGet <c>ilspycmd</c> por ordem. 10.x costuma alinhar com .NET 8 — evita exigir o runtime .NET 6
-    /// em separado (comum quando só existe SDK 8). 8.2.x é .NET 6; só usar se versões mais novas falharem no NuGet/SDK.
-    /// </summary>
+    // --- Versões do pacote ilspycmd por ordem: 10.x alinha com .NET 8; 8.2.x é .NET 6 ---
     private static readonly string[] IlSpyCmdPreferredVersions =
     [
         "10.0.0.8330",
@@ -32,18 +27,14 @@ internal static class IlSpyDependencyHelper
         "8.2.0.7535",
     ];
 
-    /// <summary>
-    /// Resolve um executável ilspycmd utilizável (variável de ambiente, pasta de tools globais .NET, PATH).
-    /// </summary>
+    // --- Resolve um executável ilspycmd utilizável (variável de ambiente, tools globais .NET, PATH) ---
     public static async Task<string?> GetEffectiveIlSpyExecutableAsync(CancellationToken ct = default)
     {
         var probe = await ProbeIlSpyAsync(ct).ConfigureAwait(false);
         return probe.Working ? probe.ExecutablePath : null;
     }
 
-    /// <summary>
-    /// Se já existir ILSpy CLI válido, regista no log. Caso contrário pergunta ao utilizador e tenta instalar.
-    /// </summary>
+    // --- Se já existir ILSpy CLI válido regista no log; senão pergunta ao utilizador e tenta instalar ---
     public static async Task TryOfferInstallIfMissingAsync(Action<string> log, CancellationToken ct)
     {
         var existing = await GetEffectiveIlSpyExecutableAsync(ct).ConfigureAwait(false);
@@ -222,9 +213,7 @@ internal static class IlSpyDependencyHelper
         return new ProbeResult(false, null);
     }
 
-    /// <summary>
-    /// Localiza o shim após <c>dotnet tool install</c> (nome fixo ou pesquisa na pasta tools).
-    /// </summary>
+    // --- Localiza o shim após dotnet tool install (nome fixo ou pesquisa na pasta tools) ---
     private static string? FindIlSpyShimOnDisk()
     {
         var expected = GetDotNetGlobalIlSpyCmdPath();
@@ -254,9 +243,7 @@ internal static class IlSpyDependencyHelper
             ".dotnet", "tools", "ilspycmd.exe");
     }
 
-    /// <summary>
-    /// O arranque do WPF herda frequentemente um PATH sem «%USERPROFILE%\.dotnet\tools», onde o dotnet coloca o shim.
-    /// </summary>
+    // --- O WPF herda frequentemente PATH sem %USERPROFILE%\.dotnet\tools onde o dotnet coloca o shim ---
     private static void EnsureDotNetGlobalToolsOnPath(ProcessStartInfo psi)
     {
         var tools = Path.Combine(
@@ -284,10 +271,7 @@ internal static class IlSpyDependencyHelper
         }
     }
 
-    /// <summary>
-    /// O dotnet pode responder «already installed» com registo NuGet inconsistente — sem <c>ilspycmd.exe</c> na pasta de tools.
-    /// Força desinstalar + limpar cache + reinstalar com versão pinada até o shim existir.
-    /// </summary>
+    // --- dotnet pode reportar already installed sem ilspycmd.exe — força desinstalar + reinstalar com versão pinada ---
     private static async Task EnsureIlSpyShimFileExistsAsync(Action<string> log, CancellationToken ct)
     {
         var shim = GetDotNetGlobalIlSpyCmdPath();
@@ -392,9 +376,7 @@ internal static class IlSpyDependencyHelper
         }, ct).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// Nunca devolver só «ilspycmd» para ILSPY_CMD_PATH — o backend Python espera caminho absoluto se existir.
-    /// </summary>
+    // --- Nunca devolver só ilspycmd para ILSPY_CMD_PATH — o backend Python espera caminho absoluto ---
     private static string? ResolveAbsoluteIlSpyPath(string? probePath)
     {
         if (string.IsNullOrWhiteSpace(probePath))
@@ -422,9 +404,7 @@ internal static class IlSpyDependencyHelper
             "Depois defina ILSPY_CMD_PATH para:\n  " + GetDotNetGlobalIlSpyCmdPath();
     }
 
-    /// <summary>
-    /// Confirma que o executável arranca; algumas versões tratam --version de forma inconsistente.
-    /// </summary>
+    // --- Confirma que o executável arranca; algumas versões tratam --version de forma inconsistente ---
     private static async Task<bool> IlSpyExecutableRespondsAsync(string fileNameOrCommand, CancellationToken ct)
     {
         foreach (var args in new[] { "--version", "--help", "-?" })

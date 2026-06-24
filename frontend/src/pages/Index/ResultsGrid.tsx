@@ -1,3 +1,4 @@
+// --- Módulo: ResultsGrid.tsx ---
 import React from "react";
 import { ChevronLeft, ChevronRight, Code2, FileCode2, FileText, Loader2 } from "lucide-react";
 import CodePanel from "@/components/CodePanel";
@@ -43,7 +44,7 @@ const VmPendingPlaceholder: React.FC = () => (
   </div>
 );
 
-/** Coluna de relatório: única ou dividida horizontalmente (estático + VM). */
+// *Coluna de relatório: única ou dividida (estático + VM)*
 const ReportColumn: React.FC<{
   result: AnalysisResult | null;
   baseDownloadName: string;
@@ -59,7 +60,7 @@ const ReportColumn: React.FC<{
   const hasVm = vmReport.length > 0;
   const showStaticSection = hasStatic || staticPending;
   const showVmSection = hasVm || dynamicPending;
-  /** Metades fixas 50/50 quando há estático e VM (ou um deles ainda pendente). */
+  // *Metades fixas 50/50 quando há estático e VM*
   const splitView = showStaticSection && showVmSection;
 
   const staticReportPanel = hasStatic ? (
@@ -175,7 +176,7 @@ const ReportColumn: React.FC<{
   );
 };
 
-/** Grid de resultados: 3 colunas (C, IL e Relatório) + barra de funções suspeitas. */
+// --- Grelha de três colunas: C, IL e relatórios ---
 const ResultsGrid: React.FC<ResultsGridProps> = ({
   result,
   flaggedFunctionsSorted,

@@ -1,6 +1,7 @@
+// --- Módulo: mockDemo.ts ---
 import type { AnalysisResult } from "@/lib/analysis";
 
-/** Resultado mock para testar o layout das 3 colunas sem chamar o backend. */
+// --- Resultado mock para testar layout sem backend ---
 export const MOCK_DEMO_RESULT: AnalysisResult = {
   fileName: "demo.cs",
   cCode: [

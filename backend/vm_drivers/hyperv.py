@@ -1,17 +1,5 @@
-"""
-Driver Hyper-V (Windows host local).
-
-Este driver:
-  - Usa PowerShell/Hyper-V para restaurar snapshot e arrancar a VM
-  - Fala com o VM Agent via HTTP (upload/run/report)
-
-Boas práticas de segurança:
-  - Só corre em Windows (falha noutros SOs)
-  - Nome da VM e do snapshot vêm de variáveis de ambiente controladas (não
-    aceitamos input do utilizador para esses campos)
-  - Se a config estiver incompleta ou o agent não responder, falha com erro
-    explícito (não inventa resultados)
-"""
+# --- Módulo: hyperv ---
+# Driver Hyper-V (Windows): snapshot, arranque VM e comunicação com VM Agent via HTTP.
 
 from __future__ import annotations
 
@@ -33,18 +21,19 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger("rat_analyzer_vm_hyperv")
 
-# Allowlist estrita para nomes de VM/snapshot interpolados em comandos PowerShell.
+# *Allowlist estrita para nomes de VM/snapshot em comandos PowerShell*
 _SAFE_PS_NAME_RE = re.compile(r"^[A-Za-z0-9 ._\-]+$")
 
 
+# --- Headers de autenticação do VM Agent ---
 def _agent_headers() -> Dict[str, str]:
-    """Header de autenticação do VM agent (env VM_AGENT_TOKEN, opcional)."""
     token = (os.environ.get("VM_AGENT_TOKEN") or "").strip()
     if token:
         return {"X-Agent-Token": token}
     return {}
 
 
+# --- Configuração do driver Hyper-V ---
 @dataclass(frozen=True)
 class HyperVConfig:
     vm_name: str
@@ -52,45 +41,45 @@ class HyperVConfig:
     agent_base_url: str
 
     http_timeout_seconds: int = 20
-    # Timeout dedicado (mais alto) para operações PowerShell de snapshot/start.
     vm_op_timeout_seconds: int = 120
     boot_wait_seconds: int = 120
     agent_wait_seconds: int = 120
     dynamic_timeout_seconds: int = 300
 
 
+# --- Driver de análise dinâmica via Hyper-V ---
 class HyperVVMDriver:
     name = "hyperv"
 
+# --- Helper interno: init   ---
     def __init__(self, cfg: HyperVConfig):
         self.cfg = cfg
 
+    # --- Pipeline completo: snapshot → boot → upload → run → report ---
     def run(self, job: "AnalysisJob") -> DynamicAnalysisOutput:
         self._validate_cfg()
 
-        # 1) Restaurar snapshot limpo
+        # *1) Restaurar snapshot limpo*
         self._ps(
             f'Restore-VMSnapshot -VMName "{self.cfg.vm_name}" -Name "{self.cfg.snapshot_name}" -Confirm:$false',
             timeout=self.cfg.vm_op_timeout_seconds,
         )
 
-        # 2) Arrancar VM
+        # *2) Arrancar VM*
         self._ps(
             f'Start-VM -Name "{self.cfg.vm_name}" | Out-Null',
             timeout=self.cfg.vm_op_timeout_seconds,
         )
 
-        # 3) Esperar o boot da VM e que o agent fique pronto.
-        #    boot_wait_seconds dá tempo ao SO convidado; o polling do agent
-        #    decorre durante esse período (sai mais cedo se ficar pronto).
+        # *3) Esperar boot e agent pronto*
         self._wait_for_agent_ready(
             total_wait_seconds=self.cfg.boot_wait_seconds + self.cfg.agent_wait_seconds
         )
 
-        # 4) Upload da amostra
+        # *4) Upload da amostra*
         self._agent_upload(job)
 
-        # 5) Executar + recolher relatório
+        # *5) Executar e recolher relatório*
         self._agent_run(timeout_seconds=self.cfg.dynamic_timeout_seconds)
         behavior = self._agent_get_report()
 
@@ -104,6 +93,7 @@ class HyperVVMDriver:
             behavior=behavior if isinstance(behavior, dict) else {"raw": behavior},
         )
 
+    # --- Validação de configuração e allowlist de nomes ---
     def _validate_cfg(self) -> None:
         if not sys.platform.startswith("win"):
             raise RuntimeError("Driver Hyper-V só é suportado em Windows.")
@@ -120,8 +110,6 @@ class HyperVVMDriver:
                 f"Config Hyper-V incompleta. Variáveis em falta: {', '.join(missing)}"
             )
 
-        # Allowlist estrita: evita injeção PowerShell (backtick, $, &, ;, |,
-        # parênteses, newlines, aspas, etc. ficam todos de fora).
         for label, value in (
             ("HYPERV_VM_NAME", self.cfg.vm_name),
             ("HYPERV_SNAPSHOT_NAME", self.cfg.snapshot_name),
@@ -132,10 +120,8 @@ class HyperVVMDriver:
                     "Permitidos: letras, dígitos, espaço, ponto, hífen e underscore."
                 )
 
+    # --- Execução de comando PowerShell não interativo ---
     def _ps(self, command: str, timeout: int) -> None:
-        """
-        Executa um comando PowerShell de forma não interativa.
-        """
         completed = subprocess.run(
             [
                 "powershell",
@@ -154,9 +140,11 @@ class HyperVVMDriver:
                 f"Comando Hyper-V falhou ({completed.returncode}): {completed.stderr[:500]}"
             )
 
+    # --- Construção de URL do VM Agent ---
     def _agent_url(self, path: str) -> str:
         return self.cfg.agent_base_url.rstrip("/") + path
 
+    # --- Polling até o VM Agent responder em /api/health ---
     def _wait_for_agent_ready(self, total_wait_seconds: Optional[int] = None) -> None:
         wait = int(total_wait_seconds if total_wait_seconds is not None else self.cfg.agent_wait_seconds)
         deadline = time.time() + max(1, wait)
@@ -172,6 +160,7 @@ class HyperVVMDriver:
             time.sleep(2)
         raise TimeoutError(f"VM agent (Hyper-V) não ficou pronto a tempo. Último erro: {last_err}")
 
+    # --- Upload da amostra para o VM Agent ---
     def _agent_upload(self, job: "AnalysisJob") -> None:
         with open(job.sample_path, "rb") as f:
             files = {"file": (job.sample_path.name, f, "application/octet-stream")}
@@ -186,6 +175,7 @@ class HyperVVMDriver:
                 f"Upload para VM agent (Hyper-V) falhou ({r.status_code}): {r.text[:500]}"
             )
 
+    # --- Pedido de execução da amostra no VM Agent ---
     def _agent_run(self, timeout_seconds: int) -> None:
         payload = {"timeoutSeconds": int(timeout_seconds)}
         r = requests.post(
@@ -199,6 +189,7 @@ class HyperVVMDriver:
                 f"Execução no VM agent (Hyper-V) falhou ({r.status_code}): {r.text[:500]}"
             )
 
+    # --- Obtenção do relatório comportamental ---
     def _agent_get_report(self) -> Any:
         r = requests.get(
             self._agent_url("/api/report"),
@@ -216,4 +207,3 @@ class HyperVVMDriver:
 
 
 __all__ = ["HyperVConfig", "HyperVVMDriver"]
-

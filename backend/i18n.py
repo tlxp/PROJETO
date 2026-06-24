@@ -1,4 +1,6 @@
-"""Mensagens de API/relatório localizadas (PT/EN)."""
+# --- Módulo: i18n ---
+# Mensagens de API/relatório localizadas (PT/EN).
+
 from __future__ import annotations
 
 import os
@@ -28,12 +30,13 @@ MESSAGES: dict[str, dict[str, str]] = {
 }
 
 
+# --- Resolução do idioma preferido ---
 def resolve_lang(
     accept_language: Optional[str] = None,
     query_lang: Optional[str] = None,
     env_lang: Optional[str] = None,
 ) -> str:
-    """Resolve idioma: query > env > Accept-Language > pt."""
+    # *Ordem: query > env > Accept-Language > pt*
     for candidate in (query_lang, env_lang):
         if candidate in ("en", "pt"):
             return candidate
@@ -42,10 +45,12 @@ def resolve_lang(
     return "pt"
 
 
+# --- Idioma atual a partir da variável de ambiente ---
 def current_lang() -> str:
     return resolve_lang(env_lang=os.environ.get("RATANALYZER_LANG"))
 
 
+# --- Tradução de chave de mensagem ---
 def t(key: str, lang: Optional[str] = None) -> str:
     lang = lang or current_lang()
     bucket = MESSAGES.get(lang) or MESSAGES["pt"]

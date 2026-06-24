@@ -1,3 +1,6 @@
+# --- Script: PhaseA-Plan.ps1 ---
+
+# --- Definição da lista de instaladores ---
 $installers = @(
     @{
         Name="VC++ Redistributable (x86)"
@@ -15,6 +18,7 @@ $installers = @(
     }
 )
 
+# --- .NET Framework 4.8 (opcional) ---
 if (-not $SkipDotNet48) {
     $installers += @{
         Name=".NET Framework 4.8 (offline)"
@@ -25,8 +29,9 @@ if (-not $SkipDotNet48) {
     }
 }
 
+# --- .NET Desktop Runtime 8 (opcional) ---
 if (-not $SkipDotNetDesktop) {
-    # Usar URL final resolvido + wildcard para aceitar versões reais (8.0.xx).
+    # *Resolver URLs finais e usar wildcard para aceitar versões reais (8.0.xx).*
     $urlX86 = $null
     $urlX64 = $null
     try { $urlX86 = Resolve-DotnetDesktopRuntimeUrl -Arch "x86" } catch { Write-LogWarning $_.Exception.Message }
@@ -52,6 +57,7 @@ if (-not $SkipDotNetDesktop) {
     )
 }
 
+# --- Registo de contexto da execução ---
 Write-LogHost "=== Garantir runtimes essenciais (offline) ==="
 Write-LogHost "VM: $VMName | Snapshot (referência): $SnapshotName"
 Write-LogHost "Offline dir: $OfflineDir"

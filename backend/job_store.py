@@ -1,3 +1,6 @@
+# --- Módulo: job_store ---
+# --- Persistência SQLite de jobs de análise (histórico e auditoria) ---
+
 from __future__ import annotations
 
 import hashlib
@@ -14,34 +17,38 @@ import config
 
 _LOCK = threading.Lock()
 
-# init_db() corre apenas uma vez por processo (item de robustez SQLite).
+# *init_db() corre apenas uma vez por processo (robustez SQLite)*
 _INIT_LOCK = threading.Lock()
 _INITIALIZED = False
 
 _SQLITE_TIMEOUT_SECONDS = 30
 
 
+# --- Timestamp UTC em formato ISO ---
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+# --- Caminho da base SQLite (cria diretório se necessário) ---
 def _db_path() -> Path:
     config.SANDBOX_JOBS_DIR.mkdir(parents=True, exist_ok=True)
     return Path(config.ANALYSIS_DB_PATH)
 
 
+# --- Abre conexão SQLite com timeout ---
 def _connect() -> sqlite3.Connection:
     return sqlite3.connect(str(_db_path()), timeout=_SQLITE_TIMEOUT_SECONDS)
 
 
+# --- Garante que init_db() correu uma vez neste processo ---
 def _ensure_init() -> None:
-    """Garante que init_db() correu uma vez neste processo."""
     global _INITIALIZED
     if _INITIALIZED:
         return
     init_db()
 
 
+# --- Lista colunas existentes numa tabela (para migrações soft) ---
 def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
     try:
         rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
@@ -50,6 +57,7 @@ def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
         return set()
 
 
+# --- Cria tabela analyses e aplica migrações ALTER TABLE ---
 def init_db() -> None:
     global _INITIALIZED
     with _INIT_LOCK, _LOCK:
@@ -73,7 +81,7 @@ def init_db() -> None:
                 """
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_analyses_updated_at ON analyses(updated_at)")
-            # Migrações "soft" (ALTER TABLE) para manter compatibilidade com DBs antigas
+            # *Migrações soft (ALTER TABLE) para compatibilidade com DBs antigas*
             cols = _table_columns(conn, "analyses")
             migrations: list[tuple[str, str]] = [
                 ("pipeline_version", "TEXT NULL"),
@@ -92,12 +100,14 @@ def init_db() -> None:
             conn.close()
 
 
+# --- Calcula hash SHA-256 de bytes ---
 def sha256_bytes(data: bytes) -> str:
     h = hashlib.sha256()
     h.update(data)
     return h.hexdigest()
 
 
+# --- Insere novo job na base de dados ---
 def insert_job(job_id: str, analysis_type: str, file_name: str, sha256: str, status: str) -> None:
     _ensure_init()
     with _LOCK:
@@ -116,6 +126,7 @@ def insert_job(job_id: str, analysis_type: str, file_name: str, sha256: str, sta
             conn.close()
 
 
+# --- Update pipeline version ---
 def update_pipeline_version(job_id: str, pipeline_version: str) -> None:
     _ensure_init()
     with _LOCK:
@@ -135,6 +146,7 @@ def update_pipeline_version(job_id: str, pipeline_version: str) -> None:
             conn.close()
 
 
+# --- Mark reused ---
 def mark_reused(job_id: str, reused_from_job_id: str) -> None:
     _ensure_init()
     with _LOCK:
@@ -154,6 +166,7 @@ def mark_reused(job_id: str, reused_from_job_id: str) -> None:
             conn.close()
 
 
+# --- Set archive paths ---
 def set_archive_paths(job_id: str, out_zip_path: str | None, decompiled_zip_path: str | None) -> None:
     _ensure_init()
     with _LOCK:
@@ -175,6 +188,7 @@ def set_archive_paths(job_id: str, out_zip_path: str | None, decompiled_zip_path
             conn.close()
 
 
+# --- Mark artifacts deleted ---
 def mark_artifacts_deleted(job_id: str) -> None:
     _ensure_init()
     with _LOCK:
@@ -194,11 +208,8 @@ def mark_artifacts_deleted(job_id: str) -> None:
             conn.close()
 
 
+# --- Procura job COMPLETED por sha256 (filtros opcionais) ---
 def find_completed_by_sha256(sha256: str, analysis_type: str | None = None, pipeline_version: str | None = None) -> Optional[dict]:
-    """
-    Procura um job COMPLETED por sha256, opcionalmente filtrando por analysis_type e pipeline_version.
-    Devolve o row "normalizado" (mesmo formato de get_job_row).
-    """
     _ensure_init()
     with _LOCK:
         conn = _connect()
@@ -220,6 +231,7 @@ def find_completed_by_sha256(sha256: str, analysis_type: str | None = None, pipe
         finally:
             conn.close()
 
+# --- Helper interno: loads ---
     def _loads(s: Optional[str]) -> Any | None:
         if not s:
             return None
@@ -247,6 +259,7 @@ def find_completed_by_sha256(sha256: str, analysis_type: str | None = None, pipe
         "artifactsDeletedAt": d.get("artifacts_deleted_at"),
     }
 
+# --- Update analysis type ---
 def update_analysis_type(job_id: str, analysis_type: str) -> None:
     _ensure_init()
     with _LOCK:
@@ -266,6 +279,7 @@ def update_analysis_type(job_id: str, analysis_type: str) -> None:
             conn.close()
 
 
+# --- Update status ---
 def update_status(job_id: str, status: str, error: Optional[str] = None) -> None:
     _ensure_init()
     with _LOCK:
@@ -286,6 +300,7 @@ def update_status(job_id: str, status: str, error: Optional[str] = None) -> None
             conn.close()
 
 
+# --- Update results ---
 def update_results(job_id: str, static_obj: Any | None, dynamic_obj: Any | None) -> None:
     _ensure_init()
     with _LOCK:
@@ -308,6 +323,7 @@ def update_results(job_id: str, static_obj: Any | None, dynamic_obj: Any | None)
             conn.close()
 
 
+# --- Get job row ---
 def get_job_row(job_id: str) -> Optional[dict]:
     _ensure_init()
     with _LOCK:
@@ -321,6 +337,7 @@ def get_job_row(job_id: str) -> Optional[dict]:
         finally:
             conn.close()
 
+# --- Helper interno: loads ---
     def _loads(s: Optional[str]) -> Any | None:
         if not s:
             return None
@@ -343,8 +360,8 @@ def get_job_row(job_id: str) -> Optional[dict]:
     }
 
 
+# --- Conta jobs num determinado estado (ex.: running) ---
 def count_jobs_by_status(status: str) -> int:
-    """Conta jobs num determinado estado (ex.: 'running')."""
     _ensure_init()
     with _LOCK:
         conn = _connect()
@@ -357,6 +374,7 @@ def count_jobs_by_status(status: str) -> int:
             conn.close()
 
 
+# --- List jobs ---
 def list_jobs(limit: int = 50, offset: int = 0) -> list[dict]:
     _ensure_init()
     with _LOCK:

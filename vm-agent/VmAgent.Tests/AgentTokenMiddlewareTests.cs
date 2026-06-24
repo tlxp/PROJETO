@@ -1,16 +1,21 @@
+// --- Módulo: AgentTokenMiddlewareTests.cs ---
+
 using VmAgent.Security;
 using Xunit;
 
 namespace VmAgent.Tests;
 
+// --- Testes do middleware de autenticação ---
 public sealed class AgentTokenMiddlewareTests
 {
+    // --- Token presente deve permitir arranque ---
     [Fact]
     public void ValidateStartupToken_WithToken_ReturnsTrue()
     {
         Assert.True(AgentTokenMiddleware.ValidateStartupToken("my-token", allowInsecure: false));
     }
 
+    // --- Sem token e sem modo inseguro deve bloquear arranque ---
     [Fact]
     public void ValidateStartupToken_WithoutTokenAndWithoutInsecure_ReturnsFalse()
     {
@@ -18,12 +23,14 @@ public sealed class AgentTokenMiddlewareTests
         Assert.False(AgentTokenMiddleware.ValidateStartupToken("   ", allowInsecure: false));
     }
 
+    // --- Modo inseguro permite arranque sem token ---
     [Fact]
     public void ValidateStartupToken_WithoutTokenButInsecureAllowed_ReturnsTrue()
     {
         Assert.True(AgentTokenMiddleware.ValidateStartupToken(null, allowInsecure: true));
     }
 
+    // --- Variável VM_AGENT_ALLOW_INSECURE controla modo inseguro ---
     [Fact]
     public void IsInsecureDevMode_ReadsEnvironmentVariable()
     {
@@ -42,6 +49,7 @@ public sealed class AgentTokenMiddlewareTests
         }
     }
 
+    // --- Token é lido da variável VM_AGENT_TOKEN ---
     [Fact]
     public void ResolveTokenFromEnvironment_ReturnsConfiguredValue()
     {

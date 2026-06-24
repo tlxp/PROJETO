@@ -1,9 +1,11 @@
+// --- Módulo: eslint.config.js ---
 import js from "@eslint/js";
 import globals from "globals";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
+// --- Regras ESLint para TypeScript/React ---
 export default tseslint.config(
   { ignores: ["dist"] },
   {

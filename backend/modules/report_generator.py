@@ -1,21 +1,20 @@
-"""
-Módulo de Geração de Relatórios
-Gera relatórios detalhados da análise
-"""
+# --- Módulo: report_generator ---
+# Geração de relatórios detalhados da análise em formato texto.
 
 from pathlib import Path
 from typing import Dict
 from datetime import datetime
 
 
+# --- Gera relatórios de análise em formato texto ---
 class ReportGenerator:
-    """Gera relatórios de análise em formato texto"""
-    
+
+# --- Helper interno: init   ---
     def __init__(self):
         pass
-    
+
+    # --- Gera relatório completo a partir dos resultados da análise ---
     def generate(self, analysis_results: Dict, output_path: Path) -> Path:
-        """Gera relatório completo"""
         
         report_lines = []
         

@@ -1,5 +1,7 @@
-﻿# Canal serial COM1 (Gen1) ↔ Named Pipe no host (relatório texto, START_OF_REPORT … END_OF_REPORT)
+﻿# --- Script: SerialPipe.ps1 ---
+# *Canal serial COM1 (Gen1) ↔ Named Pipe no host (relatório texto, START_OF_REPORT … END_OF_REPORT)*
 
+# --- Configuração de COM1 para named pipe na VM Gen1 ---
 function Set-SandboxVMComPortPipe {
     param(
         [Parameter(Mandatory = $true)][string] $VMName,
@@ -20,6 +22,7 @@ function Set-SandboxVMComPortPipe {
     Set-VMComPort -VMName $VMName -Number 1 -Path $path -ErrorAction Stop | Out-Null
 }
 
+# --- Verificação se transporte serial é aplicável à VM ---
 function Test-SandboxSerialTransportApplicable {
     param(
         [Parameter(Mandatory = $true)][string] $VMName
@@ -32,6 +35,7 @@ function Test-SandboxSerialTransportApplicable {
     }
 }
 
+# --- Paragem de job receptor de pipe ---
 function Stop-SandboxPipeReportJob {
     param(
         [Parameter(Mandatory = $true)] $PipeJob
@@ -41,6 +45,7 @@ function Stop-SandboxPipeReportJob {
     try { Remove-Job -Job $PipeJob -Force -ErrorAction SilentlyContinue } catch { }
 }
 
+# --- Limpeza de estado residual de pipes/COM1 ---
 function Clear-SandboxPipeEnvironment {
     <#
     .SYNOPSIS
@@ -59,6 +64,7 @@ function Clear-SandboxPipeEnvironment {
         }
     }
 
+    # *Parar jobs órfãos de Receive-SandboxReportFromPipe*
     $stoppedJobs = 0
     Get-Job -ErrorAction SilentlyContinue | ForEach-Object {
         $jb = $_
@@ -78,6 +84,7 @@ function Clear-SandboxPipeEnvironment {
     $vm = Get-VM -Name $VMName -ErrorAction SilentlyContinue
     if (-not $vm) { return }
 
+    # *Parar VM se ligada para libertar o pipe do vmwp*
     if ($vm.State -ne 'Off') {
         Write-PipeCleanupLog "Pipe cleanup: stopping VM '$VMName' (state=$($vm.State)) to release vmwp pipe"
         Stop-VM -Name $VMName -Force -ErrorAction SilentlyContinue | Out-Null
@@ -91,7 +98,7 @@ function Clear-SandboxPipeEnvironment {
         Write-PipeCleanupLog "Pipe cleanup: VM state after stop wait: $finalState"
     }
 
-    # COM1 -> pipe descartavel (VM Off) para nao reutilizar mapeamento do run anterior
+    # *COM1 -> pipe descartável (VM Off) para não reutilizar mapeamento do run anterior*
     if ($vm.Generation -eq 1 -and (Get-VM -Name $VMName -ErrorAction SilentlyContinue).State -eq 'Off') {
         $discard = "SandboxReportPipe_DISCARD_" + [guid]::NewGuid().ToString('N').Substring(0, 8)
         try {
@@ -103,6 +110,7 @@ function Clear-SandboxPipeEnvironment {
     }
 }
 
+# --- Recepção de relatório via named pipe (cliente Hyper-V) ---
 function Receive-SandboxReportFromPipe {
     param(
         [string] $PipeName,
@@ -111,13 +119,8 @@ function Receive-SandboxReportFromPipe {
         [int]    $IdleReconnectSeconds = -1
     )
 
-    # O servidor do named pipe do COM1 é criado pelo worker do Hyper-V (vmwp.exe)
-    # quando a VM arranca com COM1 -> \\.\pipe\<nome>. O host tem de se ligar como
-    # CLIENTE. Criar aqui um NamedPipeServerStream com o mesmo nome gera uma 2ª
-    # instância do pipe: os bytes do guest vão para a instância do vmwp (sem leitor,
-    # são descartados) e o WaitForConnection do nosso servidor nunca dispara.
-    # O pipe só existe enquanto a VM está ligada, por isso o connect é repetido
-    # até a VM arrancar; se o vmwp fechar (VM reiniciada/desligada) religa-se.
+    # *O servidor do named pipe do COM1 é criado pelo vmwp.exe quando a VM arranca.*
+    # *O host liga-se como CLIENTE; criar NamedPipeServerStream aqui gera conflito de instâncias.*
 
     try {
         $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
@@ -149,7 +152,7 @@ function Receive-SandboxReportFromPipe {
                 try {
                     $pipe.Connect(2000)
                 } catch {
-                    # Pipe ainda não existe (VM desligada / vmwp ainda não o criou) — repetir.
+                    # *Pipe ainda não existe (VM desligada / vmwp ainda não o criou)*
                     if (([DateTime]::UtcNow - $lastConnectLogUtc).TotalSeconds -ge 25) {
                         $rem = [int]($deadline - [DateTime]::UtcNow).TotalSeconds
                         Write-Host "[PIPE] À espera do pipe do Hyper-V \\.\pipe\$PipeName (VM ligada?) tentativas=$connectAttempts restante~${rem}s"
@@ -176,8 +179,7 @@ function Receive-SandboxReportFromPipe {
                         $sessionEof = $true
                         continue
                     }
-                    # Leitura assíncrona para conseguir heartbeat e respeitar o deadline
-                    # (PipeStream não suporta ReadTimeout em leituras síncronas).
+                    # *Leitura assíncrona para heartbeat e respeitar deadline*
                     $task = $reader.ReadLineAsync()
                     while (-not $task.IsCompleted -and [DateTime]::UtcNow -lt $deadline) {
                         try { [void]$task.Wait(500) } catch { }
@@ -191,19 +193,18 @@ function Receive-SandboxReportFromPipe {
                             $lastProgress = [DateTime]::UtcNow
                         }
                     }
-                    if (-not $task.IsCompleted) { break }   # deadline atingido durante a leitura
+                    if (-not $task.IsCompleted) { break }
 
                     $raw = $null
                     try {
                         $raw = $task.GetAwaiter().GetResult()
                     } catch {
-                        # Pipe partido (VM parada/reiniciada) — religar
+                        # *Pipe partido (VM parada/reiniciada) — religar*
                         Write-Host "[PIPE] Leitura falhou (pipe fechado?) sessao#${sessionCount}: $($_.Exception.Message)"
                         $sessionEof = $true
                         continue
                     }
                     if ($null -eq $raw) {
-                        # EOF: vmwp fechou o pipe — religar
                         Write-Host "[PIPE] EOF na sessao#$sessionCount rxLines=$rxLines inReport=$inReport"
                         $sessionEof = $true
                         continue
@@ -246,7 +247,7 @@ function Receive-SandboxReportFromPipe {
             }
 
             if (-not $gotEndOfReport) {
-                # Sessão terminou sem relatório completo: descartar parcial e religar.
+                # *Sessão terminou sem relatório completo: descartar parcial e religar*
                 if ($reportLines.Count -gt 0) {
                     Write-Host "[PIPE] Sessao#$sessionCount terminou com relatório incompleto ($($reportLines.Count) linhas) -- a descartar e religar"
                     $reportLines = @()
@@ -260,7 +261,7 @@ function Receive-SandboxReportFromPipe {
             throw "Nenhum relatório completo recebido do pipe"
         }
 
-        # Remover linhas de cabeçalho (se existirem)
+        # --- Remoção de cabeçalho opcional do relatório ---
         $cleanLines = @()
         $skipHeader = $true
         foreach ($line in $reportLines) {

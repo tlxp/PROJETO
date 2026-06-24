@@ -1,9 +1,5 @@
-"""
-Configuração partilhada dos testes.
-
-IMPORTANTE: RATANALYZER_DATA_DIR tem de ser definido ANTES de importar
-config/api/analysis_jobs (os paths são resolvidos no import do config).
-"""
+# --- Módulo: conftest ---
+# Configuração partilhada dos testes (RATANALYZER_DATA_DIR antes de importar config).
 
 import os
 import sys
@@ -20,6 +16,7 @@ _TEST_DATA_DIR = tempfile.mkdtemp(prefix="ratanalyzer_tests_")
 os.environ["RATANALYZER_DATA_DIR"] = _TEST_DATA_DIR
 
 
+# --- Teste: pytest configure ---
 def pytest_configure(config):
     config.addinivalue_line(
         "markers",

@@ -1,9 +1,5 @@
-"""
-Módulo de Deobfuscação
-Remove ou reduz ofuscação de código (binário e código fonte C#).
-Para binários: unpack UPX e/ou patch de strings XOR em .rdata/.data;
-o ficheiro de saída pode ser usado pelo Ghidra.
-"""
+# --- Módulo: deobfuscator ---
+# --- Deobfuscação: unpack UPX, patch XOR, decode Base64 em binários/C# ---
 
 import base64
 import binascii
@@ -19,21 +15,15 @@ from artifact_naming import short_stem
 logger = logging.getLogger("rat_analyzer_deobfuscator")
 
 
+# --- Deobfuscador básico para strings e código ---
 class Deobfuscator:
-    """Deobfuscador básico para strings e código"""
-    
+
+# --- Helper interno: init   ---
     def __init__(self):
         self.deobfuscation_results = {}
     
+    # --- Aplica técnicas de deobfuscação ao ficheiro ---
     def deobfuscate(self, file_path: str) -> Dict:
-        """
-        Aplica técnicas de deobfuscação
-        
-        Nota: Para deobfuscação avançada, pode integrar ferramentas como:
-        - de4dot (para .NET)
-        - IDA Pro scripts
-        - Ghidra scripts
-        """
         results = {
             'deobfuscated_strings': [],
             'xor_strings': [],
@@ -66,8 +56,8 @@ class Deobfuscator:
 
         return results
     
+    # --- Deteta possíveis strings XOR (assembly e C#/.NET) ---
     def _detect_xor_strings(self, text: str) -> List[str]:
-        """Deteta possíveis strings XOR (assembly e C#/.NET)"""
         xor_strings = []
 
         xor_patterns = [
@@ -91,6 +81,7 @@ class Deobfuscator:
         'product', 'company', 'title', 'target', 'informational', 'file',
     )
 
+# --- Helper interno: is probable base64 literal ---
     def _is_probable_base64_literal(self, s: str) -> bool:
         if not s or not isinstance(s, str):
             return False
@@ -118,6 +109,7 @@ class Deobfuscator:
             return False
         return True
 
+# --- Helper interno: decode base64 to readable text ---
     def _decode_base64_to_readable_text(self, s: str) -> str | None:
         if not self._is_probable_base64_literal(s):
             return None
@@ -139,8 +131,8 @@ class Deobfuscator:
             return None
         return decoded
     
+    # --- Deteta e decodifica strings Base64 ---
     def _detect_base64_strings(self, text: str) -> List[str]:
-        """Deteta e decodifica strings Base64"""
         import base64
         
         base64_strings = []
@@ -158,8 +150,8 @@ class Deobfuscator:
         
         return base64_strings
     
+    # --- Deteta indicadores de ofuscação ---
     def _detect_obfuscation(self, text: str) -> List[str]:
-        """Deteta indicadores de ofuscação"""
         indicators = []
         
         # Padrões comuns de ofuscação (Python e C#/.NET)
@@ -184,12 +176,12 @@ class Deobfuscator:
         
         return indicators
     
+    # --- Aplica deobfuscação XOR com uma chave ---
     def apply_xor_deobfuscation(self, data: bytes, key: int) -> bytes:
-        """Aplica deobfuscação XOR com uma chave"""
         return bytes([b ^ key for b in data])
     
+    # --- Aplica deobfuscação XOR com chave multi-byte ---
     def apply_multi_xor_deobfuscation(self, data: bytes, key: bytes) -> bytes:
-        """Aplica deobfuscação XOR com chave multi-byte"""
         result = bytearray()
         for i, byte in enumerate(data):
             result.append(byte ^ key[i % len(key)])
@@ -197,8 +189,8 @@ class Deobfuscator:
 
     # Deobfuscação de binário (saída = ficheiro para Ghidra)
 
+    # --- Deteta PE empacotado com UPX (secções UPX0/UPX1 ou assinatura UPX!) ---
     def _is_upx_packed(self, file_path: str) -> bool:
-        """Deteta se o PE está empacotado com UPX (secções UPX0/UPX1 ou assinatura UPX!)."""
         try:
             with open(file_path, "rb") as f:
                 head = f.read(8192)
@@ -218,8 +210,8 @@ class Deobfuscator:
             logger.debug("Falha ao inspecionar secções UPX de %s", file_path, exc_info=True)
         return False
 
+    # --- Desempacota UPX: upx -d -o output input ---
     def _unpack_upx(self, input_path: str, output_path: str) -> Tuple[bool, str]:
-        """Desempacota UPX: upx -d -o output input. Retorna (sucesso, mensagem)."""
         try:
             r = subprocess.run(
                 ["upx", "-d", "-o", output_path, input_path],
@@ -237,21 +229,19 @@ class Deobfuscator:
         except Exception as e:
             return False, str(e)
 
+# --- Helper interno: xor decrypt byte ---
     def _xor_decrypt_byte(self, data: bytes, key: int) -> bytes:
         return bytes([b ^ key for b in data])
 
+# --- Helper interno: printable ratio ---
     def _printable_ratio(self, data: bytes) -> float:
         if not data:
             return 0.0
         printable = sum(1 for b in data if 0x20 <= b <= 0x7E or b in (0x09, 0x0A, 0x0D))
         return printable / len(data)
 
+    # --- Patch XOR em .rdata/.data: substitui blocos por texto decodificado ---
     def _try_xor_patch_sections(self, file_path: str, output_path: str) -> Tuple[bool, int]:
-        """
-        Tenta encontrar blocos em .rdata/.data que parecem XOR single-byte e grava
-        um novo PE com esses blocos substituídos pelo texto decodificado.
-        Retorna (sucesso, número de regiões patched).
-        """
         try:
             import pefile
         except ImportError:
@@ -331,20 +321,13 @@ class Deobfuscator:
             logger.exception("Falha ao gravar PE com patch XOR: %s -> %s", file_path, output_path)
             return False, 0
 
+    # --- Produz binário deobfuscado (UPX unpack e/ou patch XOR) para entrada do Ghidra ---
     def deobfuscate_binary(
         self,
         file_path: str,
         output_path: Optional[str] = None,
         output_root: str = "decompiled",
     ) -> Dict:
-        """
-        Produz um binário deobfuscado a partir do ficheiro dado (unpack UPX e/ou
-        patch de strings XOR). O ficheiro de saída deve ser usado como entrada do Ghidra.
-        :param file_path: Caminho para o .exe ou .dll
-        :param output_path: Ficheiro de saída (opcional)
-        :param output_root: Pasta base se output_path for None
-        :return: { "success", "output_file", "techniques_applied", "error" }
-        """
         result = {
             "success": False,
             "output_file": "",
@@ -388,14 +371,8 @@ class Deobfuscator:
         result["output_file"] = str(path)
         return result
 
+    # --- Deobfusca C# descompilado: decode Base64 em comentários ---
     def deobfuscate_source(self, source_path: str, output_path: Optional[str] = None) -> Dict:
-        """
-        Aplica deobfuscação ao código C# descompilado: decodifica Base64 em comentários,
-        adiciona anotações para strings concatenadas. Escreve o resultado num ficheiro.
-        :param source_path: Caminho para o ficheiro .cs consolidado (descompilado)
-        :param output_path: Onde guardar o código desobfuscado (default: mesmo dir, nome .deobfuscated.cs)
-        :return: { "success", "output_file", "base64_decoded", "comments_added" }
-        """
         result = {"success": False, "output_file": "", "base64_decoded": 0, "error": ""}
         src = Path(source_path)
         if not src.exists():
@@ -439,13 +416,8 @@ class Deobfuscator:
             result["error"] = str(e)
         return result
 
+    # --- Deobfusca bloco de texto (snippet): decode Base64 em comentários ---
     def deobfuscate_content(self, content: str) -> str:
-        """
-        Aplica deobfuscação a um bloco de texto (ex.: snippet): decodifica Base64
-        em comentários. Reutilizável pelo obfuscation_snippet_extractor.
-        :param content: Texto (ex. várias linhas de código C#)
-        :return: Texto com comentários '// Decoded Base64: ...' adicionados
-        """
         if not content or not content.strip():
             return content
         lines = content.split("\n")

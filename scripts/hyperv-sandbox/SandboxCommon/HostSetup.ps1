@@ -1,4 +1,7 @@
-﻿function Ensure-DirectoryExists {
+﻿# --- Script: HostSetup.ps1 ---
+
+# --- Criação de diretório se não existir ---
+function Ensure-DirectoryExists {
     param(
         [string] $Path
     )
@@ -10,6 +13,7 @@
     }
 }
 
+# --- Alias para Ensure-DirectoryExists ---
 function Ensure-Directory {
     param(
         [string] $Path
@@ -17,6 +21,7 @@ function Ensure-Directory {
     Ensure-DirectoryExists -Path $Path
 }
 
+# --- Verificação de pré-requisitos do sandbox ---
 function Test-SandboxPrerequisites {
     [CmdletBinding()]
     param()
@@ -27,6 +32,7 @@ function Test-SandboxPrerequisites {
     }
 }
 
+# --- Criação de VMSwitch Internal se não existir ---
 function Ensure-VMSwitchExists {
     param(
         [string] $SwitchName
@@ -41,6 +47,7 @@ function Ensure-VMSwitchExists {
     }
 }
 
+# --- Alias para Ensure-VMSwitchExists ---
 function Ensure-VMSwitch {
     param(
         [string] $Name
@@ -48,6 +55,7 @@ function Ensure-VMSwitch {
     Ensure-VMSwitchExists -SwitchName $Name
 }
 
+# --- Validação de isolamento de rede da VM ---
 function Assert-SandboxVmNetworkIsolation {
     <#
     .SYNOPSIS
@@ -71,6 +79,7 @@ function Assert-SandboxVmNetworkIsolation {
         throw "VM '$VMName' não tem adaptadores de rede — isolamento não verificável."
     }
 
+    # *Cada adaptador deve estar no switch Internal esperado*
     foreach ($adapter in $adapters) {
         $swName = $adapter.SwitchName
         if ([string]::IsNullOrWhiteSpace($swName)) {
@@ -91,6 +100,7 @@ function Assert-SandboxVmNetworkIsolation {
     Write-LogHost "Preflight rede OK: VM '$VMName' isolada no switch Internal '$ExpectedSwitchName' ($($adapters.Count) adaptador(es))."
 }
 
+# --- Obtenção do adaptador de rede do switch sandbox ---
 function Get-SandboxNetAdapter {
     param(
         [string] $SwitchName
@@ -101,12 +111,14 @@ function Get-SandboxNetAdapter {
         $adapter = Get-NetAdapter -Name $expectedName -ErrorAction SilentlyContinue
     } catch { $adapter = $null }
 
+    # *Fallback: procurar por nome parcial*
     if (-not $adapter) {
         $adapter = Get-NetAdapter | Where-Object { $_.Name -eq "vEthernet ($SwitchName)" -or $_.Name -like "*$SwitchName*" } | Select-Object -First 1
     }
     return $adapter
 }
 
+# --- Atribuição de IP ao adaptador do switch no host ---
 function Set-SandboxHostIpIfNeeded {
     param(
         [string] $SwitchName,
@@ -138,6 +150,7 @@ function Set-SandboxHostIpIfNeeded {
     Ensure-SandboxHostFirewall -SwitchName $SwitchName -RemoteSubnet "${IpAddress}/$PrefixLength"
 }
 
+# --- Regra de firewall para bloquear tráfego inbound da sandbox ---
 function Ensure-SandboxHostFirewall {
     <#
     .SYNOPSIS

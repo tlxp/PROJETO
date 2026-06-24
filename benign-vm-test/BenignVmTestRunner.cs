@@ -1,14 +1,15 @@
+// --- Módulo: BenignVmTestRunner.cs ---
+
 using System.Diagnostics;
 using System.Runtime.Versioning;
 using Microsoft.Win32;
 
 namespace BenignVmTest;
 
-/// <summary>
-/// Executa os três sinais observáveis (ficheiro, registry, processo filho) de forma inofensiva.
-/// </summary>
+// --- Executor dos sinais observáveis inofensivos ---
 public static class BenignVmTestRunner
 {
+    // --- Executa ficheiro, registry e processo filho de teste ---
     public static int Run(TextWriter? log = null)
     {
         log ??= Console.Out;
@@ -20,6 +21,7 @@ public static class BenignVmTestRunner
         {
             Directory.CreateDirectory(BenignVmTestPaths.WorkDir);
 
+            // *sinal 1: escrita de ficheiro marcador*
             File.WriteAllText(
                 BenignVmTestPaths.MarkerPath,
                 $"benign marker @ {DateTimeOffset.Now:O}{Environment.NewLine}");
@@ -27,6 +29,7 @@ public static class BenignVmTestRunner
 
             if (OperatingSystem.IsWindows())
             {
+                // *sinal 2: escrita no registry HKCU*
                 WriteRegistryMarker(BenignVmTestPaths.RegistryKeyPath);
                 log.WriteLine(
                     $@"{BenignVmTestPaths.LogPrefix} registry escrito: HKCU\{BenignVmTestPaths.RegistryKeyPath}");
@@ -42,6 +45,7 @@ public static class BenignVmTestRunner
                 log.WriteLine($"{BenignVmTestPaths.LogPrefix} ficheiro-flag escrito: {BenignVmTestPaths.RegistryFlagPath}");
             }
 
+            // *sinal 3: processo filho cmd.exe com saída para ficheiro*
             var psi = new ProcessStartInfo
             {
                 FileName = "cmd.exe",
@@ -70,6 +74,7 @@ public static class BenignVmTestRunner
         return 0;
     }
 
+    // --- Escreve valores de marcador na chave HKCU ---
     [SupportedOSPlatform("windows")]
     private static void WriteRegistryMarker(string keyPath)
     {
@@ -79,6 +84,7 @@ public static class BenignVmTestRunner
         key.SetValue("Marker", "benign-vm-test", RegistryValueKind.String);
     }
 
+    // --- Regista entrada RunOnce que cria ficheiro-flag ---
     [SupportedOSPlatform("windows")]
     private static void WriteRunOnceFlag(string keyPath, string valueName, string flagFilePath)
     {

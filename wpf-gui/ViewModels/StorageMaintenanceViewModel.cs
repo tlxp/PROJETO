@@ -1,3 +1,4 @@
+﻿// --- Módulo: StorageMaintenanceViewModel.cs ---
 using System;
 using System.Threading.Tasks;
 using System.Windows.Input;
@@ -6,6 +7,7 @@ using RatAnalyzer.Desktop.Services;
 
 namespace RatAnalyzer.Desktop.ViewModels;
 
+// --- ViewModel da janela de manutenção de armazenamento ---
 public sealed class StorageMaintenanceViewModel : ViewModelBase
 {
     private readonly IStorageMaintenanceDialogs _dialogs;

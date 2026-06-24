@@ -1,14 +1,5 @@
-"""
-Validação de segredos no arranque do backend.
-
-Modo produção (RATANALYZER_ENV=production ou RATANALYZER_REQUIRE_SECRETS=1):
-  - RATANALYZER_API_TOKEN obrigatório
-
-Modo estrito (RATANALYZER_REQUIRE_API_TOKEN=1):
-  - RATANALYZER_API_TOKEN obrigatório (sem exigir RATANALYZER_ENV=production)
-
-Dev local: omita as flags acima; sem token a API aceita pedidos em 127.0.0.1.
-"""
+# --- Módulo: security_config ---
+# Validação de segredos no arranque do backend (token API em produção).
 
 from __future__ import annotations
 
@@ -21,25 +12,29 @@ logger = logging.getLogger("rat_analyzer_api")
 _TRUE = frozenset({"1", "true", "yes", "on"})
 
 
+# --- Interpretação de variável de ambiente como booleano ---
 def _env_bool(name: str) -> bool:
     return (os.environ.get(name) or "").strip().lower() in _TRUE
 
 
+# --- Detecção de modo produção ---
 def is_production_mode() -> bool:
     env = (os.environ.get("RATANALYZER_ENV") or "").strip().lower()
     return env == "production" or _env_bool("RATANALYZER_REQUIRE_SECRETS")
 
 
+# --- Verificação se token API é obrigatório ---
 def require_api_token_enforced() -> bool:
     return _env_bool("RATANALYZER_REQUIRE_API_TOKEN") or is_production_mode()
 
 
+# --- Verificação se token API está configurado ---
 def api_token_configured() -> bool:
     return bool((os.environ.get("RATANALYZER_API_TOKEN") or "").strip())
 
 
+# --- Validação de segredos no arranque (aborta se em falta em produção) ---
 def validate_startup_secrets() -> None:
-    """Aborta o processo se segredos obrigatórios estiverem em falta."""
     if not require_api_token_enforced():
         if not api_token_configured():
             logger.warning(

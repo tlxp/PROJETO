@@ -1,4 +1,6 @@
-﻿# 8) Parar VM e restaurar snapshot
+﻿# --- Script: PhaseG-Finish.ps1 ---
+# --- Finalização: parar VM, restaurar snapshot e emitir resumo ---
+
 Write-LogHost "[8/8] A parar a VM e a restaurar snapshot..."
 Stop-SandboxVM -VMName $VMName
 Start-Sleep -Milliseconds 500
@@ -7,6 +9,7 @@ Write-LogHost "      VM restaurada ao estado limpo."
 
 Add-LogLine -Path $HostLogPath -Value "VM stopped and snapshot restored"
 
+# --- Desactivação opcional do Guest Service ---
 if ($script:PROJETOVM_UseGuestServices) {
     try {
         Disable-SandboxGuestService -VMName $VMName
@@ -16,8 +19,9 @@ if ($script:PROJETOVM_UseGuestServices) {
     }
 }
 
-# JSON estruturado do run
+# --- JSON estruturado do run ---
 $analysisEnd = Get-Date
+# *status reflecte completude do relatório: ok, partial ou failed*
 $status = if (Test-ReportLooksComplete -Path $ReportOutputPath) { "ok" }
           elseif ((Test-Path -LiteralPath $ReportOutputPath) -and ((Get-Item -LiteralPath $ReportOutputPath).Length -gt 0)) { "partial" }
           else { "failed" }
@@ -42,4 +46,5 @@ Write-LogHost ""
 try { Set-Clipboard -Value $ReportOutputPath } catch { }
 Write-LogHost "Concluído."
 Write-LogHost "Relatório (copiado para clipboard): $ReportOutputPath"
+# *marca conclusão normal para evitar cleanup de emergência no finally*
 $script:SandboxRunCleanupDone = $true

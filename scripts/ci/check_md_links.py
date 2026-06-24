@@ -1,16 +1,7 @@
 #!/usr/bin/env python3
-"""
-Valida documentação Markdown do repositório:
-
-  1. Links internos resolvíveis (exclui node_modules e pastas de build).
-  2. Ortografia PT pós-acordo em ficheiros .md (formas legadas).
-  3. Grafia legada com «c» em comentários/texto de código (ex.: forma antiga de artefato).
-  4. Um único título H1 por ficheiro (fora de blocos ```).
-  5. Sem espaços em branco no fim de linha.
-
-Uso:
-  python scripts/ci/check_md_links.py
-"""
+# --- Módulo: check_md_links ---
+# --- Valida documentação Markdown: links, ortografia PT, H1 único, trailing spaces ---
+# *Uso: python scripts/ci/check_md_links.py*
 
 from __future__ import annotations
 

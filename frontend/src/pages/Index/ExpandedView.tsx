@@ -1,3 +1,4 @@
+// --- Módulo: ExpandedView.tsx ---
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, Code2, FileCode2, FileSearch, FileText, X } from "lucide-react";
@@ -62,7 +63,7 @@ type ExpandedViewProps = {
   geminiAllowMock?: boolean;
 };
 
-/** Vista expandida: ecrã inteiro com navegação à esquerda, código no centro e referências à direita. */
+// --- Vista expandida: navegação, código e referências em ecrã inteiro ---
 const ExpandedView: React.FC<ExpandedViewProps> = ({
   expandedPanel,
   result,

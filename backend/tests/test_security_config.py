@@ -1,4 +1,5 @@
-"""Testes de validação de segredos no arranque."""
+# --- Módulo: test_security_config ---
+# Testes de validação de segredos no arranque.
 
 import pytest
 
@@ -11,6 +12,7 @@ from security_config import (
 
 
 @pytest.fixture(autouse=True)
+# --- Helper interno: clear secret env ---
 def _clear_secret_env(monkeypatch):
     for name in (
         "RATANALYZER_ENV",
@@ -22,29 +24,35 @@ def _clear_secret_env(monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
 
+# --- Testes de SecurityConfig ---
 class TestSecurityConfig:
+# --- Teste: verifica dev sem flags nao exige token ---
     def test_dev_sem_flags_nao_exige_token(self):
         assert not require_api_token_enforced()
         assert not is_production_mode()
         validate_startup_secrets()
 
+# --- Teste: verifica require api token sem valor aborta ---
     def test_require_api_token_sem_valor_aborta(self, monkeypatch):
         monkeypatch.setenv("RATANALYZER_REQUIRE_API_TOKEN", "1")
         with pytest.raises(SystemExit) as exc:
             validate_startup_secrets()
         assert exc.value.code == 1
 
+# --- Teste: verifica production sem token aborta ---
     def test_production_sem_token_aborta(self, monkeypatch):
         monkeypatch.setenv("RATANALYZER_ENV", "production")
         with pytest.raises(SystemExit):
             validate_startup_secrets()
 
+# --- Teste: verifica production com token ok ---
     def test_production_com_token_ok(self, monkeypatch):
         monkeypatch.setenv("RATANALYZER_ENV", "production")
         monkeypatch.setenv("RATANALYZER_API_TOKEN", "segredo-forte")
         validate_startup_secrets()
         assert api_token_configured()
 
+# --- Teste: verifica token configurado sem modo estrito ---
     def test_token_configurado_sem_modo_estrito(self, monkeypatch):
         monkeypatch.setenv("RATANALYZER_API_TOKEN", "x")
         assert api_token_configured()

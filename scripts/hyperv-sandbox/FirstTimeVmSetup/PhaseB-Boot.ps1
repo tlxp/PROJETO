@@ -1,12 +1,16 @@
-﻿# [1/5] Parar VM para estado limpo
+﻿# --- Script: PhaseB-Boot.ps1 ---
+# Fase B: parar VM, arrancar e aguardar PowerShell Direct + configuração automática do guest.
+
+# --- [1/5] Parar VM para estado limpo ---
 Write-LogHost '[1/5] A parar a VM (estado limpo)...'
 if ($vm.State -ne "Off") {
+    # *Força desligamento para garantir ponto de partida consistente*
     Stop-VM -Name $VMName -Force -ErrorAction SilentlyContinue
     Start-Sleep -Milliseconds 800
 }
 Write-LogHost "       VM desligada."
 
-# [2/5] Arrancar VM + aguardar PowerShell Direct
+# --- [2/5] Arrancar VM e aguardar PowerShell Direct ---
 Write-LogHost "[2/5] A arrancar VM e aguardar PowerShell Direct..."
 try {
     $psDirectOk = Start-SandboxVM -VMName $VMName -CredentialCandidates $credCandidates -PowerShellDirectTimeoutSeconds $PowerShellDirectTimeoutSeconds
@@ -15,6 +19,7 @@ try {
     Write-LogWarning ('       Erro ao aguardar PowerShell Direct: {0}' -f $_.Exception.Message)
 }
 
+# --- Validação do PowerShell Direct ---
 if (-not $psDirectOk) {
     Write-LogHost ""
     Write-LogHost "=========================================================="
@@ -34,11 +39,12 @@ if (-not $psDirectOk) {
     Abort-WithCleanup "Sem PowerShell Direct (timeout=${PowerShellDirectTimeoutSeconds}s)."
 }
 
-# Se Start-SandboxVM devolveu PSCredential (credencial efetivamente aceite), use-a no resto do script.
+# *Se Start-SandboxVM devolveu a credencial aceite, reutilizá-la no resto do fluxo*
 if ($psDirectOk -is [pscredential]) {
     $cred = $psDirectOk
 }
 
+# --- Configuração automática de rede e serviços no guest ---
 Write-LogHost "       A configurar rede e aceitar popups automaticamente..."
 
 $autoAcceptScript = @'
@@ -86,6 +92,7 @@ try {
 '@
 
 try {
+    # *Executa script de configuração remota via PowerShell Direct*
     $autoResult = Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock ([scriptblock]::Create($autoAcceptScript))
     $autoResult | ForEach-Object { Write-LogHost "         $_" }
     Write-LogHost "       Configuração automática aplicada."

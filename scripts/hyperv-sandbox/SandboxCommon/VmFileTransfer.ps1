@@ -1,9 +1,13 @@
-﻿function Get-SandboxPsDirectChunkSize {
+﻿# --- Script: VmFileTransfer.ps1 ---
+
+# --- Tamanho de chunk para transferência via PowerShell Direct ---
+function Get-SandboxPsDirectChunkSize {
     $configured = [int]$script:PROJETOVM_PsDirectChunkSizeBytes
     if ($configured -gt 65536) { return $configured }
     return 2097152
 }
 
+# --- Cópia host→guest via PowerShell Direct (chunks Base64) ---
 function Copy-SandboxVMFileToGuestViaPsDirect {
     param(
         [Parameter(Mandatory = $true)][string] $VMName,
@@ -16,6 +20,7 @@ function Copy-SandboxVMFileToGuestViaPsDirect {
         throw "Ficheiro host não encontrado: $HostSourcePath"
     }
 
+    # *Garantir diretório de destino no guest*
     Invoke-Command -VMName $VMName -Credential $Credential -ScriptBlock {
         param($Path)
         $parent = Split-Path -Parent -Path $Path
@@ -39,6 +44,7 @@ function Copy-SandboxVMFileToGuestViaPsDirect {
                 [Convert]::ToBase64String($buffer)
             }
 
+            # *Escrever chunk no guest na posição correta*
             Invoke-Command -VMName $VMName -Credential $Credential -ScriptBlock {
                 param($Path, $Offset, $Base64Data, $IsFirst)
                 $bytes = [Convert]::FromBase64String($Base64Data)
@@ -60,6 +66,7 @@ function Copy-SandboxVMFileToGuestViaPsDirect {
     }
 }
 
+# --- Cópia host→guest (Guest Services ou fallback PsDirect) ---
 function Copy-SandboxVMFile {
     param(
         [string] $VMName,
@@ -74,6 +81,7 @@ function Copy-SandboxVMFile {
         return
     }
 
+    # --- Tentativa via Guest Services (Copy-VMFile) ---
     $svcName = Get-SandboxGuestServiceName -VMName $VMName
     if ($script:PROJETOVM_UseGuestServices -and $svcName) {
         Enable-VMIntegrationService -VMName $VMName -Name $svcName -ErrorAction SilentlyContinue
@@ -98,6 +106,7 @@ function Copy-SandboxVMFile {
         throw "N-o foi fornecida -Credential para c-pia via PowerShell Direct na VM '$VMName'."
     }
 
+    # --- Fallback: PowerShell Direct ---
     for ($i = 1; $i -le $Retries; $i++) {
         try {
             if ($i -eq 1 -and $script:SandboxGuestFileCopyMode -ne "psdirect") {
@@ -119,6 +128,7 @@ function Copy-SandboxVMFile {
     }
 }
 
+# --- Atualização do snapshot CleanState ---
 function Update-SandboxCleanSnapshot {
     param(
         [Parameter(Mandatory = $true)][string] $VMName,
@@ -143,6 +153,7 @@ function Update-SandboxCleanSnapshot {
     Write-LogHost "        Snapshot '$SnapshotName' actualizado com sucesso."
 }
 
+# --- Restauração de snapshot ---
 function Restore-SandboxSnapshot {
     param(
         [string] $VMName,
@@ -155,6 +166,7 @@ function Restore-SandboxSnapshot {
     }
 }
 
+# --- Paragem forçada da VM ---
 function Stop-SandboxVM {
     param(
         [string] $VMName
@@ -166,6 +178,7 @@ function Stop-SandboxVM {
     }
 }
 
+# --- Verificação de existência de caminho no guest ---
 function Test-SandboxGuestPathExists {
     param(
         [Parameter(Mandatory = $true)][string] $VMName,
@@ -183,6 +196,7 @@ function Test-SandboxGuestPathExists {
     }
 }
 
+# --- Verificação de conclusão do relatório de análise no guest ---
 function Test-SandboxGuestAnalysisReportComplete {
     param(
         [Parameter(Mandatory = $true)][string] $VMName,
@@ -210,6 +224,7 @@ function Test-SandboxGuestAnalysisReportComplete {
                 return [pscustomobject]$result
             }
 
+            # *Procurar marcador de fim no final do ficheiro*
             $markerBytes = [System.Text.Encoding]::UTF8.GetBytes($ReportEndMarker)
             $scanBytes = [Math]::Max($markerBytes.Length, 8192)
             $fs = [System.IO.File]::Open($ReportPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
@@ -241,6 +256,7 @@ function Test-SandboxGuestAnalysisReportComplete {
     }
 }
 
+# --- Cópia de artefatos de diagnóstico do guest para o host ---
 function Copy-SandboxGuestDiagnostics {
     <#
     .SYNOPSIS
@@ -284,6 +300,7 @@ function Copy-SandboxGuestDiagnostics {
     return @($copied)
 }
 
+# --- Obtenção de digest SHA256 do relatório no guest ---
 function Get-SandboxGuestReportDigest {
     <#
     .SYNOPSIS
@@ -304,6 +321,7 @@ function Get-SandboxGuestReportDigest {
                 reportBytes = 0
             }
 
+            # *Preferir digest pré-calculado em guest_analysis_done.txt*
             if (Test-Path -LiteralPath $DonePath) {
                 try {
                     $done = Get-Content -LiteralPath $DonePath -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -329,6 +347,7 @@ function Get-SandboxGuestReportDigest {
     }
 }
 
+# --- Validação SHA256 do relatório copiado para o host ---
 function Assert-SandboxCopiedReportHash {
     <#
     .SYNOPSIS
@@ -354,6 +373,7 @@ function Assert-SandboxCopiedReportHash {
     return (Assert-FileSha256 -Path $HostReportPath -ExpectedSha256 $ExpectedSha256 -Label "relatório copiado")
 }
 
+# --- Obtenção do relatório do guest com validação opcional ---
 function Try-ReceiveSandboxGuestReport {
     <#
     .SYNOPSIS
@@ -382,6 +402,7 @@ function Try-ReceiveSandboxGuestReport {
     $shouldPull = $false
     $reason = ""
 
+    # *Decidir se deve copiar o relatório (completo, done.txt ou parcial)*
     if ($guestDone) {
         $shouldPull = $true
         $reason = "guest_analysis_done.txt"
@@ -439,6 +460,7 @@ function Try-ReceiveSandboxGuestReport {
     }
 }
 
+# --- Deteção do modo de cópia de ficheiros (Cmdlet vs PsDirect) ---
 function Get-SandboxGuestFileCopyMode {
     if ($script:SandboxGuestFileCopyMode) { return $script:SandboxGuestFileCopyMode }
 
@@ -457,6 +479,7 @@ function Get-SandboxGuestFileCopyMode {
     return $script:SandboxGuestFileCopyMode
 }
 
+# --- Cópia guest→host via PowerShell Direct (chunks Base64) ---
 function Copy-SandboxVMFileFromGuestViaPsDirect {
     param(
         [Parameter(Mandatory = $true)][string] $VMName,
@@ -523,6 +546,7 @@ function Copy-SandboxVMFileFromGuestViaPsDirect {
     }
 }
 
+# --- Cópia guest→host (Copy-VMFile ou fallback PsDirect) ---
 function Copy-SandboxVMFileFromGuest {
     param(
         [Parameter(Mandatory = $true)][string] $VMName,
@@ -556,6 +580,7 @@ function Copy-SandboxVMFileFromGuest {
         return
     }
 
+    # --- Cópia via Copy-VMFile (Guest Services) ---
     $svcName = Get-SandboxGuestServiceName -VMName $VMName
     if (-not $svcName) {
         throw "Guest Services não disponível na VM '${VMName}'."
@@ -565,7 +590,7 @@ function Copy-SandboxVMFileFromGuest {
 
     $parent = Split-Path -Parent -Path $HostDestinationPath
     if ($parent -and -not (Test-Path -LiteralPath $parent)) {
-        New-Item -ItemType Directory -Path $parent -Force -ErrorAction Stop | Out-Null
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
     }
     if (Test-Path -LiteralPath $HostDestinationPath) {
         Remove-Item -LiteralPath $HostDestinationPath -Force -ErrorAction SilentlyContinue

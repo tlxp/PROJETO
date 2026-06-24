@@ -1,5 +1,7 @@
+// --- Módulo: NotFound.tsx ---
 import { Link } from "react-router-dom";
 
+// --- Página 404 ---
 const NotFound = () => (
   <div className="flex min-h-screen items-center justify-center bg-muted">
     <div className="text-center">

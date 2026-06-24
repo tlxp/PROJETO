@@ -1,3 +1,4 @@
+// --- Módulo: StaticAnalysisLoadingOverlay.tsx ---
 import React from "react";
 import { useI18n } from "@/i18n";
 
@@ -6,6 +7,7 @@ type StaticAnalysisLoadingOverlayProps = {
   compact?: boolean;
 };
 
+// --- Overlay de progresso durante análise estática ---
 const StaticAnalysisLoadingOverlay: React.FC<StaticAnalysisLoadingOverlayProps> = ({
   progress,
   compact = false,

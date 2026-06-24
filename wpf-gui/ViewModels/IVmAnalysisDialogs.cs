@@ -1,8 +1,9 @@
+﻿// --- Módulo: IVmAnalysisDialogs.cs ---
 using System.Threading.Tasks;
 
 namespace RatAnalyzer.Desktop.ViewModels;
 
-/// <summary>Diálogos modais da análise VM — implementado pela janela WPF.</summary>
+// --- Diálogos modais da análise VM — implementado pela janela WPF ---
 public interface IVmAnalysisDialogs
 {
     Task<bool> ConfirmYesNoAsync(string title, string message, bool warningIcon = false);

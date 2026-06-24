@@ -1,8 +1,10 @@
+﻿// --- Módulo: VmGuestCredentialsWindow.xaml.cs ---
 using System.Windows;
 using RatAnalyzer.Desktop.Localization;
 
 namespace RatAnalyzer.Desktop.Views;
 
+// --- Diálogo modal para credenciais do utilizador na VM guest ---
 public partial class VmGuestCredentialsWindow : Window
 {
     public VmGuestCredentialsWindow(string defaultUsername)
@@ -13,12 +15,14 @@ public partial class VmGuestCredentialsWindow : Window
         Loaded += (_, _) => PasswordBox.Focus();
     }
 
+    // --- Propriedades expostas ao host após confirmação ---
     public string GuestUser => UserTextBox.Text;
 
     public string GuestPassword => PasswordBox.Password;
 
     public bool RememberForSession => RememberCheckBox.IsChecked == true;
 
+    // --- Valida campos e fecha com DialogResult true ---
     private void Continue_Click(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrWhiteSpace(UserTextBox.Text))

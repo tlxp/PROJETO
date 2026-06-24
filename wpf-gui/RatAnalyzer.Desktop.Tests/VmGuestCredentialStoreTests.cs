@@ -1,8 +1,10 @@
+﻿// --- Módulo: VmGuestCredentialStoreTests.cs ---
 using RatAnalyzer.Desktop.Services;
 using Xunit;
 
 namespace RatAnalyzer.Desktop.Tests;
 
+// --- Testes do armazenamento de credenciais da VM ---
 public sealed class VmGuestCredentialStoreTests
 {
     [Fact]

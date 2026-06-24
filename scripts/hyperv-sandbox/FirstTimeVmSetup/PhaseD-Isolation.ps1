@@ -1,12 +1,16 @@
-﻿# [4/5] Garantir isolamento (sem adaptadores externos) + validar que não há internet
+﻿# --- Script: PhaseD-Isolation.ps1 ---
+# Fase D: garantir isolamento de rede removendo adaptadores em switches não-Internal.
+
+# --- [4/5] Garantir isolamento de rede ---
 Write-LogHost '[4/5] A garantir isolamento de rede (sem adaptadores externos)...'
 
-# Importante: o Hyper-V não permite remover adaptadores sintéticos com a VM em execução.
+# *Hyper-V não permite remover adaptadores sintéticos com a VM em execução*
 Write-LogHost "       A parar a VM para remover adaptadores não-Internal..."
 Stop-VM -Name $VMName -Force -ErrorAction SilentlyContinue
 Start-Sleep -Milliseconds 500
 
-# Remover qualquer adaptador ligado a switch não-Internal (ex.: External/Default Switch)
+# --- Remover adaptadores em switches não-Internal ---
+# *Remove ligações a switches External/Default, mantendo apenas Internal (SandboxSwitch)*
 $allAdapters = @(Get-VMNetworkAdapter -VMName $VMName -ErrorAction SilentlyContinue)
 foreach ($adapter in $allAdapters) {
     if ([string]::IsNullOrWhiteSpace($adapter.SwitchName)) { continue }
@@ -23,6 +27,7 @@ foreach ($adapter in $allAdapters) {
     }
 }
 
+# --- Listar adaptadores restantes ---
 Write-LogHost '       Adaptadores restantes (devem ser apenas SandboxSwitch/Internal):'
 Get-VMNetworkAdapter -VMName $VMName | ForEach-Object {
     $swName = $_.SwitchName
@@ -35,9 +40,8 @@ Get-VMNetworkAdapter -VMName $VMName | ForEach-Object {
     Write-LogHost ('         - {0} -> ''{1}'' [{2}]' -f $_.Name, $swName, $swType)
 }
 
-# Garantir VM em execução para passos seguintes
-# NOTA: verificação de "internet" omitida por performance.
-# Com switch `Internal` e remoção de adaptadores externos, o risco de fuga é residual.
+# --- Reiniciar VM para passos seguintes ---
+# *Verificação de internet omitida: switch Internal + remoção de externos = isolamento assumido*
 Write-LogHost '       A arrancar VM (isolamento assumido: Switch Internal + adaptadores externos removidos)...'
 $ps2 = Start-SandboxVM -VMName $VMName -Credential $cred -PowerShellDirectTimeoutSeconds $PsDirectTimeoutSeconds
 if ($ps2 -is [pscredential]) { $cred = $ps2 }

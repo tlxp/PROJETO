@@ -1,3 +1,4 @@
+' --- Diagrama: pipeline de análise estática ---
 @startuml
 title Pipeline de análise estática — RAT Analyzer
 
@@ -7,6 +8,7 @@ start
 
 if (Ficheiro válido?) then (sim)
   :Extrair metadados PE;
+  ' *Descompilador escolhido pelo tipo de assembly*
   if (Assembly .NET?) then (sim)
     :Descompilar com ILSpy (C# / IL);
   else (não)

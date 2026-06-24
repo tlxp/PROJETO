@@ -1,3 +1,5 @@
+// --- Módulo: AgentEndpointsTests.cs ---
+
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -6,12 +8,15 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using VmAgent.Models;
 using Xunit;
+
 namespace VmAgent.Tests;
 
+// --- Fábrica de aplicação para testes de integração ---
 public sealed class VmAgentWebApplicationFactory : WebApplicationFactory<Program>
 {
     public const string TestToken = "test-agent-token-for-ci";
 
+    // --- Configura ambiente de teste com token fixo ---
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         Environment.SetEnvironmentVariable("VM_AGENT_TOKEN", TestToken);
@@ -20,15 +25,18 @@ public sealed class VmAgentWebApplicationFactory : WebApplicationFactory<Program
     }
 }
 
+// --- Testes de integração dos endpoints HTTP ---
 public sealed class AgentEndpointsTests : IClassFixture<VmAgentWebApplicationFactory>
 {
     private readonly HttpClient _client;
 
+    // --- Injeta cliente HTTP da fábrica de testes ---
     public AgentEndpointsTests(VmAgentWebApplicationFactory factory)
     {
         _client = factory.CreateClient();
     }
 
+    // --- Health sem token deve devolver 401 ---
     [Fact]
     public async Task Health_WithoutToken_ReturnsUnauthorized()
     {
@@ -37,6 +45,7 @@ public sealed class AgentEndpointsTests : IClassFixture<VmAgentWebApplicationFac
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+    // --- Health com token válido deve devolver 200 ---
     [Fact]
     public async Task Health_WithValidToken_ReturnsOk()
     {
@@ -48,6 +57,7 @@ public sealed class AgentEndpointsTests : IClassFixture<VmAgentWebApplicationFac
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    // --- Health com token inválido deve devolver 401 ---
     [Fact]
     public async Task Health_WithInvalidToken_ReturnsUnauthorized()
     {
@@ -59,6 +69,7 @@ public sealed class AgentEndpointsTests : IClassFixture<VmAgentWebApplicationFac
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+    // --- Upload sem multipart deve devolver 400 ---
     [Fact]
     public async Task Upload_WithoutMultipart_ReturnsBadRequest()
     {
@@ -71,6 +82,7 @@ public sealed class AgentEndpointsTests : IClassFixture<VmAgentWebApplicationFac
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    // --- Upload com ficheiro vazio deve devolver 400 ---
     [Fact]
     public async Task Upload_EmptyFile_ReturnsBadRequest()
     {
@@ -87,6 +99,7 @@ public sealed class AgentEndpointsTests : IClassFixture<VmAgentWebApplicationFac
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    // --- Upload com ficheiro válido deve devolver 200 ---
     [Fact]
     public async Task Upload_WithValidFile_ReturnsOk()
     {
@@ -104,6 +117,7 @@ public sealed class AgentEndpointsTests : IClassFixture<VmAgentWebApplicationFac
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    // --- Report antes de execução deve devolver 400 ---
     [Fact]
     public async Task Report_BeforeRun_ReturnsBadRequest()
     {
@@ -115,6 +129,7 @@ public sealed class AgentEndpointsTests : IClassFixture<VmAgentWebApplicationFac
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    // --- Run sem amostra carregada deve devolver 400 ---
     [Fact]
     public async Task Run_WithoutSample_ReturnsBadRequest()
     {

@@ -1,3 +1,4 @@
+' --- Diagrama: casos de uso do RAT Analyzer ---
 @startuml
 left to right direction
 skinparam shadowing false
@@ -19,6 +20,7 @@ A --> UC1
 A --> UC2
 A --> UC3
 A --> UC4
+' *Análise estática inclui score e descompilação; IA estende pseudo-C*
 UC2 ..> UC5 : <<include>>
 UC2 ..> UC6 : <<include>>
 UC6 ..> UC7 : <<extend>>

@@ -1,4 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <!-- BenignVmTest.Tests: testes unitários do smoke test -->
 
   <PropertyGroup>
     <TargetFramework>net8.0-windows</TargetFramework>

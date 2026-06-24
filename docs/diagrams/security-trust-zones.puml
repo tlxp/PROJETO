@@ -1,3 +1,4 @@
+' --- Diagrama: zonas de confiança (host, sandbox, guest) ---
 @startuml
 title Zonas de confiança — RAT Analyzer
 skinparam shadowing false
@@ -21,6 +22,7 @@ package "Zona guest (não confiável)" #FFE0B2 {
   [Run-MalwareAnalysis.ps1] as VMPS
 }
 
+' *Autenticação por token entre camadas*
 WEB --> API : X-API-Token
 WPF --> API : X-API-Token
 WPF --> PS : orquestração local
@@ -29,6 +31,7 @@ PS --> VMPS : PsDirect +\nSHA256
 VMA --> SAMPLE : upload / run
 VMPS --> SAMPLE : execução isolada
 
+' *Guest sem acesso à Internet*
 NET ..> SAMPLE : bloqueado
 NET ..> VMPS : bloqueado
 

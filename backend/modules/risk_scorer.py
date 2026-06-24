@@ -1,7 +1,5 @@
-"""
-Módulo de Scoring de Risco
-Calcula score de risco baseado em múltiplos fatores
-"""
+# --- Módulo: risk_scorer ---
+# Scoring de risco (0–100) com base em análise estática, YARA e deobfuscação.
 
 from typing import Dict, List, Optional
 
@@ -11,8 +9,8 @@ BENIGN_VALIDATION_SHA256 = frozenset({
 })
 
 
+# --- Calcula score de risco de 0–100 com retornos decrescentes ---
 class RiskScorer:
-    """Calcula score de risco de 0-100 baseado na análise"""
 
     WEIGHTS = {
         "suspicious_imports": 12,
@@ -27,9 +25,11 @@ class RiskScorer:
         "high_entropy": 5,
     }
 
+# --- Helper interno: init   ---
     def __init__(self):
         pass
 
+    # --- Calcula score total com retornos decrescentes e nível de risco ---
     def calculate_risk(
         self,
         static_analysis: Dict,
@@ -37,7 +37,6 @@ class RiskScorer:
         deobfuscation: Dict,
         file_sha256: Optional[str] = None,
     ) -> Dict:
-        """Calcula score de risco total com retornos decrescentes e nível calibrado."""
         score = 0
         details: Dict = {}
 
@@ -162,14 +161,15 @@ class RiskScorer:
         return result
 
     @staticmethod
+# --- Helper interno: tier score ---
     def _tier_score(count: int, per_item: int, maximum: int) -> int:
         if count <= 0:
             return 0
         return min(count * per_item, maximum)
 
     @staticmethod
+    # --- C2: primeiros indicadores pesam mais; evita saturar só com ruído ---
     def _score_c2_strings(count: int) -> int:
-        """C2: primeiros indicadores pesam mais; evita saturar só com ruído de strings."""
         if count <= 0:
             return 0
         if count == 1:
@@ -180,8 +180,8 @@ class RiskScorer:
             return 12
         return min(12 + (count - 5) * 2, 20)
 
+    # --- Nível calibrado: ALTO/CRÍTICO exigem sinais fortes ---
     def _get_risk_level(self, score: int, details: Dict, yara_count: int) -> str:
-        """Nível calibrado: ALTO/CRÍTICO exigem sinais fortes, não só ruído heurístico."""
         has_yara = yara_count > 0
         strong_c2 = details["c2_strings"]["count"] >= 2
         strong_funcs = details["suspicious_functions"]["count"] >= 2

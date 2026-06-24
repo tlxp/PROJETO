@@ -1,3 +1,4 @@
+﻿// --- Módulo: MainDashboardView.xaml.cs ---
 using System.Windows;
 using System.Windows.Controls;
 using RatAnalyzer.Desktop.Localization;
@@ -5,6 +6,7 @@ using RatAnalyzer.Desktop.ViewModels;
 
 namespace RatAnalyzer.Desktop.Views;
 
+// --- Vista principal: drop de ficheiros e comandos de análise ---
 public partial class MainDashboardView : UserControl
 {
     private readonly MainDashboardViewModel _viewModel;
@@ -19,6 +21,7 @@ public partial class MainDashboardView : UserControl
     private void ChangeLanguageButton_Click(object sender, RoutedEventArgs e) =>
         AppNavigation.RequestLanguagePicker?.Invoke();
 
+    // --- Trata drop de ficheiro na área de arrastar ---
     private void FileDropArea_Drop(object sender, DragEventArgs e)
     {
         if (!e.Data.GetDataPresent(DataFormats.FileDrop))

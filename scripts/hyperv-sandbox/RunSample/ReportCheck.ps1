@@ -1,6 +1,9 @@
-﻿# Verificação de relatório + logging do host.
-# Carregado via dot-sourcing (mesmo scope).
+﻿# --- Script: ReportCheck.ps1 ---
+# --- Verificação de relatório, logging e diagnóstico do guest ---
+# *carregado via dot-sourcing no mesmo scope do orquestrador*
 
+# --- Função: Test-ReportLooksComplete ---
+# *confirma que o relatório contém cabeçalho e rodapé gerados por Run-MalwareAnalysis.ps1*
 function Test-ReportLooksComplete {
     param([string] $Path)
     try {
@@ -9,7 +12,6 @@ function Test-ReportLooksComplete {
         if ($fi.Length -le 0) { return $false }
         $txt = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop
         if ([string]::IsNullOrWhiteSpace($txt)) { return $false }
-        # O relatório está completo quando contém o cabeçalho e o rodapé gerados por Run-MalwareAnalysis.ps1
         if ($txt -notmatch "RELAT") { return $false }
         if ($txt -notmatch "FIM DO RELAT") { return $false }
         return $true
@@ -18,8 +20,12 @@ function Test-ReportLooksComplete {
     }
 }
 
+# --- Função: Add-LogLine ---
+# *acrescenta linha com timestamp ao ficheiro de log do host*
 function Add-LogLine { param([string]$Path, [string]$Value) Add-Content -Path $Path -Value "[$(Get-Date -Format 'HH:mm:ss')] $Value" }
 
+# --- Função: Get-SandboxGuestAnalysisDiag ---
+# *consulta remotamente o estado da análise dentro da VM via PowerShell Direct*
 function Get-SandboxGuestAnalysisDiag {
     param(
         [Parameter(Mandatory = $true)][string] $VMName,
@@ -44,6 +50,7 @@ function Get-SandboxGuestAnalysisDiag {
             pidRunning   = $false
         }
 
+        # *caminhos de ficheiros de estado criados pela análise no guest*
         $donePath = Join-Path $WorkDirLocal 'guest_analysis_done.txt'
         $alivePath = Join-Path $WorkDirLocal 'guest_alive.txt'
         $errPath = Join-Path $WorkDirLocal 'launch_error.txt'
@@ -71,6 +78,8 @@ function Get-SandboxGuestAnalysisDiag {
         if (Test-Path -LiteralPath $crashLogPath) {
             $out.crashLogTail = (Get-Content -LiteralPath $crashLogPath -Tail 3 -ErrorAction SilentlyContinue) -join ' | '
         }
+
+        # *verifica se o marcador REPORT_END; está no final do relatório*
         if ($out.reportBytes -gt 0) {
             try {
                 $markerBytes = [System.Text.Encoding]::UTF8.GetBytes($ReportEndMarkerLocal)

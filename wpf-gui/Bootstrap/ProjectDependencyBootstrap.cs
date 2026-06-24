@@ -1,3 +1,4 @@
+﻿// --- Módulo: ProjectDependencyBootstrap.cs ---
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -11,16 +12,10 @@ using RatAnalyzer.Desktop.Views;
 
 namespace RatAnalyzer.Desktop.Bootstrap;
 
-/// <summary>
-/// Na abertura do WPF: verifica e instala dependências comuns à análise estática (Python/pip, npm, YARA em Python,
-/// JDK 21 para Ghidra, ILSpy CLI, Ghidra) e à análise em VM (Hyper-V, ADK/oscdimg, scripts). Depois <see cref="StartupSequence.RunFullStartupSequenceAsync"/>
-/// continua para as portas 8000/8080.
-/// </summary>
+// --- Na abertura do WPF: verifica/instala dependências estáticas e VM; depois StartupSequence abre portas 8000/8080 ---
 public static class ProjectDependencyBootstrap
 {
-    /// <summary>
-    /// Instala apenas o que falta (pip/npm são idempotentes). Não instala Node/.NET/Python no sistema.
-    /// </summary>
+    // --- Instala apenas o que falta (pip/npm idempotentes); não instala Node/.NET/Python no sistema ---
     public static async Task EnsureAndInstallAsync(Action<string> log, CancellationToken cancellationToken)
     {
         log(LocalizationManager.Get(LocKeys.LogDepsStart));

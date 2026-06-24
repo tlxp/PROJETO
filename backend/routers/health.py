@@ -1,4 +1,5 @@
-"""Healthcheck enriquecido e métricas Prometheus."""
+# --- Módulo: health ---
+# --- Healthcheck enriquecido e métricas Prometheus ---
 
 from __future__ import annotations
 
@@ -19,6 +20,7 @@ from security_config import api_token_configured
 router = APIRouter(tags=["health"])
 
 
+# --- Endpoint de saúde com estado de DB, YARA, Ghidra e driver VM ---
 @router.get("/api/health")
 async def health() -> dict:
     yara = check_yara_available()
@@ -37,6 +39,7 @@ async def health() -> dict:
     }
 
 
+# --- Métricas no formato Prometheus (text/plain) ---
 @router.get("/metrics", response_class=PlainTextResponse)
 async def metrics() -> PlainTextResponse:
     return PlainTextResponse(

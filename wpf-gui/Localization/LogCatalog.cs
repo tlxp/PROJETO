@@ -1,8 +1,9 @@
+﻿// --- Módulo: LogCatalog.cs ---
 using System.Collections.Generic;
 
 namespace RatAnalyzer.Desktop.Localization;
 
-/// <summary>Strings de logs de arranque e análise (PT/EN).</summary>
+// --- Strings de logs de arranque e análise (PT/EN) ---
 internal static class LogCatalog
 {
     public static void MergeInto(Dictionary<string, string> pt, Dictionary<string, string> en)

@@ -1,3 +1,4 @@
+# --- Script: 07-Ensure-Runtimes.ps1 ---
 <#
 .SYNOPSIS
     Garante runtimes essenciais na VM (offline/sem internet).
@@ -39,6 +40,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# --- Inicialização de módulos e configuração ---
 try { Remove-Module SandboxCommon -ErrorAction SilentlyContinue } catch {}
 Import-Module (Join-Path $PSScriptRoot "SandboxCommon.psm1") -Force -DisableNameChecking -ErrorAction Stop
 
@@ -51,22 +53,22 @@ $BasePath      = $script:PROJETOVM_BasePath
 $GuestUser     = $script:PROJETOVM_GuestUser
 $GuestPassword = $script:PROJETOVM_GuestPassword
 
+# --- Preparação de pastas no host ---
 $SharedDir = Join-Path $BasePath "Shared\Installers"
 Ensure-DirectoryExists -Path $SharedDir
 
 $OfflineDir = Join-Path $PSScriptRoot "offline\runtimes"
 Ensure-DirectoryExists -Path $OfflineDir
 
-# Funções auxiliares (host)
-# Extraídas para .\EnsureRuntimes\ e carregadas via dot-sourcing (mesmo scope).
+# --- Biblioteca auxiliar (host) ---
+# *Funções de download e localização de instaladores, carregadas no mesmo scope.*
 $EnsureRuntimesLibDir = Join-Path $PSScriptRoot 'EnsureRuntimes'
 foreach ($lib in @('Downloads.ps1', 'Installers.ps1')) {
     . (Join-Path $EnsureRuntimesLibDir $lib)
 }
 
-# Fluxo por fases
-# Cada fase é um fragmento procedural dot-sourced no MESMO scope deste script.
-# A ordem replica exatamente a execução original.
+# --- Fluxo por fases ---
+# *Cada fase é dot-sourced no mesmo scope; a ordem replica a execução original.*
 foreach ($phase in @(
     'PhaseA-Plan.ps1',
     'PhaseB-Resolve.ps1',

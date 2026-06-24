@@ -1,3 +1,4 @@
+// --- Módulo: useIndexResultsViewModel.ts ---
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { getT } from "@/i18n";
 import { apiFetch } from "@/lib/api";
@@ -37,6 +38,7 @@ type UseIndexResultsViewModelArgs = {
   currentJobId: string | null;
 };
 
+// --- ViewModel da grelha de resultados (painéis, funções sinalizadas, snippets) ---
 export function useIndexResultsViewModel({ result, file, currentJobId }: UseIndexResultsViewModelArgs) {
   const [expandedPanel, setExpandedPanel] = useState<ExpandedPanel>(null);
   const [scrollToLine, setScrollToLine] = useState<number | null>(null);

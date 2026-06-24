@@ -1,3 +1,4 @@
+﻿// --- Módulo: StaticAnalysisService.cs ---
 using System;
 using System.Globalization;
 using System.IO;
@@ -13,7 +14,7 @@ using RatAnalyzer.Desktop.Localization;
 
 namespace RatAnalyzer.Desktop.Services;
 
-/// <summary>Cliente HTTP para análise estática via backend FastAPI (streaming + job unificado).</summary>
+// --- Cliente HTTP para análise estática via backend FastAPI (streaming + job unificado) ---
 public sealed class StaticAnalysisService
 {
     private const string GhidraProgressPrefix = "[GHIDRA_PROGRESS]";

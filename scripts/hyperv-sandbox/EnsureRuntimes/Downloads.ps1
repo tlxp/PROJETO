@@ -1,15 +1,16 @@
-# Resolução de URLs e download de instaladores (host).
-# Carregado via dot-sourcing (mesmo scope).
+# --- Script: Downloads.ps1 ---
 
+# --- Configuração TLS para downloads ---
 function Set-TlsForDownloads {
     try {
-        # Garantir TLS 1.2+ em hosts mais antigos
+        # *Garantir TLS 1.2+ em hosts mais antigos.*
         [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol `
             -bor [Net.SecurityProtocolType]::Tls12 `
             -bor [Net.SecurityProtocolType]::Tls13
     } catch { }
 }
 
+# --- Resolução de URL final (seguir redirecionamentos) ---
 function Resolve-FinalUrl {
     param(
         [Parameter(Mandatory = $true)][string] $Url,
@@ -18,13 +19,11 @@ function Resolve-FinalUrl {
 
     Set-TlsForDownloads
 
-    # Seguir redirecionamentos manualmente e parar quando não houver Location.
-    # NOTA: alguns links aka.ms devolvem HTML/cookies. Nesse caso, falhamos de forma explícita.
+    # *Seguir redirecionamentos manualmente; alguns links aka.ms devolvem HTML/cookies.*
     $current = $Url
     for ($i = 0; $i -lt $MaxRedirects; $i++) {
         try {
-            # HttpWebRequest tende a expor "Location" de forma mais consistente para alguns endpoints (aka.ms).
-            # Usamos GET (não HEAD) porque alguns endpoints só redirecionam em GET.
+            # *HttpWebRequest com GET (não HEAD) expõe Location de forma consistente.*
             $req = [System.Net.HttpWebRequest]::Create($current)
             $req.AllowAutoRedirect = $false
             $req.Method = "GET"
@@ -42,7 +41,7 @@ function Resolve-FinalUrl {
             try { $ct = $resp.ContentType } catch { }
 
             if ($status -ge 300 -and $status -lt 400 -and $loc) {
-                # Location pode ser relativo
+                # *Location pode ser relativo — resolver para URI absoluto.*
                 $nextUri = New-Object System.Uri((New-Object System.Uri($current)), $loc)
                 $next = $nextUri.AbsoluteUri
                 try { $resp.Close() } catch { }
@@ -50,7 +49,7 @@ function Resolve-FinalUrl {
                 continue
             }
 
-            # Se chegámos aqui, não há redirect. Validar que parece um download direto quando esperamos .exe.
+            # *Sem redirect: devolver URL final e metadados.*
             try { $resp.Close() } catch { }
             return @{ Url = $current; Status = $status; ContentType = $ct }
         } catch {
@@ -63,16 +62,17 @@ function Resolve-FinalUrl {
     throw "Demasiados redirecionamentos ao resolver URL: $Url"
 }
 
+# --- URL do .NET Desktop Runtime 8 ---
 function Resolve-DotnetDesktopRuntimeUrl {
     param(
         [Parameter(Mandatory = $true)][ValidateSet("x86","x64")][string] $Arch
     )
 
-    # Launcher oficial (pode redirecionar para download.visualstudio.microsoft.com)
+    # *Launcher oficial Microsoft; pode redirecionar para download.visualstudio.microsoft.com.*
     $launcher = "https://aka.ms/dotnet-core-applaunch?framework=Microsoft.WindowsDesktop.App&framework_version=8.0.0&arch=$Arch&rid=win-$Arch&os=win10&gui=true"
     $r = Resolve-FinalUrl -Url $launcher -MaxRedirects 15
 
-    # Se acabar numa página HTML (ContentType text/html), é sinal de cookies/landing page.
+    # *HTML no ContentType indica landing page/cookies em vez de download directo.*
     if ($r.ContentType -and $r.ContentType -match "text/html") {
         throw "URL do .NET Desktop Runtime ($Arch) resolveu para HTML (não é download direto). URL final: $($r.Url)"
     }
@@ -83,6 +83,7 @@ function Resolve-DotnetDesktopRuntimeUrl {
     return $r.Url
 }
 
+# --- Download condicional para pasta offline ---
 function Download-InstallerIfMissing {
     param(
         [Parameter(Mandatory = $true)][string] $Url,
@@ -90,7 +91,7 @@ function Download-InstallerIfMissing {
         [Parameter(Mandatory = $true)][string] $Label
     )
 
-    # Se o nome tiver wildcard, inferir nome real a partir do URL final (inclui redirects).
+    # *Com wildcard no nome, inferir ficheiro real a partir do URL final.*
     if ($OutFileName -match "[\*\?]") {
         try {
             $final = Resolve-FinalUrl -Url $Url -MaxRedirects 15
@@ -108,6 +109,7 @@ function Download-InstallerIfMissing {
     Set-TlsForDownloads
     Write-LogHost ("[DL]  {0} -> {1}" -f $Label, $OutFileName)
     try {
+        # *Download atómico: ficheiro temporário + rename.*
         $tmp = $dst + ".download"
         if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
         Invoke-WebRequest -Uri $Url -UseBasicParsing -OutFile $tmp -TimeoutSec $DownloadTimeoutSeconds -ErrorAction Stop | Out-Null

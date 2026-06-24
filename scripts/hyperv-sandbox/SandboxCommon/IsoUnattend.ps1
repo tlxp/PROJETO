@@ -1,15 +1,16 @@
-﻿# Funções de ISO / autounattend.xml / VHDX / idiomas (parte do SandboxCommon).
-# Originalmente um único ficheiro; subdividido em .\IsoUnattend\ e carregado via
-# dot-sourcing. Este ficheiro é ele próprio carregado via dot-sourcing por
-# SandboxCommon.psm1, por isso as funções acabam no scope do módulo e são
-# exportadas normalmente.
+﻿# --- Script: IsoUnattend.ps1 ---
+
+# --- Carregamento dos módulos ISO / autounattend ---
+# *Funções de ISO, autounattend.xml, VHDX e idiomas (parte do SandboxCommon).*
+# *Originalmente um único ficheiro; subdividido em .\IsoUnattend\ e carregado via dot-sourcing.*
+# *Este ficheiro é carregado por SandboxCommon.psm1; as funções ficam no scope do módulo.*
 $IsoUnattendPartsDir = Join-Path $PSScriptRoot 'IsoUnattend'
 foreach ($part in @(
-    'MediaAndLanguages.ps1',         # candidatos de media, idiomas da imagem/UI
-    'IsoCreation.ps1',               # New-IsoFromFolder, New-WindowsIsoWithUnattend
-    'VhdxUnattend.ps1',              # New-UnattendVhdx
-    'UnattendXml.ps1',               # New-Windows10UnattendXml
-    'LanguageAndUnattendTweaks.ps1'  # idioma default do ISO, ajustes ao autounattend
+    'MediaAndLanguages.ps1',
+    'IsoCreation.ps1',
+    'VhdxUnattend.ps1',
+    'UnattendXml.ps1',
+    'LanguageAndUnattendTweaks.ps1'
 )) {
     . (Join-Path $IsoUnattendPartsDir $part)
 }

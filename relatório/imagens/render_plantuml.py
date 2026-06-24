@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Gera fig-4-*.png a partir de docs/diagrams/ (fonte única). Não mantém fig-4-*.puml."""
+# --- Módulo: render_plantuml ---
+# --- Gera fig-4-*.png a partir de docs/diagrams/ (fonte única) ---
+# *Não mantém fig-4-*.puml duplicados no relatório*
 from __future__ import annotations
 
 import subprocess
@@ -7,6 +9,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+# *Raiz do repositório (dois níveis acima de relatório/imagens/)*
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT / "scripts" / "ci") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "scripts" / "ci"))
@@ -15,6 +18,7 @@ from diagram_sources import CANONICAL_DIR, MAPPING, REPORT_DIR, render_fig_puml 
 
 
 def check() -> int:
+    # --- Validação: PNGs do relatório vs fontes canónicas ---
     errors = 0
     for source_name, fig_id in MAPPING:
         src = CANONICAL_DIR / source_name
@@ -27,6 +31,7 @@ def check() -> int:
             print(f"PNG EM FALTA: {png.relative_to(REPO_ROOT)} — execute render_plantuml.py", file=sys.stderr)
             errors += 1
             continue
+        # *PNG desatualizado se a fonte .puml foi modificada depois*
         if png.stat().st_mtime < src.stat().st_mtime:
             print(f"DESATUALIZADO: {png.name} (fonte {source_name} mais recente)", file=sys.stderr)
             errors += 1
@@ -36,6 +41,7 @@ def check() -> int:
 
 
 def render() -> int:
+    # --- Renderização: .puml temporário → PNG via plantuml.jar ---
     folder = Path(__file__).resolve().parent
     jar = folder / "plantuml.jar"
     if not jar.is_file():
@@ -54,6 +60,7 @@ def render() -> int:
             print(f"Em falta: {src}", file=sys.stderr)
             return 1
 
+        # *Injeta @startuml com fig_id para nomear o PNG corretamente*
         content = render_fig_puml(source_name, fig_id)
         with tempfile.NamedTemporaryFile(
             mode="w",
@@ -71,7 +78,7 @@ def render() -> int:
                 check=True,
                 cwd=folder,
             )
-            # PlantUML nomeia o PNG pelo @startuml id, não pelo ficheiro temporário
+            # *PlantUML nomeia o PNG pelo @startuml id, não pelo ficheiro temporário*
             generated = folder / f"{fig_id}.png"
             if not generated.is_file():
                 generated = tmp_path.with_suffix(".png")
@@ -85,11 +92,12 @@ def render() -> int:
             print(f"OK {source_name} -> {target.name} ({target.stat().st_size} bytes)")
         finally:
             tmp_path.unlink(missing_ok=True)
+            # *Remove PNGs órfãos gerados na pasta local*
             for orphan in folder.glob(f"{fig_id}*.png"):
                 if orphan.resolve() != (REPORT_DIR / f"{fig_id}.png").resolve():
                     orphan.unlink(missing_ok=True)
 
-    # Remover artefatos legados duplicados
+    # --- Limpeza de artefatos legados ---
     for legacy in REPORT_DIR.glob("fig-4-*.puml"):
         legacy.unlink()
         print(f"REMOVE legado {legacy.name}")
@@ -98,6 +106,7 @@ def render() -> int:
 
 
 def main() -> int:
+    # *Modo --check: apenas valida; sem --check: renderiza*
     if "--check" in sys.argv:
         return check()
     return render()

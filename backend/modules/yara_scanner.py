@@ -1,11 +1,6 @@
-"""
-Módulo de Scanner YARA
-Deteta padrões de malware conhecido usando regras YARA.
-
-As regras são carregadas exclusivamente de `yara_rules/` (fonte única de
-verdade no repositório). Se a pasta não existir, estiver vazia ou o módulo
-`yara` não estiver instalado, a análise continua sem YARA (com warning).
-"""
+# --- Módulo: yara_scanner ---
+# --- Scanner YARA: deteta padrões de malware com regras de yara_rules/ ---
+# *Se yara-python ou regras faltarem, a análise continua sem YARA*
 
 import logging
 from pathlib import Path
@@ -19,9 +14,10 @@ except ImportError:  # yara-python é opcional: a análise continua sem YARA
 logger = logging.getLogger("rat_analyzer_yara")
 
 
+# --- Scanner YARA para deteção de padrões de RATs ---
 class YaraScanner:
-    """Scanner YARA para deteção de padrões de RATs"""
 
+# --- Helper interno: init   ---
     def __init__(self, rules_dir: str = "yara_rules"):
         self.rules_dir = Path(rules_dir)
         self.rules = None
@@ -30,8 +26,8 @@ class YaraScanner:
         except Exception:
             logger.exception("Não foi possível inicializar scanner YARA. A análise continuará sem YARA.")
 
+    # --- Compila regras YARA a partir de rules_dir ---
     def _compile_rules(self):
-        """Compila regras YARA a partir de rules_dir (sem criar ficheiros)."""
         if yara is None:
             logger.warning(
                 "Módulo yara-python não está instalado; a análise continuará sem scanner YARA."
@@ -59,8 +55,8 @@ class YaraScanner:
             logger.exception("Erro ao compilar regras YARA; a análise continuará sem YARA.")
             self.rules = None
 
+    # --- Executa scan YARA no ficheiro ---
     def scan(self, file_path: str) -> List[Dict]:
-        """Executa scan YARA no ficheiro"""
         matches = []
         
         if not self.rules:

@@ -1,9 +1,5 @@
-"""
-Métricas e contexto de logging para observabilidade mínima.
-
-Expõe contadores Prometheus em texto plano (sem dependência extra) e
-propaga job_id nos logs via ContextVar.
-"""
+# --- Módulo: observability ---
+# Métricas Prometheus em texto plano e contexto job_id nos logs via ContextVar.
 
 from __future__ import annotations
 
@@ -28,19 +24,21 @@ _COUNTERS: dict[str, int] = {
 }
 
 
+# --- Filtro de logging que injeta job_id no registo ---
 class JobIdFilter(logging.Filter):
-    """Injeta job_id no registo de log (quando definido no contexto)."""
-
+# --- Filter ---
     def filter(self, record: logging.LogRecord) -> bool:
         record.job_id = job_id_ctx.get() or "-"  # type: ignore[attr-defined]
         return True
 
 
+# --- Incremento atómico de contador de métricas ---
 def increment(counter: str, amount: int = 1) -> None:
     with _LOCK:
         _COUNTERS[counter] = _COUNTERS.get(counter, 0) + amount
 
 
+# --- Renderização de métricas no formato Prometheus ---
 def render_prometheus_metrics() -> str:
     uptime = time.monotonic() - _START_TIME
     lines = [
@@ -56,6 +54,7 @@ def render_prometheus_metrics() -> str:
     return "\n".join(lines) + "\n"
 
 
+# --- Health check: disponibilidade do motor YARA ---
 def check_yara_available() -> dict[str, Any]:
     try:
         import yara  # noqa: F401
@@ -73,6 +72,7 @@ def check_yara_available() -> dict[str, Any]:
     return {"status": "available", "rule_count": len(rule_files)}
 
 
+# --- Health check: configuração do Ghidra ---
 def check_ghidra_configured() -> dict[str, Any]:
     import os
 
@@ -86,6 +86,7 @@ def check_ghidra_configured() -> dict[str, Any]:
     return {"status": "invalid_path", "path": install}
 
 
+# --- Health check: base de dados SQLite ---
 def check_db_health() -> dict[str, Any]:
     try:
         import job_store

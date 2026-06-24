@@ -1,4 +1,5 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+  <!-- BenignVmTest: executável inofensivo para validação da sandbox -->
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>

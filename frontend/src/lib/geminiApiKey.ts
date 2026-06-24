@@ -1,5 +1,7 @@
+// --- Módulo: geminiApiKey.ts ---
 const STORAGE_KEY = "rat-analyzer.gemini-api-key";
 
+// --- Lê a chave API Gemini do localStorage ---
 export function getGeminiApiKey(): string | null {
   try {
     const value = localStorage.getItem(STORAGE_KEY);
@@ -9,6 +11,7 @@ export function getGeminiApiKey(): string | null {
   }
 }
 
+// --- Guarda ou limpa a chave API Gemini ---
 export function setGeminiApiKey(key: string): void {
   const trimmed = key.trim();
   if (!trimmed) {
@@ -18,6 +21,7 @@ export function setGeminiApiKey(key: string): void {
   localStorage.setItem(STORAGE_KEY, trimmed);
 }
 
+// --- Remove a chave API Gemini do localStorage ---
 export function clearGeminiApiKey(): void {
   localStorage.removeItem(STORAGE_KEY);
 }

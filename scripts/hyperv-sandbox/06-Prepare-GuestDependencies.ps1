@@ -1,3 +1,4 @@
+# --- Script: 06-Prepare-GuestDependencies.ps1 ---
 <#
 .SYNOPSIS
     Prepara dependências OFFLINE para análises futuras (sem internet na VM).
@@ -23,6 +24,7 @@
 #>
 #Requires -RunAsAdministrator
 
+# --- Parâmetros de entrada ---
 [CmdletBinding()]
 param(
     [Parameter()]
@@ -41,12 +43,14 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# --- Importação de módulos e configuração ---
 try { Remove-Module SandboxCommon -ErrorAction SilentlyContinue } catch {}
 Import-Module (Join-Path $PSScriptRoot "SandboxCommon.psm1") -Force -DisableNameChecking -ErrorAction Stop
 
 $configScript = Join-Path $PSScriptRoot "_Config.ps1"
 if (Test-Path $configScript) { . $configScript }
 
+# --- Variáveis de ambiente da sandbox ---
 $VMName        = $script:PROJETOVM_VMName
 $SnapshotName  = $script:PROJETOVM_SnapshotName
 $GuestUser     = $script:PROJETOVM_GuestUser
@@ -60,8 +64,7 @@ $PsDirectTimeoutSeconds = if ($script:PROJETOVM_PowerShellDirectTimeoutSeconds -
     $script:PROJETOVM_PowerShellDirectTimeoutSeconds
 } else { 240 }
 
-
-# Funções auxiliares (host)
+# --- Carregar biblioteca auxiliar e validar VM ---
 $PrepDepsLibDir = Join-Path $PSScriptRoot 'PrepareGuestDependencies'
 . (Join-Path $PrepDepsLibDir 'Helpers.ps1')
 Write-LogHost "=== Preparar dependências offline (downloads só no host) ==="
@@ -72,17 +75,19 @@ Write-LogHost ""
 $vm = Get-VM -Name $VMName -ErrorAction SilentlyContinue
 if (-not $vm) { throw "VM '$VMName' não encontrada." }
 
+# *Credenciais candidatas para PowerShell Direct e Copy-VMFile*
 $credCandidates = New-SandboxCredentialCandidates -UserName $GuestUser -Password $GuestPassword -ComputerName $VMName
 $cred = $credCandidates | Select-Object -First 1
 
 Ensure-DirectoryExists -Path $HostToolsDir
 
-
+# --- Execução do fluxo (Flow1 + Flow2) com cleanup garantido ---
 try {
     . (Join-Path $PrepDepsLibDir 'Flow1-Download.ps1')
     . (Join-Path $PrepDepsLibDir 'Flow2-Stage.ps1')
 }
 finally {
+    # *Garante paragem da VM e remoção de adaptadores mesmo em caso de erro*
     try {
         if (-not $HostOnly) {
             Stop-SandboxVM -VMName $VMName -ErrorAction SilentlyContinue

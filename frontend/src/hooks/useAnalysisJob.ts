@@ -1,9 +1,11 @@
+// --- Módulo: useAnalysisJob.ts ---
 import { useCallback, useEffect, useRef } from "react";
 import { getT } from "@/i18n";
 import { apiFetchJson } from "@/lib/api";
 
+// *Intervalo entre pedidos de estado do job*
 export const POLL_INTERVAL_MS = 1000;
-/** ~5 minutos com intervalo de 1s. */
+// *~5 minutos com intervalo de 1s*
 export const POLL_MAX_ATTEMPTS = 300;
 
 export type AnalysisJobSubmitResponse = {
@@ -15,9 +17,10 @@ export type AnalysisJobSubmitResponse = {
 export type PollOutcome =
   | { kind: "completed"; job: Record<string, unknown> }
   | { kind: "failed"; error: string }
-  /** O job continua queued/running após o tempo máximo de espera (não é um erro). */
+  // *Job ainda queued/running após timeout — não é erro*
   | { kind: "still-running"; lastStatus: string };
 
+// --- Aguarda com suporte a cancelamento via AbortSignal ---
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const onAbort = () => {
@@ -33,11 +36,8 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-/**
- * Hook para submissão e polling de jobs de análise (`/api/analysis`).
- * Todas as operações partilham um AbortController: iniciar uma nova operação
- * cancela a anterior e o unmount cancela qualquer polling pendente.
- */
+// --- Submissão e polling de jobs de análise (`/api/analysis`) ---
+// *AbortController partilhado: nova operação cancela a anterior; unmount cancela polling*
 export function useAnalysisJob() {
   const abortRef = useRef<AbortController | null>(null);
 
@@ -53,7 +53,7 @@ export function useAnalysisJob() {
     abortRef.current = null;
   }, []);
 
-  /** Cancela operações anteriores e cria um novo "contexto" cancelável. */
+  // --- Novo contexto cancelável (aborta sessão anterior) ---
   const beginSession = useCallback((): AbortSignal => {
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -89,11 +89,8 @@ export function useAnalysisJob() {
     []
   );
 
-  /**
-   * Faz polling do job até concluir, falhar ou esgotar as tentativas.
-   * Em vez de lançar erro por timeout, devolve `still-running` para a UI
-   * mostrar um aviso informativo.
-   */
+  // --- Polling até concluir, falhar ou esgotar tentativas ---
+  // *Timeout devolve `still-running` em vez de erro, para aviso na UI*
   const pollJob = useCallback(
     async (
       jobId: string,

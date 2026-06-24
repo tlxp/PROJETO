@@ -1,4 +1,7 @@
-﻿function Wait-VMHeartbeatOk {
+﻿# --- Script: VmReadiness.ps1 ---
+
+# --- Espera pelo Heartbeat da VM ---
+function Wait-VMHeartbeatOk {
     param(
         [Parameter(Mandatory = $true)][string] $VMName,
         [int] $TimeoutSeconds = 2400,
@@ -34,6 +37,7 @@
                     Write-SandboxLog -Message "Heartbeat: Primary='$primary' Secondary='$secondary' (elapsed=${elapsed}s)" -LogPath $LogPath -Level "INFO"
                 }
 
+                # *Heartbeat OK indica que o guest está a responder*
                 if ($primary -eq "OK") {
                     $elapsed = [int]((Get-Date) - $start).TotalSeconds
                     Write-SandboxLog -Message "Heartbeat da VM '$VMName' ficou OK após ${elapsed}s." -LogPath $LogPath -Level "INFO"
@@ -50,6 +54,7 @@
     return $false
 }
 
+# --- Geração de candidatos de credencial para PowerShell Direct ---
 function New-SandboxCredentialCandidates {
     param(
         [Parameter(Mandatory = $true)][string] $UserName,
@@ -63,7 +68,7 @@ function New-SandboxCredentialCandidates {
         $userNames.Add($UserName)
     }
 
-    # Se não houver domínio explícito, tentar variações comuns para conta local.
+    # *Se não houver domínio explícito, tentar variações comuns para conta local*
     $hasQualifier = ($UserName -match "\\") -or ($UserName -match "@")
     if (-not $hasQualifier) {
         $userNames.Add(".\$UserName")
@@ -72,7 +77,7 @@ function New-SandboxCredentialCandidates {
         }
     }
 
-    # Remover duplicados preservando ordem
+    # *Remover duplicados preservando ordem*
     $seen = @{}
     $final = @()
     foreach ($u in $userNames) {
@@ -85,6 +90,7 @@ function New-SandboxCredentialCandidates {
     return @($final | ForEach-Object { [pscredential]::new($_, $secure) })
 }
 
+# --- Deteção de erro de autenticação no PowerShell Direct ---
 function Test-PowerShellDirectAuthError {
     param([string] $Message)
     if ([string]::IsNullOrWhiteSpace($Message)) { return $false }
@@ -107,18 +113,17 @@ function Test-PowerShellDirectAuthError {
     return $false
 }
 
+# --- Espera pelo PowerShell Direct ficar disponível ---
 function Wait-VMPowerShellDirectReady {
     param(
         [Parameter(Mandatory = $true)][string] $VMName,
         [pscredential] $Credential,
         [pscredential[]] $CredentialCandidates,
-        # TimeoutSeconds:
-        # - >0  : timeout normal
-        # - <=0 : sem timeout (espera indefinidamente)
+        # *TimeoutSeconds: >0 = timeout normal; <=0 = espera indefinida*
         [int] $TimeoutSeconds = 0,
         [string] $LogPath,
         [int] $LogIntervalSeconds = 10,
-        # Após N ciclos seguidos só com erros de autenticação, parar (evita lockout infinito).
+        # *Após N ciclos seguidos só com erros de autenticação, parar (evita lockout infinito)*
         [int] $MaxAuthFailureAttempts = 15
     )
     if ($script:DryRun) { return $true }
@@ -146,8 +151,7 @@ function Wait-VMPowerShellDirectReady {
         try {
             foreach ($cand in $candidates) {
                 try {
-                    # PowerShell Direct (Invoke-Command -VMName) não depende de rede/WinRM.
-                    # Ele normalmente só começa a funcionar quando o Windows convidado já arrancou e aceita logon com as credenciais.
+                    # *PowerShell Direct (Invoke-Command -VMName) não depende de rede/WinRM*
                     $null = Invoke-Command -VMName $VMName -Credential $cand -ScriptBlock { 1 } -ErrorAction Stop
 
                     $elapsed = [int]((Get-Date) - $start).TotalSeconds
@@ -200,9 +204,11 @@ function Wait-VMPowerShellDirectReady {
     return $null
 }
 
+# --- Resolução do nome do Guest Service (Integration Service) ---
 function Get-SandboxGuestServiceName {
     param([string] $VMName)
 
+    # --- Normalização de texto para comparação sem acentos ---
     function _Normalize-Ascii {
         param([AllowNull()][string] $s)
         if ([string]::IsNullOrWhiteSpace($s)) { return "" }
@@ -224,14 +230,14 @@ function Get-SandboxGuestServiceName {
     try {
         $services = Get-VMIntegrationService -VMName $VMName -ErrorAction Stop
 
-        # 1) Preferir match estável por Id/Description quando possível (alguns hosts expõem Ids como GUID).
+        # *1) Preferir match estável por Id/Description*
         $svc = $services | Where-Object {
             ($_.Id -is [string] -and (($_.Id -like "*Guest*Service*") -or ($_.Id -like "*Guest*Interface*"))) -or
             ($_.Description -is [string] -and (($_.Description -like "*Guest Service*") -or ($_.Description -like "*Guest Service Interface*")))
         } | Select-Object -First 1
         if ($svc) { return $svc.Name }
 
-        # 2) Fallback robusto por nome/descrição, ignorando acentos/idioma
+        # *2) Fallback robusto por nome/descrição, ignorando acentos/idioma*
         $targets = @(
             "guest service interface",
             "guest services",
@@ -252,7 +258,7 @@ function Get-SandboxGuestServiceName {
 
         if ($svc) { return $svc.Name }
 
-        # 3) Último recurso: qualquer serviço cujo Name/Id contenha "guest" (exclui Heartbeat/shutdown).
+        # *3) Último recurso: qualquer serviço cujo Name/Id contenha "guest"*
         $svc = $services | Where-Object {
             $n = _Normalize-Ascii $_.Name
             $id = _Normalize-Ascii ([string]$_.Id)
@@ -264,6 +270,7 @@ function Get-SandboxGuestServiceName {
     return $null
 }
 
+# --- Ativação do Guest Service na VM ---
 function Enable-SandboxGuestService {
     param([string] $VMName)
     if ($script:DryRun) { return }
@@ -277,6 +284,7 @@ function Enable-SandboxGuestService {
     Enable-VMIntegrationService -VMName $VMName -Name $name -ErrorAction SilentlyContinue
 }
 
+# --- Desativação do Guest Service na VM ---
 function Disable-SandboxGuestService {
     param([string] $VMName)
     if ($script:DryRun) { return }

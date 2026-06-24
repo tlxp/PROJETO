@@ -1,3 +1,4 @@
+﻿// --- Módulo: LocalArtifactCleanup.cs ---
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -12,10 +13,7 @@ internal static class LocalArtifactCleanup
     private static readonly string[] TempDirectoryPrefixes = { "rat_", "rat_stream_" };
     private const string AdkTempFolderName = "RatAnalyzerAdk";
 
-    /// <summary>
-    /// Pastas no diretório de dados do utilizador que não devem ser apagadas pela limpeza completa
-    /// (instalação Ghidra transferida/extraída pelo arranque — ver <c>GhidraDependencyHelper</c>).
-    /// </summary>
+    // --- Pastas em %LOCALAPPDATA%\RatAnalyzer preservadas na limpeza completa (ex.: Ghidra instalado no arranque) ---
     private static readonly HashSet<string> PreservedLocalDataTopLevelNames =
         new(StringComparer.OrdinalIgnoreCase) { "Ghidra" };
 
@@ -170,10 +168,7 @@ internal static class LocalArtifactCleanup
         }
     }
 
-    /// <summary>
-    /// Remove relatórios, jobs e restantes entradas sob %LOCALAPPDATA%\RatAnalyzer,
-    /// mantendo subpastas de tooling (ex.: Ghidra) verificadas no arranque.
-    /// </summary>
+    // --- Remove relatórios/jobs sob %LOCALAPPDATA%\RatAnalyzer mantendo subpastas de tooling (ex.: Ghidra) ---
     private static void PurgeLocalRatAnalyzerDataRootPreservingTooling(string dataRoot, CleanupSummary summary)
     {
         if (string.IsNullOrWhiteSpace(dataRoot) || !Directory.Exists(dataRoot))

@@ -1,3 +1,4 @@
+' --- Diagrama: comparação Caminho A (HTTP) vs Caminho B (PowerShell) ---
 @startuml
 title Caminhos de análise dinâmica — comparação A vs B
 skinparam shadowing false
@@ -20,12 +21,14 @@ package "Caminho B — PowerShell Hyper-V" #FFF9C4 {
   [Run-MalwareAnalysis.ps1\n+ Sysmon] as B_GUEST
 }
 
+' *Caminho A: orquestrador no backend via HTTP*
 A_FE --> A_VMO : POST /api/analysis
 A_VMO --> A_DRV
 A_DRV --> A_VM : restore snapshot\nstart / stop
 A_DRV --> A_AGENT : HTTP REST\nupload · run · report
 A_AGENT --> A_VM
 
+' *Caminho B: orquestração local WPF + PsDirect*
 B_WPF --> B_PS : orquestração local
 B_PS --> B_VM : restore snapshot\nCopy-VMFile / PsDirect
 B_PS --> B_GUEST : credenciais guest

@@ -1,7 +1,5 @@
-"""
-Desmontagem de binários nativos (não .NET).
-Gera listing em assembly (x86/x64) a partir do PE para binários sem metadados .NET.
-"""
+# --- Módulo: native_disassembly ---
+# Desmontagem de binários nativos (PE x86/x64) para listing em assembly.
 
 import logging
 from pathlib import Path
@@ -19,15 +17,8 @@ IMAGE_FILE_MACHINE_ARM64 = 0xAA64
 IMAGE_SCN_MEM_EXECUTE = 0x20000000
 
 
+# --- Desmonta secções executáveis do PE e grava ficheiro .asm ---
 def disassemble_pe(file_path: str, output_path: Optional[str] = None, output_root: str = "decompiled") -> Dict:
-    """
-    Desmonta as secções de código de um PE (exe/dll) e grava um ficheiro .asm.
-    Funciona para binários nativos (x86, x64). Não usa código fonte .NET.
-    :param file_path: Caminho para o .exe ou .dll
-    :param output_path: Ficheiro de saída (opcional). Se None, usa output_root/<stem>/<stem>.asm
-    :param output_root: Pasta base de saída
-    :return: { "success", "output_file", "error", "instructions", "arch" }
-    """
     result = {"success": False, "output_file": "", "error": "", "instructions": 0, "arch": ""}
     try:
         import pefile

@@ -1,3 +1,4 @@
+# --- Script: 02-Host-ReceiveReport.ps1 ---
 <#
 .SYNOPSIS
     Servidor no host que recebe o relatório da VM via Named Pipe (porta serial virtual).
@@ -12,6 +13,7 @@ param(
 
 Import-Module (Join-Path $PSScriptRoot "SandboxCommon.psm1") -ErrorAction Stop
 
+# --- Configuração inicial e caminhos de saída ---
 $configScript = Join-Path $PSScriptRoot "_Config.ps1"
 if (Test-Path $configScript) { . $configScript }
 if ([string]::IsNullOrWhiteSpace($PipeName)) { $PipeName = $script:PROJETOVM_PipeName }
@@ -33,6 +35,7 @@ Write-Host ""
 
 $logFile = $OutputPath -replace "\.txt$", "_receive.log"
 
+# --- Registo de eventos da recepção ---
 function Write-ReceiveLog {
     param([string]$Message, [string]$Level = "INFO")
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -41,9 +44,11 @@ function Write-ReceiveLog {
     Add-Content -Path $logFile -Value $logLine -Encoding UTF8 -ErrorAction SilentlyContinue
 }
 
+# --- Recepção do relatório via Named Pipe ---
 $startTime = Get-Date
 try {
     Write-ReceiveLog "A iniciar servidor Named Pipe: $PipeName"
+    # *Bloqueia até receber todas as linhas ou expirar o timeout*
     $receivedLines = Receive-SandboxReportFromPipe -PipeName $PipeName -OutputPath $OutputPath -TimeoutSeconds $TimeoutSeconds
 
     $duration = [int]((Get-Date) - $startTime).TotalSeconds

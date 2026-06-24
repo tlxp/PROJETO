@@ -1,4 +1,5 @@
-"""Endpoints de jobs de análise (pipeline static/dynamic/both)."""
+# --- Módulo: jobs ---
+# Endpoints de jobs de análise (pipeline static/dynamic/both).
 
 from __future__ import annotations
 
@@ -41,6 +42,7 @@ logger = logging.getLogger("rat_analyzer_api")
 router = APIRouter(tags=["jobs"])
 
 
+# --- Submissão de job de análise (static/dynamic/both) ---
 @router.post("/api/analysis", dependencies=[Depends(require_api_token)])
 async def submit_analysis(
     request: Request,
@@ -82,6 +84,7 @@ async def submit_analysis(
     }
 
 
+# --- Publicação de resultado estático (Caminho B / WPF) ---
 @router.post("/api/analysis/upload_static", dependencies=[Depends(require_api_token)])
 async def upload_static_analysis(payload: StaticAnalysisUpload) -> dict:
     increment("rat_analyzer_upload_static_total")
@@ -245,6 +248,7 @@ async def upload_static_analysis(payload: StaticAnalysisUpload) -> dict:
     return {"jobId": job_id, "analysisType": analysis_type, "status": final_status}
 
 
+# --- Publicação de resultado dinâmico (Caminho B / PowerShell Hyper-V) ---
 @router.post("/api/analysis/upload_dynamic", dependencies=[Depends(require_api_token)])
 async def upload_dynamic_analysis(payload: DynamicAnalysisUpload) -> dict:
     increment("rat_analyzer_upload_dynamic_total")
@@ -330,6 +334,7 @@ async def upload_dynamic_analysis(payload: DynamicAnalysisUpload) -> dict:
     return {"jobId": job_id, "analysisType": analysis_type, "status": job_status.value}
 
 
+# --- Artefacto de trechos obfuscados (obfuscated ou deobfuscated) ---
 @router.get("/api/analysis/{job_id}/artifacts/obfuscated_snippets", response_class=PlainTextResponse)
 async def get_obfuscated_snippets_artifact(
     job_id: str,
@@ -437,6 +442,7 @@ async def get_obfuscated_snippets_artifact(
     raise HTTPException(404, t("snippets_not_available", current_lang()))
 
 
+# --- Consulta de estado e payload de um job ---
 @router.get("/api/analysis/{job_id}")
 async def get_analysis_status(job_id: str) -> dict:
     require_valid_job_id(job_id)
@@ -454,6 +460,7 @@ async def get_analysis_status(job_id: str) -> dict:
     return payload
 
 
+# --- Listagem paginada de análises ---
 @router.get("/api/analyses")
 async def list_analyses(limit: int = 50, offset: int = 0) -> dict:
     limit = min(max(1, limit), 200)

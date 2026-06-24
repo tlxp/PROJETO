@@ -1,3 +1,6 @@
+# --- Módulo: stub ---
+# Driver seguro que simula análise dinâmica sem executar a amostra.
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -9,15 +12,11 @@ if TYPE_CHECKING:
 from .base import DynamicAnalysisOutput
 
 
+# --- Driver stub (sem execução real) ---
 class StubVMDriver:
-    """
-    Driver 100% seguro: NÃO executa o ficheiro.
-
-    Serve para validar a pipeline (UI + API + jobs) sem qualquer risco.
-    """
-
     name = "stub"
 
+    # --- Geração de relatório comportamental simulado ---
     def run(self, job: "AnalysisJob") -> DynamicAnalysisOutput:
         started_at = datetime.now(timezone.utc).isoformat()
         sample_name = job.sample_path.name
@@ -54,4 +53,3 @@ class StubVMDriver:
             ),
             behavior=behavior,
         )
-

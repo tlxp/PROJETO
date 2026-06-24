@@ -1,3 +1,4 @@
+﻿// --- Módulo: DownloadIntegrity.cs ---
 using System;
 using System.IO;
 using System.Security.Cryptography;
@@ -6,13 +7,13 @@ using System.Text.RegularExpressions;
 
 namespace RatAnalyzer.Desktop.Helpers;
 
-/// <summary>Verificação de integridade (SHA-256) de ficheiros transferidos.</summary>
+// --- Verificação de integridade (SHA-256) de ficheiros transferidos ---
 internal static class DownloadIntegrity
 {
-    /// <summary>Hash opcional do shim <c>ilspycmd</c> após instalação NuGet (versão pinada).</summary>
+    // --- Hash opcional do shim ilspycmd após instalação NuGet (versão pinada) ---
     public const string IlSpySha256Env = "RATANALYZER_ILSPY_SHA256";
 
-    /// <summary>Hash opcional de <c>java.exe</c> do JDK em uso (ex.: Temurin 21 via winget).</summary>
+    // --- Hash opcional de java.exe do JDK em uso (ex.: Temurin 21 via winget) ---
     public const string JavaExeSha256Env = "RATANALYZER_JAVA_EXE_SHA256";
 
     private static readonly Regex Sha256LineRegex = new(
@@ -42,10 +43,7 @@ internal static class DownloadIntegrity
         }
     }
 
-    /// <summary>
-    /// Calcula SHA-256, regista no log e valida apenas se a variável de ambiente estiver definida
-    /// (útil para ILSpy/Java instalados via NuGet/winget, onde o caminho pode variar).
-    /// </summary>
+    // --- Calcula SHA-256, regista no log e valida apenas se a variável de ambiente estiver definida ---
     public static void LogAndVerifyOptionalEnvSha256(
         string filePath,
         string envVarName,
@@ -66,7 +64,7 @@ internal static class DownloadIntegrity
         }
     }
 
-    /// <summary>Extrai o hash de um ficheiro .sha256 (formato GNU: &lt;hash&gt;  &lt;nome&gt;).</summary>
+    // --- Extrai o hash de um ficheiro .sha256 (formato GNU: hash + nome) ---
     public static string ParseSha256FileContent(string content)
     {
         if (string.IsNullOrWhiteSpace(content))
@@ -82,7 +80,7 @@ internal static class DownloadIntegrity
         throw new InvalidOperationException("Não foi possível extrair SHA-256 do ficheiro de checksum.");
     }
 
-    /// <summary>Procura URL de um asset GitHub pelo nome (ex.: ficheiro.zip.sha256).</summary>
+    // --- Procura URL de um asset GitHub pelo nome (ex.: ficheiro.zip.sha256) ---
     public static string? TryFindGithubAssetUrl(string releaseJson, string assetFileName)
     {
         using var doc = JsonDocument.Parse(releaseJson);

@@ -1,19 +1,26 @@
-﻿function Get-LogTimestamp {
+﻿# --- Script: Logging.ps1 ---
+
+# --- Timestamp para mensagens de log ---
+function Get-LogTimestamp {
     return Get-Date -Format "HH:mm:ss"
 }
 
+# --- Log simples no consola (host) ---
 function Write-LogHost {
     param([string] $Message)
+    # *Formatar mensagem com timestamp e escrever no host*
     $t = Get-LogTimestamp
     Write-Host "[$t] $Message"
 }
 
+# --- Log de aviso com timestamp ---
 function Write-LogWarning {
     param([string] $Message)
     $t = Get-LogTimestamp
     Write-Warning "[$t] $Message"
 }
 
+# --- Log estruturado com nível e persistência opcional em ficheiro ---
 function Write-SandboxLog {
     param(
         [string] $Message,
@@ -24,6 +31,7 @@ function Write-SandboxLog {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $line = "[$timestamp][$Level] $Message"
     Write-Host $line
+    # *Anexar linha ao ficheiro de log se o caminho foi fornecido*
     if ($LogPath) {
         try {
             Add-Content -Path $LogPath -Value $line -ErrorAction SilentlyContinue
@@ -31,6 +39,7 @@ function Write-SandboxLog {
     }
 }
 
+# --- Escrita de log em formato JSON ---
 function Write-SandboxJsonLog {
     param(
         [hashtable] $Data,

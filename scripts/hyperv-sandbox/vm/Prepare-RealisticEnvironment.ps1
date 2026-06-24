@@ -1,4 +1,5 @@
-﻿<#
+﻿# --- Script: Prepare-RealisticEnvironment.ps1 ---
+<#
 .SYNOPSIS
     Corre DENTRO da VM. Prepara um ambiente "realista" para análise (sem instalar aplicações).
 .DESCRIPTION
@@ -12,6 +13,7 @@
 .PARAMETER WorkDir
     Diretório de trabalho na VM. Predefinição: C:\analysis_work
 #>
+
 param(
     [string] $WorkDir = "C:\analysis_work"
 )
@@ -19,7 +21,7 @@ param(
 Set-StrictMode -Off
 $ErrorActionPreference = "Stop"
 
-# Auxiliares
+# --- Funções auxiliares de logging ---
 function LogMsg {
     param([string]$msg, [string]$level = "INFO")
     $ts = Get-Date -Format "HH:mm:ss"
@@ -29,7 +31,7 @@ function LogMsg {
 function LogWarn  { param([string]$m) LogMsg $m "WARN"  }
 function LogError { param([string]$m) LogMsg $m "ERROR" }
 
-# Garantir pasta de trabalho
+# --- Inicialização da pasta de trabalho ---
 if (-not (Test-Path $WorkDir)) {
     New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
 }
@@ -37,15 +39,15 @@ if (-not (Test-Path $WorkDir)) {
 $StateJsonPath = Join-Path $WorkDir "prepare_env_state.json"
 $ReadyFlagPath = Join-Path $WorkDir "prepare_env_ready.flag"
 
-# Limpar ficheiros de estado anteriores
+# *Remove estado de execuções anteriores*
 Remove-Item -LiteralPath $StateJsonPath -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $ReadyFlagPath -Force -ErrorAction SilentlyContinue
 
-# 1) Preparar ambiente "realista"
+# --- Configuração do ambiente realista ---
 LogMsg "=== Prepare-RealisticEnvironment ==="
 LogMsg "[1] A configurar ambiente realista..."
 
-# Desativar Windows Update automático (evita que o sample seja perturbado por atualizações)
+# *Desativa Windows Update para não interromper a análise*
 try {
     Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" `
         -Name "NoAutoUpdate" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
@@ -54,7 +56,7 @@ try {
     LogWarn "  Não foi possível desactivar Windows Update: $($_.Exception.Message)"
 }
 
-# Desativar hibernação e ecrã de bloqueio (VM deve ficar ativa durante análise)
+# *Mantém a VM activa durante a análise (sem hibernação/standby)*
 try {
     powercfg /hibernate off 2>&1 | Out-Null
     powercfg /change standby-timeout-ac 0 2>&1 | Out-Null
@@ -64,7 +66,7 @@ try {
     LogWarn "  Não foi possível configurar power: $($_.Exception.Message)"
 }
 
-# Desativar SmartScreen para não bloquear samples
+# *Desactiva SmartScreen para não bloquear samples*
 try {
     Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" `
         -Name "SmartScreenEnabled" -Value "Off" -Type String -Force -ErrorAction SilentlyContinue
@@ -75,7 +77,7 @@ try {
     LogWarn "  Não foi possível desactivar SmartScreen: $($_.Exception.Message)"
 }
 
-# Desativar UAC (facilita a execução de samples como admin)
+# *Desactiva UAC para facilitar execução de samples*
 try {
     Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" `
         -Name "EnableLUA" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
@@ -86,7 +88,7 @@ try {
 
 $analysisDir = $WorkDir
 
-# Criar documentos "isca" para o ambiente parecer usado
+# --- Criação de ficheiros isca (decoys) ---
 $decoyDocs = @(
     @{ Path = "$env:USERPROFILE\Documents\relatorio_q3_2024.txt"; Content = "Relatório Q3 2024`nTotal vendas: 1.250.000 EUR`nMargem: 18,3%" },
     @{ Path = "$env:USERPROFILE\Documents\passwords_backup.txt";  Content = "# Notas pessoais - NÃO PARTILHAR`nEmail: analyst@empresa.pt`nVPN: changeme123" },
@@ -104,7 +106,7 @@ foreach ($doc in $decoyDocs) {
 }
 LogMsg "  Ficheiros isca criados."
 
-# 2) Gravar estado final
+# --- Gravação do estado final ---
 LogMsg "[2] A gravar estado final..."
 
 $state = @{
@@ -118,6 +120,7 @@ $state = @{
 $state | ConvertTo-Json -Depth 6 | Set-Content -Path $StateJsonPath -Encoding UTF8
 LogMsg "  Estado gravado: $StateJsonPath"
 
+# *Flag simples para o host saber que a preparação terminou*
 Set-Content -Path $ReadyFlagPath -Value "ready" -Encoding UTF8
 LogMsg "  Flag de pronto criada: $ReadyFlagPath"
 

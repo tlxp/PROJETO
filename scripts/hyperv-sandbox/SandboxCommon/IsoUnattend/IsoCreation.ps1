@@ -1,4 +1,7 @@
-﻿function New-IsoFromFolder {
+﻿# --- Script: IsoCreation.ps1 ---
+
+# --- Criação de ISO a partir de pasta (legado) ---
+function New-IsoFromFolder {
     <#
     .SYNOPSIS
         Cria um ISO bootável a partir de uma pasta usando oscdimg.exe (Windows ADK)
@@ -20,6 +23,7 @@
     throw "New-IsoFromFolder: use New-WindowsIsoWithUnattend para criar ISOs bootaveis."
 }
 
+# --- Criação de ISO do Windows com autounattend injetado ---
 function New-WindowsIsoWithUnattend {
     <#
     .SYNOPSIS
@@ -40,7 +44,7 @@ function New-WindowsIsoWithUnattend {
     if (-not (Test-Path -LiteralPath $SourceIsoPath)) { throw "ISO não encontrado: $SourceIsoPath" }
     if (-not (Test-Path -LiteralPath $UnattendXmlPath)) { throw "autounattend.xml não encontrado: $UnattendXmlPath" }
 
-    # Encontrar oscdimg.exe
+    # --- Localização do oscdimg.exe ---
     if ([string]::IsNullOrWhiteSpace($OscdimgPath) -or -not (Test-Path $OscdimgPath)) {
         $candidates = @(
             "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe",
@@ -60,7 +64,7 @@ function New-WindowsIsoWithUnattend {
     New-Item -ItemType Directory -Path $wimDir  -Force | Out-Null
 
     try {
-        # 1. Montar ISO e copiar conteúdo
+        # --- Montagem e cópia do ISO de origem ---
         Write-LogHost "A montar ISO: $SourceIsoPath"
         Mount-DiskImage -ImagePath $SourceIsoPath -StorageType ISO -ErrorAction Stop | Out-Null
         Start-Sleep -Milliseconds 800
@@ -74,24 +78,20 @@ function New-WindowsIsoWithUnattend {
         Dismount-DiskImage -ImagePath $SourceIsoPath -ErrorAction SilentlyContinue | Out-Null
         Start-Sleep -Milliseconds 400
 
-        # 2. Colocar autounattend.xml na raiz do ISO (método clássico)
+        # --- autounattend.xml na raiz do ISO ---
         Copy-Item -Path $UnattendXmlPath -Destination (Join-Path $tmpDir "autounattend.xml") -Force
         Write-LogHost "autounattend.xml copiado para raiz do ISO."
 
-        # 3. Injetar autounattend.xml dentro do boot.wim (WinPE)
-        #    O WinPE (index 2 do boot.wim) procura autounattend.xml em:
-        #    - raiz de qualquer drive (A:, B:, C:, D:, etc.)
-        #    - \Windows\System32\ no WinPE (X:\Windows\System32\)
-        #    Injetamos em \Windows\System32\ para garantia máxima.
+        # --- Injeção de autounattend.xml no boot.wim (WinPE) ---
+        # *O WinPE procura autounattend.xml em drives e em \Windows\System32\*
         $bootWimSrc = Join-Path $tmpDir "sources\boot.wim"
         if (Test-Path $bootWimSrc) {
             Write-LogHost "A injetar autounattend.xml no boot.wim (WinPE)..."
             try {
-                # boot.wim pode ser read-only (vem do ISO) -- remover atributo
+                # *boot.wim pode ser read-only (vem do ISO)*
                 Set-ItemProperty -Path $bootWimSrc -Name IsReadOnly -Value $false -ErrorAction SilentlyContinue
 
-                # Montar index 2 (WinPE Setup -- index 1 é o Setup loader, index 2 é o WinPE completo)
-                # Tentar index 2 primeiro, fallback para index 1
+                # *Montar index 2 (WinPE Setup); fallback para index 1*
                 $wimIndex = 2
                 $dismResult = & dism /Mount-Wim /WimFile:"$bootWimSrc" /index:$wimIndex /MountDir:"$wimDir" 2>&1
                 if ($LASTEXITCODE -ne 0) {
@@ -100,13 +100,11 @@ function New-WindowsIsoWithUnattend {
                 }
 
                 if ($LASTEXITCODE -eq 0) {
-                    # Copiar autounattend.xml para System32 do WinPE
                     $sys32 = Join-Path $wimDir "Windows\System32"
                     if (Test-Path $sys32) {
                         Copy-Item -Path $UnattendXmlPath -Destination (Join-Path $sys32 "autounattend.xml") -Force
                         Write-LogHost "autounattend.xml injetado em WinPE\Windows\System32\ (index $wimIndex)."
                     }
-                    # Desmontar e guardar
                     & dism /Unmount-Wim /MountDir:"$wimDir" /Commit 2>&1 | Out-Null
                     Write-LogHost "boot.wim atualizado com sucesso."
                 } else {
@@ -119,7 +117,7 @@ function New-WindowsIsoWithUnattend {
             }
         }
 
-        # 4. Criar ISO bootável com oscdimg
+        # --- Criação do ISO bootável com oscdimg ---
         $bootSector = Join-Path $tmpDir "boot\etfsboot.com"
         $efiBoot    = Join-Path $tmpDir "efi\microsoft\boot\efisys.bin"
 

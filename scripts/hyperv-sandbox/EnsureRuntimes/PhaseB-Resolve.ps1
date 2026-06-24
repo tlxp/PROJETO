@@ -1,7 +1,10 @@
+# --- Script: PhaseB-Resolve.ps1 ---
+
+# --- Resolução de instaladores no host ---
 $resolved = @()
 $missing = @()
 foreach ($it in $installers) {
-    # Se faltar, tentar download automático (quando ativado) para a pasta offline
+    # *Se faltar, tentar download automático (quando ativado) para a pasta offline.*
     if ($it.Url) {
         $null = Download-InstallerIfMissing -Url $it.Url -OutFileName $it.File -Label $it.Name
     }
@@ -15,6 +18,7 @@ foreach ($it in $installers) {
     }
 }
 
+# --- Validação: abortar se faltarem instaladores ---
 if ($missing.Count -gt 0) {
     Write-LogHost ""
     Write-LogWarning "Faltam instaladores no host. Coloque-os em:"

@@ -1,6 +1,7 @@
+// --- Módulo: utils.ts ---
 import type { FoldBlock } from "./types";
 
-/** Encontra todos os blocos { } no código (por linha). */
+// --- Encontra blocos { } no código (por linha) ---
 export function getFoldBlocks(lines: string[]): FoldBlock[] {
   const blocks: FoldBlock[] = [];
   const stack: number[] = [];

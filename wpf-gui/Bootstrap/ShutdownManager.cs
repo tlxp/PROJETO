@@ -1,3 +1,4 @@
+﻿// --- Módulo: ShutdownManager.cs ---
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -13,14 +14,7 @@ internal static class ShutdownManager
     private const int BackendPort = 8000;
     private static bool _cleanupCompleted;
 
-    /// <summary>
-    /// Limpa recursos locais ao sair da aplicação:
-    /// - Termina o backend uvicorn gerido pelo WPF (se estiver ativo)
-    /// - Termina o dev server do frontend (npm run dev) gerido pelo WPF (se estiver ativo)
-    /// - Liberta as portas do frontend e backend (processos que estejam a escutar nessas portas)
-    /// - Remove pastas temporárias de análise em %TEMP% (rat_*, rat_stream_*, RatAnalyzerAdk)
-    /// - Remove amostras e artefatos em disco em sandbox_jobs (mantém analysis.db).
-    /// </summary>
+    // --- Ao sair: termina backend/frontend geridos, liberta portas 8000/8080 e limpa artefatos locais ---
     public static void CleanupOnExit()
     {
         if (_cleanupCompleted)
@@ -63,10 +57,7 @@ internal static class ShutdownManager
         catch { /* ignorar */ }
     }
 
-    /// <summary>
-    /// Termina processos que estejam a escutar na porta indicada (ex.: node do frontend na 8080).
-    /// Usa netstat no Windows para encontrar PIDs e garante que as portas são libertadas ao fechar o WPF.
-    /// </summary>
+    // --- Termina processos à escuta na porta (netstat no Windows) para libertar 8080/8000 ---
     private static void KillProcessesListeningOnPort(int port)
     {
         foreach (var pid in GetListeningProcessIds(port))

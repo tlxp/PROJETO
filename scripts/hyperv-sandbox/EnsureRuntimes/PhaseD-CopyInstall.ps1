@@ -1,3 +1,6 @@
+# --- Script: PhaseD-CopyInstall.ps1 ---
+
+# --- Preparação da pasta de instaladores na VM ---
 $vmInstallDir = "C:\analysis_work\installers"
 try {
     Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
@@ -8,6 +11,7 @@ try {
     Write-LogWarning "Não foi possível preparar '$vmInstallDir' na VM: $($_.Exception.Message)"
 }
 
+# --- Cópia de instaladores para a VM ---
 Write-LogHost ""
 Write-LogHost "A copiar instaladores para a VM..."
 Enable-SandboxGuestService -VMName $VMName
@@ -19,6 +23,7 @@ foreach ($it in $resolved) {
     Copy-SandboxVMFile -VMName $VMName -Credential $cred -SourcePath $it.HostPath -DestinationPath $dst
 }
 
+# --- Instalação silenciosa na VM ---
 Write-LogHost ""
 Write-LogHost "A instalar na VM (silencioso)..."
 foreach ($it in $resolved) {
@@ -33,6 +38,7 @@ foreach ($it in $resolved) {
             return @{ ok = $true; code = [int]$p.ExitCode; msg = "ok" }
         } -ArgumentList $dst, $it.Args -ErrorAction Stop
 
+        # *ExitCode 0 = sucesso; 3010 = sucesso com reinício pendente.*
         $code = if ($res -and $res.code -ne $null) { [int]$res.code } else { 0 }
         if ($code -eq 0 -or $code -eq 3010) {
             Write-LogHost ("        OK (ExitCode={0})" -f $code)

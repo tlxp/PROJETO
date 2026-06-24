@@ -1,8 +1,11 @@
-# Criar VM
+# --- Script: Phase5-CreateVm.ps1 ---
+# --- Criação ou reinstalação da VM sandbox ---
+
 Write-Host "[5/8] VM $VMName (Gen$VMGeneration, RAM: $memMB MB, CPUs: $procCount, VHD: $vhdSizeGB GB)..."
 
 $existingVm = Get-VM -Name $VMName -ErrorAction SilentlyContinue
 
+# --- Remoção de VM existente (se solicitado) ---
 if ($existingVm) {
     Write-Warning "      A VM '$VMName' ja existe."
     $reinstall = $false
@@ -21,6 +24,7 @@ if ($existingVm) {
     }
     try { Get-VMSnapshot -VMName $VMName -ErrorAction SilentlyContinue | Remove-VMSnapshot -Confirm:$false -ErrorAction SilentlyContinue | Out-Null } catch { }
     try { Remove-VM -Name $VMName -Force -ErrorAction SilentlyContinue | Out-Null } catch { }
+    # *limpa VHD, floppy unattended e metadados Hyper-V*
     foreach ($p in @($VHDPath,
                      (Join-Path $VMPath "unattend"),
                      (Join-Path $VMPath "unattend.vfd"),
@@ -32,6 +36,7 @@ if ($existingVm) {
     Write-Host "      Remocao concluida."
 }
 
+# --- Remoção de VHDX órfão ---
 if (-not $existingVm -and (Test-Path $VHDPath)) {
     Write-Warning "      VHDX existente: $VHDPath"
     $delVhd = $false
@@ -44,7 +49,7 @@ if (-not $existingVm -and (Test-Path $VHDPath)) {
     Write-Host "      VHDX anterior removido."
 }
 
-# Criar VM
+# --- Criação da VM ---
 New-VM -Name $VMName `
        -MemoryStartupBytes $vmStartupBytes `
        -Generation $VMGeneration `
@@ -55,6 +60,7 @@ New-VM -Name $VMName `
 
 Set-VMProcessor -VMName $VMName -Count $procCount | Out-Null
 
+# --- Configuração de memória ---
 if ($script:PROJETOVM_DynamicMemoryEnabled) {
     Write-Host "      DynamicMemory: ON (Min: $vmMinMB MB, Startup: $vmStartupMB MB, Max: $vmMaxMB MB)"
     Set-VMMemory -VMName $VMName -DynamicMemoryEnabled $true -StartupBytes $vmStartupBytes -MinimumBytes $vmMinBytes -MaximumBytes $vmMaxBytes | Out-Null
@@ -62,7 +68,7 @@ if ($script:PROJETOVM_DynamicMemoryEnabled) {
     Set-VMMemory -VMName $VMName -StartupBytes $memBytes -DynamicMemoryEnabled $false | Out-Null
 }
 
-# Sincronização de tempo (corrige desvio do relógio da VM)
+# --- Sincronização de tempo (corrige desvio do relógio da VM) ---
 Write-Host "      Enabling Time Synchronization integration service..."
 try {
     $timeSvc = Get-VMIntegrationService -VMName $VMName | Where-Object { $_.Name -like "*Time*" -or $_.Name -eq "Time Synchronization" } | Select-Object -First 1

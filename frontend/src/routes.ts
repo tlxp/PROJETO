@@ -1,6 +1,7 @@
-/**
- * Rotas canónicas da SPA — única fonte para paths de navegação (não confundir com /api/*).
- */
+// --- Módulo: routes.ts ---
+// *Rotas canónicas da SPA — única fonte para paths de navegação (não confundir com /api/*)*
+
+// --- Construtores de paths de navegação ---
 export const ROUTES = {
   home: "/",
   analysis: (jobId: string) => `/analysis/${encodeURIComponent(jobId)}`,
@@ -13,7 +14,7 @@ export const ROUTES = {
     word ? `/xref?word=${encodeURIComponent(word)}` : "/xref",
 } as const;
 
-/** Paths usados em `<Route path="…">` (React Router). */
+// --- Padrões para `<Route path="…">` (React Router) ---
 export const ROUTE_PATTERNS = {
   home: "/",
   analysis: "/analysis/:jobId",

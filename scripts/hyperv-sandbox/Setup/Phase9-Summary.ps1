@@ -1,7 +1,11 @@
-﻿# Resumo
+﻿# --- Script: Phase9-Summary.ps1 ---
+# --- Resumo final e próximos passos ---
+
+# *Mensagens finais apresentadas ao operador após conclusão do setup*
 Write-Host ""
 Write-Host "  Concluido."
 Write-Host ""
+# *Estrutura de pastas criada em PROJETOVM*
 Write-Host "  Estrutura em $BasePath :"
 Write-Host "    VM\      -> Sandbox.vhdx e configuração"
 Write-Host "    Reports\ -> relatorios de analise"

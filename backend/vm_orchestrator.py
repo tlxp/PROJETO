@@ -1,9 +1,5 @@
-"""
-Orquestrador de VMs para análise dinâmica.
-
-O orquestrador escolhe um "driver" (stub/proxmox/...) via variável de ambiente,
-permitindo evoluir para uma sandbox real sem alterar o resto do sistema.
-"""
+# --- Módulo: vm_orchestrator ---
+# Orquestrador de VMs: escolhe driver (stub/proxmox/hyperv) via variável de ambiente.
 
 from __future__ import annotations
 
@@ -22,10 +18,12 @@ if TYPE_CHECKING:
     from analysis_jobs import AnalysisJob
 
 
+# --- Nome do driver a partir de SANDBOX_VM_DRIVER ---
 def _get_driver_name() -> str:
     return (os.getenv("SANDBOX_VM_DRIVER") or "stub").strip().lower()
 
 
+# --- Instanciação do driver conforme configuração ---
 def _build_driver():
     name = _get_driver_name()
     from vm_drivers import warn_if_experimental
@@ -39,7 +37,7 @@ def _build_driver():
             "SANDBOX_VM_DRIVER=proxmox é experimental (sem guia nem testes de integração). "
             "Para produção use hyperv (Caminho A) ou o pipeline PowerShell (Caminho B)."
         )
-        # Config via env para evitar hardcode e facilitar deploy.
+        # *Config via env para evitar hardcode*
         api_url = os.getenv("PROXMOX_API_URL") or ""
         token_id = os.getenv("PROXMOX_TOKEN_ID") or ""
         token_secret = os.getenv("PROXMOX_TOKEN_SECRET") or ""
@@ -91,6 +89,7 @@ def _build_driver():
     )
 
 
+# --- Ponto de entrada da análise dinâmica para analysis_jobs ---
 def run_dynamic_analysis(job: AnalysisJob) -> Dict[str, Any]:
     driver = _build_driver()
     out: DynamicAnalysisOutput = driver.run(job)
@@ -98,4 +97,3 @@ def run_dynamic_analysis(job: AnalysisJob) -> Dict[str, Any]:
 
 
 __all__ = ["run_dynamic_analysis"]
-

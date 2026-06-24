@@ -1,6 +1,5 @@
-"""
-Middleware HTTP: rate limiting de uploads e correlação de job_id nos logs.
-"""
+# --- Módulo: middleware ---
+# Middleware HTTP: rate limiting de uploads e correlação de job_id nos logs.
 
 from __future__ import annotations
 
@@ -31,6 +30,7 @@ _RATE_LOCK = Lock()
 _RATE_BUCKETS: dict[str, list[float]] = defaultdict(list)
 
 
+# --- Limite de uploads por minuto (env RATANALYZER_RATE_LIMIT_UPLOADS_PER_MIN) ---
 def _rate_limit_per_minute() -> int:
     raw = (os.environ.get("RATANALYZER_RATE_LIMIT_UPLOADS_PER_MIN") or "60").strip()
     try:
@@ -39,6 +39,7 @@ def _rate_limit_per_minute() -> int:
         return 60
 
 
+# --- Extração do IP do cliente (X-Forwarded-For ou socket) ---
 def _client_ip(request: Request) -> str:
     forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
     if forwarded:
@@ -48,6 +49,7 @@ def _client_ip(request: Request) -> str:
     return "unknown"
 
 
+# --- Contagem de pedidos na janela deslizante de 60 s ---
 def _prune_and_count(timestamps: list[float], now: float, window: float) -> int:
     cutoff = now - window
     while timestamps and timestamps[0] < cutoff:
@@ -55,15 +57,15 @@ def _prune_and_count(timestamps: list[float], now: float, window: float) -> int:
     return len(timestamps)
 
 
+# --- Reset do rate limiter (apenas para testes) ---
 def reset_rate_limit_buckets() -> None:
-    """Limpa estado do rate limiter (apenas para testes)."""
     with _RATE_LOCK:
         _RATE_BUCKETS.clear()
 
 
+# --- Middleware que propaga job_id para logs ---
 class JobIdLoggingMiddleware(BaseHTTPMiddleware):
-    """Define job_id no contexto de logging para rotas /api/analysis/{uuid}."""
-
+# --- Dispatch ---
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         match = _JOB_ID_PATH.match(request.url.path)
         token = job_id_ctx.set(match.group(1) if match else None)
@@ -73,9 +75,9 @@ class JobIdLoggingMiddleware(BaseHTTPMiddleware):
             job_id_ctx.reset(token)
 
 
+# --- Middleware de rate limit por IP em endpoints de upload ---
 class UploadRateLimitMiddleware(BaseHTTPMiddleware):
-    """Limite simples por IP em endpoints de upload (janela deslizante de 60 s)."""
-
+# --- Dispatch ---
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         if request.method != "POST" or request.url.path not in _UPLOAD_PATHS:
             return await call_next(request)

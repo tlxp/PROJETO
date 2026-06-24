@@ -1,3 +1,4 @@
+' --- Diagrama: pipeline de análise dinâmica ---
 @startuml
 title Pipeline de análise dinâmica — RAT Analyzer
 
@@ -9,6 +10,7 @@ start
 if (Driver configurado?) then (hyperv / proxmox)
   :Restaurar snapshot CleanState;
   :Arrancar VM isolada (sem Internet);
+  ' *Caminho A: HTTP vm-agent; Caminho B: scripts PowerShell/WPF*
   if (Caminho A — vm-agent HTTP?) then (sim)
     :Upload + run + report via vm-agent;
     :Executar amostra com timeout;
@@ -22,6 +24,7 @@ if (Driver configurado?) then (hyperv / proxmox)
   endif
   :Restaurar snapshot e parar VM;
 else (stub)
+  ' *Driver stub: resultado sintético sem execução real*
   :Gerar resultado sintético (sem execução real);
 endif
 

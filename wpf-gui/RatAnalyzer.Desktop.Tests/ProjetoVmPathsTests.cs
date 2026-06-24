@@ -1,8 +1,10 @@
+﻿// --- Módulo: ProjetoVmPathsTests.cs ---
 using RatAnalyzer.Desktop.Infrastructure;
 using Xunit;
 
 namespace RatAnalyzer.Desktop.Tests;
 
+// --- Testes de resolução de caminhos do sandbox Hyper-V ---
 public sealed class ProjetoVmPathsTests
 {
     [Fact]

@@ -1,8 +1,11 @@
-﻿# Recolher e validar relatório copiado do guest
+﻿# --- Script: PhaseF-CollectResult.ps1 ---
+# --- Recolha e validação do relatório no host ---
+
 if (Test-Path -LiteralPath $ReportOutputPath) {
     Write-LogHost "      Relatório no host: $ReportOutputPath"
     Add-LogLine -Path $HostLogPath -Value "Report on host: $ReportOutputPath"
 
+    # --- Verificação SHA256 do relatório copiado ---
     if ($reportHashVerified -and $reportSha256) {
         Add-LogLine -Path $HostLogPath -Value "Report hash verified: $reportSha256"
     } elseif (-not $reportHashVerified -and $cred -is [pscredential]) {
@@ -19,10 +22,12 @@ if (Test-Path -LiteralPath $ReportOutputPath) {
         } catch {
             Write-LogWarning "      Verificação SHA256 falhou: $($_.Exception.Message)"
             Add-LogLine -Path $HostLogPath -Value "Report hash verification failed: $($_.Exception.Message)"
+            # *remove relatório inválido para não confundir o utilizador*
             try { Remove-Item -LiteralPath $ReportOutputPath -Force -ErrorAction SilentlyContinue } catch { }
         }
     }
 
+    # --- Verificação de completude do relatório ---
     if (Test-Path -LiteralPath $ReportOutputPath) {
         if (-not (Test-ReportLooksComplete -Path $ReportOutputPath)) {
             Write-LogWarning "      Relatório parece incompleto (verificar manualmente: $ReportOutputPath)."
@@ -30,6 +35,7 @@ if (Test-Path -LiteralPath $ReportOutputPath) {
         }
     }
 } else {
+    # --- Recuperação de emergência: copiar directamente do guest ---
     Write-LogWarning "      Relatório não foi obtido do guest."
     Add-LogLine -Path $HostLogPath -Value "Report not obtained from guest"
 

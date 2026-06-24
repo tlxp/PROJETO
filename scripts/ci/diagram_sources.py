@@ -1,4 +1,5 @@
-"""Fonte única de diagramas PlantUML — docs/diagrams/ -> relatório/imagens/fig-4-*.png."""
+# --- Módulo: diagram_sources ---
+# --- Fonte única de diagramas PlantUML: docs/diagrams/ -> relatório/imagens/fig-4-*.png ---
 from __future__ import annotations
 
 import re

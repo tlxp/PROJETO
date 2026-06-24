@@ -1,4 +1,7 @@
-﻿function Get-WindowsIsoDefaultLanguage {
+﻿# --- Script: LanguageAndUnattendTweaks.ps1 ---
+
+# --- Deteção do idioma default de um ISO do Windows ---
+function Get-WindowsIsoDefaultLanguage {
     <#
     .SYNOPSIS
         Deteta o idioma default de um ISO do Windows (ex.: en-US, pt-PT) lendo sources\lang.ini.
@@ -9,7 +12,7 @@
     #>
     param(
         [Parameter(Mandatory = $true)][string] $IsoPath,
-        # Quando não é possível ler lang.ini, devolver $null (não fingir en-US — evita logs enganadores).
+        # *Quando não é possível ler lang.ini, devolver $null (evita logs enganadores)*
         [string] $Fallback = $null
     )
 
@@ -42,6 +45,7 @@
             }
         }
 
+        # *Fallback: idiomas via install.wim / install.esd*
         $wimLangs = @(Get-WindowsImageLanguagesFromInstallMedia -IsoRoot $isoDrive)
         if ($wimLangs.Count -gt 0) {
             $first = [string]$wimLangs[0]
@@ -58,6 +62,7 @@
     }
 }
 
+# --- Ajuste de idioma/locale no autounattend.xml ---
 function Set-UnattendLanguageInPlace {
     <#
     .SYNOPSIS
@@ -80,7 +85,7 @@ function Set-UnattendLanguageInPlace {
 
     $xmlText = Get-Content -LiteralPath $UnattendXmlPath -Raw -ErrorAction Stop
 
-    # WinPE / OOBE / general: substituir valores simples (ex.: en-US, pt-PT).
+    # *Substituir valores de locale em WinPE, OOBE e secções gerais*
     $xmlText = [regex]::Replace($xmlText, '<UILanguage>\s*[^<]+\s*</UILanguage>', "<UILanguage>$UiLanguage</UILanguage>")
     $xmlText = [regex]::Replace($xmlText, '<InputLocale>\s*[^<]+\s*</InputLocale>', "<InputLocale>$UiLanguage</InputLocale>")
     $xmlText = [regex]::Replace($xmlText, '<SystemLocale>\s*[^<]+\s*</SystemLocale>', "<SystemLocale>$UiLanguage</SystemLocale>")
@@ -89,6 +94,7 @@ function Set-UnattendLanguageInPlace {
     Set-Content -LiteralPath $UnattendXmlPath -Value $xmlText -Encoding UTF8 -ErrorAction Stop
 }
 
+# --- Alinhamento de credenciais do guest no autounattend.xml ---
 function Set-UnattendGuestCredentialsInPlace {
     <#
     .SYNOPSIS
@@ -116,6 +122,7 @@ function Set-UnattendGuestCredentialsInPlace {
         throw "Set-UnattendGuestCredentialsInPlace: Password vazia."
     }
 
+    # *Escapar valores para XML seguro*
     $escapedUser = [System.Security.SecurityElement]::Escape($UserName)
     $escapedDisplay = [System.Security.SecurityElement]::Escape($DisplayName)
     $escapedPassword = [System.Security.SecurityElement]::Escape($Password)
@@ -174,6 +181,7 @@ function Set-UnattendGuestCredentialsInPlace {
     Set-Content -LiteralPath $UnattendXmlPath -Value $xmlText -Encoding UTF8 -ErrorAction Stop
 }
 
+# --- Remoção de componentes de idioma do autounattend.xml ---
 function Remove-UnattendInternationalSettings {
     <#
     .SYNOPSIS
@@ -195,7 +203,7 @@ function Remove-UnattendInternationalSettings {
 
     $xmlText = Get-Content -LiteralPath $UnattendXmlPath -Raw -ErrorAction Stop
 
-    # Remover bloco WinPE international core
+    # *Remover bloco WinPE international core*
     $xmlText = [regex]::Replace(
         $xmlText,
         '<component\s+name="Microsoft-Windows-International-Core-WinPE"[\s\S]*?</component>\s*',
@@ -203,7 +211,7 @@ function Remove-UnattendInternationalSettings {
         [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
     )
 
-    # Remover bloco OOBE international core
+    # *Remover bloco OOBE international core*
     $xmlText = [regex]::Replace(
         $xmlText,
         '<component\s+name="Microsoft-Windows-International-Core"[\s\S]*?</component>\s*',

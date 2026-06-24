@@ -1,3 +1,4 @@
+' --- Diagrama: arquitetura conceptual em camadas ---
 @startuml
 title Arquitetura conceptual — RAT Analyzer
 skinparam componentStyle rectangle
@@ -28,6 +29,7 @@ package "Infraestrutura Sandbox" #FFE0B2 {
   [Scripts PowerShell\nhyperv-sandbox] as PS1
 }
 
+' *Clientes HTTP e orquestração local*
 FE --> API : HTTP REST
 WPF --> API : HTTP REST
 WPF --> PS1 : orquestração local
@@ -38,6 +40,7 @@ API --> VMO
 SA --> YARA
 SA --> DEC
 SA --> RS
+' *Dois caminhos independentes para sandbox*
 VMO --> AGENT : Caminho A
 VMO --> HV
 PS1 --> HV : Caminho B

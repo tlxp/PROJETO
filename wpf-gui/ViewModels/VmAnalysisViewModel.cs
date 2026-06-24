@@ -1,3 +1,4 @@
+﻿// --- Módulo: VmAnalysisViewModel.cs ---
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -14,6 +15,7 @@ using RatAnalyzer.Desktop.Services;
 
 namespace RatAnalyzer.Desktop.ViewModels;
 
+// --- ViewModel da análise VM: scripts Hyper-V, log em tempo real e publicação no backend ---
 public sealed class VmAnalysisViewModel : ViewModelBase
 {
     private const int MaxLogChars = 400_000;
@@ -162,6 +164,7 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         return true;
     }
 
+    // --- Ponto de entrada: orquestra setup, primeira entrada e execução da amostra ---
     public async Task RunAsync()
     {
         try
@@ -190,6 +193,7 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         }
     }
 
+    // --- Núcleo da análise: preflight, ADK, setup, first-time e run sample ---
     private async Task RunAnalysisCoreAsync()
     {
         var scriptsPath = VmSandboxService.FindHyperVScriptsPath();

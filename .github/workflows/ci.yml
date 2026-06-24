@@ -1,3 +1,4 @@
+# --- Workflow CI: validação contínua do monorepo ---
 name: CI
 
 on:
@@ -6,6 +7,7 @@ on:
   pull_request:
 
 jobs:
+  # --- Job: backend Python (pytest, locks, pip-audit) ---
   backend:
     name: Backend (Python)
     runs-on: ubuntu-latest
@@ -40,6 +42,7 @@ jobs:
         working-directory: backend
         run: python -m pytest tests -q --cov --cov-report=term-missing
 
+  # --- Job: frontend React/Vite (lint, test, build) ---
   frontend:
     name: Frontend (React/Vite)
     runs-on: ubuntu-latest
@@ -68,6 +71,7 @@ jobs:
       - name: Build
         run: npm run build
 
+  # --- Job: testes E2E Playwright ---
   frontend-e2e:
     name: Frontend (Playwright E2E)
     runs-on: ubuntu-latest
@@ -88,6 +92,7 @@ jobs:
       - name: Testes E2E
         run: npm run test:e2e
 
+  # --- Job: .NET (WPF + vm-agent) — requer windows-latest ---
   dotnet:
     name: .NET (WPF + vm-agent)
     runs-on: windows-latest
@@ -99,6 +104,7 @@ jobs:
       - name: Build e testes unitários
         run: dotnet test RatAnalyzer.sln -c Release
 
+  # --- Job: encoding UTF-8 dos scripts PowerShell ---
   ps1-encoding:
     name: Scripts PowerShell (UTF-8)
     runs-on: ubuntu-latest
@@ -110,6 +116,7 @@ jobs:
       - name: Validar encoding UTF-8
         run: python scripts/ci/check_ps1_utf8.py
 
+  # --- Job: links e ortografia em ficheiros Markdown ---
   md-docs:
     name: Documentação (Markdown)
     runs-on: ubuntu-latest
@@ -121,6 +128,7 @@ jobs:
       - name: Validar links e ortografia em .md
         run: python scripts/ci/check_md_links.py
 
+  # --- Job: diagramas PlantUML sincronizados com o relatório ---
   diagrams:
     name: Diagramas (PlantUML)
     runs-on: ubuntu-latest
@@ -132,6 +140,7 @@ jobs:
       - name: Validar PNG do relatório vs docs/diagrams/
         run: python scripts/ci/sync_diagrams_to_report.py --check
 
+  # --- Job: sintaxe PowerShell (parser nativo no Windows) ---
   powershell:
     name: Scripts PowerShell (sintaxe)
     runs-on: windows-latest
@@ -154,6 +163,7 @@ jobs:
           }
           if ($failed) { exit 1 }
 
+  # --- Job: deteção de segredos com gitleaks ---
   security:
     name: Segredos (gitleaks)
     runs-on: ubuntu-latest

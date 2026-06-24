@@ -1,8 +1,10 @@
+﻿// --- Módulo: StorageMaintenanceDialogsHost.cs ---
 using System.Windows;
 using RatAnalyzer.Desktop.ViewModels;
 
 namespace RatAnalyzer.Desktop.Views;
 
+// --- Diálogos de confirmação da janela de manutenção ---
 internal sealed class StorageMaintenanceDialogsHost : IStorageMaintenanceDialogs
 {
     private readonly Window _owner;

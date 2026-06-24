@@ -1,4 +1,5 @@
-"""Factory da aplicação FastAPI."""
+# --- Módulo: app_factory ---
+# --- Factory da aplicação FastAPI ---
 
 from __future__ import annotations
 
@@ -26,6 +27,7 @@ from storage_maintenance import archive_cold_jobs, cleanup_job_artifacts
 logger = logging.getLogger("rat_analyzer_api")
 
 
+# --- Configuração do logging com filtro de job_id ---
 def _configure_logging() -> None:
     root = logging.getLogger()
     if not root.handlers:
@@ -39,10 +41,12 @@ def _configure_logging() -> None:
     logging.getLogger("rat_analyzer_api").addFilter(job_filter)
 
 
+# --- Origens CORS permitidas ---
 def _cors_origins() -> list[str]:
     raw = (os.environ.get("RATANALYZER_CORS_ORIGINS") or "").strip()
     if raw:
         return [o.strip() for o in raw.split(",") if o.strip()]
+    # *Defaults para dev local (Vite 8080 e 5173)*
     return [
         "http://localhost:8080",
         "http://127.0.0.1:8080",
@@ -50,6 +54,7 @@ def _cors_origins() -> list[str]:
     ]
 
 
+# --- Ciclo de vida da aplicação (startup/shutdown) ---
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     validate_startup_secrets()
@@ -71,6 +76,7 @@ async def _lifespan(app: FastAPI):
     yield
 
 
+# --- Cria e configura a instância FastAPI ---
 def create_app() -> FastAPI:
     _configure_logging()
     application = FastAPI(

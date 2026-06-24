@@ -1,3 +1,4 @@
+// --- Módulo: App.tsx ---
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { withRouteBoundary } from "@/components/RouteErrorBoundary";
@@ -9,6 +10,7 @@ import ResultadosRedirect from "./pages/ResultadosPage";
 import XrefExplorerPage from "./pages/XrefExplorerPage";
 import NotFound from "./pages/NotFound";
 
+// --- Componente raiz com router e providers globais ---
 const App = () => (
   <TooltipProvider>
     <Toaster />

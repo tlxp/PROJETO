@@ -1,6 +1,6 @@
-# Regenera requirements*.lock a partir dos ficheiros .txt editáveis (pip-tools).
-# Uso: .\scripts\ci\compile_python_locks.ps1
-# Requer: pip install pip-tools
+# --- Script: compile_python_locks.ps1 ---
+# *Regenera requirements*.lock a partir dos ficheiros .txt editáveis (pip-tools).*
+# *Uso: .\scripts\ci\compile_python_locks.ps1 — requer: pip install pip-tools*
 
 $ErrorActionPreference = "Stop"
 $backend = Join-Path $PSScriptRoot "..\..\backend" | Resolve-Path
@@ -10,6 +10,7 @@ $compileArgs = @(
     "--generate-hashes"
 )
 
+# --- Invocação do pip-compile para um par source/output ---
 function Invoke-Compile {
     param(
         [string]$Source,
@@ -18,9 +19,11 @@ function Invoke-Compile {
     $srcPath = Join-Path $backend $Source
     $outPath = Join-Path $backend $Output
     Write-Host "pip-compile $Source -> $Output"
+    # *Compila dependências com hashes para reprodutibilidade*
     python -m piptools compile $srcPath -o $outPath @compileArgs
 }
 
+# --- Compilação de todos os ficheiros lock do backend ---
 Push-Location $backend
 try {
     Invoke-Compile "requirements.txt" "requirements.lock"

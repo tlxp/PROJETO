@@ -1,6 +1,9 @@
-﻿# 6) Copiar amostra e scripts para a VM
+﻿# --- Script: PhaseC-CopyPreflight.ps1 ---
+# --- Cópia da amostra e scripts para a VM ---
+
 Write-LogHost "[6/7] A copiar amostra para a VM..."
-# Garantir que o diretório existe na VM
+
+# --- Criação do diretório de trabalho no guest ---
 try {
     Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
         param($Path)
@@ -8,9 +11,11 @@ try {
     } -ArgumentList $VMScriptsPath -ErrorAction SilentlyContinue
 } catch { }
 
+# *transfere o ficheiro da amostra do host para C:\analysis_work*
 Copy-SandboxVMFile -VMName $VMName -Credential $cred -SourcePath $SamplePath -DestinationPath $VMSamplePath
 
-# Preflight: garantir que o ficheiro na VM existe e é o mesmo (SHA256) e que parece executável PE.
+# --- Preflight: validação da amostra dentro da VM ---
+# *confirma existência, SHA256 e header PE antes de executar*
 Write-LogHost "      A validar amostra dentro da VM (existência + SHA256 + header PE)..."
 try {
     $vmCheck = Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
@@ -77,9 +82,8 @@ try {
     throw
 }
 
-# Copiar scripts de análise para a VM
-# NOTA: esta fase é dot-sourced a partir de .\RunSample\, por isso $PSScriptRoot aqui
-# aponta para ...\RunSample. A pasta vm\ está na raiz hyperv-sandbox ($SandboxRoot).
+# --- Cópia dos scripts de análise para a VM ---
+# *$PSScriptRoot aqui aponta para RunSample\; vm\ está na raiz hyperv-sandbox*
 $scriptDir = Join-Path $SandboxRoot "vm"
 $runScript = Join-Path $scriptDir "Run-MalwareAnalysis.ps1"
 if (-not (Test-Path -LiteralPath $runScript)) {
@@ -87,8 +91,7 @@ if (-not (Test-Path -LiteralPath $runScript)) {
 }
 Copy-SandboxVMFile -VMName $VMName -Credential $cred -SourcePath $runScript -DestinationPath "$VMScriptsPath\Run-MalwareAnalysis.ps1"
 
-# Run-MalwareAnalysis.ps1 faz dot-source das suas funções da subpasta RunMalwareAnalysis\.
-# Essas bibliotecas têm de existir na VM no mesmo diretório do script (mesmo $PSScriptRoot).
+# *Run-MalwareAnalysis.ps1 faz dot-source das bibliotecas em RunMalwareAnalysis\*
 $analysisLibDir = Join-Path $scriptDir "RunMalwareAnalysis"
 if (-not (Test-Path -LiteralPath $analysisLibDir)) {
     throw "Pasta de bibliotecas de análise não encontrada no host em: $analysisLibDir"
@@ -97,6 +100,7 @@ foreach ($lib in (Get-ChildItem -LiteralPath $analysisLibDir -Filter "*.ps1" -Fi
     Copy-SandboxVMFile -VMName $VMName -Credential $cred -SourcePath $lib.FullName -DestinationPath "$VMScriptsPath\RunMalwareAnalysis\$($lib.Name)"
 }
 
+# --- Ficheiros de suporte opcionais ---
 foreach ($supportFile in @('noise_patterns.txt', 'benign_validation_hashes.txt')) {
     $supportPath = Join-Path $scriptDir $supportFile
     if (Test-Path -LiteralPath $supportPath) {
@@ -104,16 +108,16 @@ foreach ($supportFile in @('noise_patterns.txt', 'benign_validation_hashes.txt')
     }
 }
 
-# Launcher destacado: corre Run-MalwareAnalysis.ps1 num processo separado dentro da VM
-# para que a análise sobreviva ao fecho da sessão PowerShell Direct (VMBus).
+# --- Launcher destacado ---
+# *processo separado na VM sobrevive ao fecho da sessão PowerShell Direct*
 $launchScript = Join-Path $scriptDir "Launch-AnalysisDetached.ps1"
 if (-not (Test-Path -LiteralPath $launchScript)) {
     throw "Launch-AnalysisDetached.ps1 não encontrado no host em: $launchScript"
 }
 Copy-SandboxVMFile -VMName $VMName -Credential $cred -SourcePath $launchScript -DestinationPath "$VMScriptsPath\Launch-AnalysisDetached.ps1"
 
-# Validar que o script principal chegou mesmo à VM antes de tentar executá-lo
-# (evita o erro tardio "'.\Run-MalwareAnalysis.ps1' is not recognized" dentro da VM).
+# --- Validação final antes da execução ---
+# *evita erro tardio de script não encontrado dentro da VM*
 $runScriptInVm = "$VMScriptsPath\Run-MalwareAnalysis.ps1"
 if (-not (Test-SandboxGuestPathExists -VMName $VMName -Credential $cred -GuestLiteralPath $runScriptInVm)) {
     throw "Run-MalwareAnalysis.ps1 não chegou à VM em: $runScriptInVm (cópia host->guest falhou)"

@@ -1,3 +1,4 @@
+// --- Módulo: StillRunningNotice.tsx ---
 import React from "react";
 import { Hourglass } from "lucide-react";
 import { useI18n } from "@/i18n";
@@ -7,6 +8,7 @@ type StillRunningNoticeProps = {
   lastStatus: string;
 };
 
+// --- Aviso quando job ainda está em execução no backend ---
 const StillRunningNotice: React.FC<StillRunningNoticeProps> = ({ jobId, lastStatus }) => {
   const { t } = useI18n();
   return (

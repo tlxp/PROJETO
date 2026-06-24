@@ -1,15 +1,12 @@
-/**
- * Camada única de acesso à API do backend (RAT Analyzer).
- * Centraliza o base URL, helpers de fetch com timeout/AbortController
- * e o tratamento de mensagens de erro do FastAPI ({ detail: ... }).
- */
+// --- Módulo: api.ts ---
+// *Camada única de acesso à API do backend (RAT Analyzer)*
 
 export const API_BASE: string = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
-/** Token opcional (env VITE_API_TOKEN) quando o backend exige RATANALYZER_API_TOKEN. */
+// *token opcional (env VITE_API_TOKEN) quando o backend exige RATANALYZER_API_TOKEN*
 export const API_TOKEN: string | undefined = import.meta.env.VITE_API_TOKEN || undefined;
 
-/** Timeout por defeito para pedidos "curtos" (status, artefatos, etc.). */
+// *timeout por defeito para pedidos curtos (status, artefatos, etc.)*
 export const DEFAULT_TIMEOUT_MS = 30_000;
 
 export type ErrorResponse = { detail?: unknown };
@@ -25,10 +22,12 @@ export class ApiError extends Error {
   }
 }
 
+// --- Deteta erros de abort/timeout do fetch ---
 export function isAbortError(e: unknown): boolean {
   return e instanceof DOMException && (e.name === "AbortError" || e.name === "TimeoutError");
 }
 
+// --- Converte detail do FastAPI em string legível ---
 export function stringifyDetail(detail: unknown): string {
   if (detail == null) return "";
   if (typeof detail === "string") return detail;
@@ -51,6 +50,7 @@ export function stringifyDetail(detail: unknown): string {
   }
 }
 
+// --- Extrai mensagem de erro do corpo JSON da resposta ---
 export function readErrorDetail(res: Response, fallbackText: string): Promise<string> {
   return res
     .json()
@@ -60,20 +60,18 @@ export function readErrorDetail(res: Response, fallbackText: string): Promise<st
 
 import { getAcceptLanguage, getT } from "@/i18n";
 
+// --- Monta URL absoluta para um path da API ---
 export function apiUrl(path: string): string {
   return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
 export type ApiFetchOptions = Omit<RequestInit, "signal"> & {
-  /** Timeout em ms; 0 desativa o timeout (ex.: uploads/streaming longos). */
+  // *timeout em ms; 0 desativa (ex.: uploads/streaming longos)*
   timeoutMs?: number;
   signal?: AbortSignal | null;
 };
 
-/**
- * `fetch` contra a API com timeout via AbortController.
- * Um `signal` externo (cancelamento do chamador) é combinado com o timeout interno.
- */
+// --- Fetch contra a API com timeout e AbortController combinado ---
 export async function apiFetch(path: string, options: ApiFetchOptions = {}): Promise<Response> {
   const { timeoutMs = DEFAULT_TIMEOUT_MS, signal, ...init } = options;
   const controller = new AbortController();
@@ -108,7 +106,7 @@ export async function apiFetch(path: string, options: ApiFetchOptions = {}): Pro
   }
 }
 
-/** `apiFetch` + validação de status + parse de JSON, lançando `ApiError` com mensagem legível. */
+// --- apiFetch + validação de status + parse JSON (lança ApiError) ---
 export async function apiFetchJson<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   const res = await apiFetch(path, options);
   if (!res.ok) {

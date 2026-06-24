@@ -1,3 +1,4 @@
+﻿// --- Módulo: MainWindow.xaml.cs ---
 using System;
 using System.Windows;
 using System.Windows.Media.Animation;
@@ -7,11 +8,13 @@ using RatAnalyzer.Desktop.Views;
 
 namespace RatAnalyzer.Desktop;
 
+// --- Janela principal: navegação entre idioma, carregamento e dashboard ---
 public partial class MainWindow : Window
 {
     private readonly Duration _transitionDuration = TimeSpan.FromMilliseconds(260);
     private readonly UserSettings _settings;
 
+    // --- Inicializa localização e fluxo inicial (idioma ou loading) ---
     public MainWindow()
     {
         _settings = UserSettingsStore.Load();
@@ -29,6 +32,7 @@ public partial class MainWindow : Window
             ShowLoading();
     }
 
+    // --- Exibe ecrã de seleção de idioma ---
     private void ShowLanguageSelection(bool isFirstLaunch)
     {
         var view = new LanguageSelectionView { ShowCancel = !isFirstLaunch };
@@ -47,6 +51,7 @@ public partial class MainWindow : Window
         SetContentWithFade(view, animateFromZeroOpacity: false);
     }
 
+    // --- Exibe ecrã de arranque do ambiente (backend/frontend) ---
     private void ShowLoading()
     {
         var loadingView = new LoadingView();
@@ -54,11 +59,13 @@ public partial class MainWindow : Window
         SetContentWithFade(loadingView, animateFromZeroOpacity: false);
     }
 
+    // --- Transição do loading para o dashboard após arranque concluído ---
     private void LoadingView_OnLoadingCompleted(object? sender, EventArgs e)
     {
         SetContentWithFade(new MainDashboardView(), animateFromZeroOpacity: true);
     }
 
+    // --- Troca conteúdo com animação de fade-in ---
     private void SetContentWithFade(object newContent, bool animateFromZeroOpacity)
     {
         ContentHost.Opacity = animateFromZeroOpacity ? 0 : 1;

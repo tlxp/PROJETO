@@ -1,3 +1,4 @@
+' --- Diagrama: mapa de autenticação e tokens ---
 @startuml
 title Mapa de autenticação — tokens e credenciais
 skinparam shadowing false
@@ -25,12 +26,14 @@ database "secrets/\nbackend.env" as SEC
 U --> FE
 U --> WPF
 
+' *Token API partilhado entre clientes e backend*
 FE --> API : X-API-Token
 WPF --> API : X-API-Token
 WPF --> PS : credenciais guest
 API --> UP : validar uploads
 API --> AGENT : X-Agent-Token\n(driver hyperv)
 
+' *Fonte única de segredos em secrets/backend.env*
 SEC ..> API : RATANALYZER_API_TOKEN
 SEC ..> FE : build-time token
 SEC ..> AGENT : VM_AGENT_TOKEN
@@ -54,6 +57,7 @@ note bottom of PS
   (exceto flag dev)
 end note
 
+' *Driver stub não executa amostras nem requer auth*
 rectangle "Driver stub" as STUB #F5F5F5
 API ..> STUB : sem auth\n(não executa amostras)
 

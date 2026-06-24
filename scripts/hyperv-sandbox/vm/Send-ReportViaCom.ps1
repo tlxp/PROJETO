@@ -1,4 +1,5 @@
-﻿<#
+﻿# --- Script: Send-ReportViaCom.ps1 ---
+<#
 
 .SYNOPSIS
 
@@ -26,6 +27,7 @@ param(
 
 
 
+# --- Logging de operações COM1 ---
 function Write-ComLog {
 
     param([string] $Message)
@@ -58,6 +60,7 @@ function Write-ComLog {
 
 
 
+# --- Escrita de uma linha na porta serial ---
 function Write-SerialLine {
 
     param(
@@ -82,6 +85,7 @@ function Write-SerialLine {
 
 
 
+# --- Abertura da porta COM1 com tentativas ---
 function Open-Com1Port {
 
     param(
@@ -134,6 +138,7 @@ function Open-Com1Port {
 
             $port.RtsEnable = $true
 
+            # *Atraso progressivo entre tentativas de abertura*
             Start-Sleep -Milliseconds (400 * $openTry)
 
             $port.Open()
@@ -168,6 +173,7 @@ function Open-Com1Port {
 
 
 
+# --- Envio do relatório linha a linha via COM1 ---
 function Send-ReportSimple {
 
     param(
@@ -208,7 +214,7 @@ function Send-ReportSimple {
 
 
 
-        # Aguardar estabilização do par virtual COM1<->pipe e receptor no host.
+        # *Aguarda estabilização do par virtual COM1<->pipe e receptor no host*
 
         Write-ComLog "A aguardar ${HostReadyDelayMs}ms antes do envio (host receptor COM1)"
 
@@ -226,6 +232,7 @@ function Send-ReportSimple {
 
 
 
+        # *Cabeçalho do protocolo de transferência*
         Write-SerialLine -Port $port -Line "VERSION=1" -DelayMs $DelayMs
 
         Write-SerialLine -Port $port -Line "TIMESTAMP=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -DelayMs $DelayMs
@@ -302,6 +309,7 @@ function Send-ReportSimple {
 
 
 
+# --- Loop de tentativas com backoff ---
 for ($attempt = 1; $attempt -le $MaxRetries; $attempt++) {
 
     if (Send-ReportSimple -ReportPath $ReportPath -SampleHash $SampleHash -Attempt $attempt) {
@@ -322,6 +330,7 @@ for ($attempt = 1; $attempt -le $MaxRetries; $attempt++) {
 
     if ($attempt -lt $MaxRetries) {
 
+        # *Espera crescente entre tentativas falhadas*
         $waitTime = [Math]::Min(15, 3 * $attempt)
 
         Write-Host "[INFO] A aguardar $waitTime segundos antes de retry COM1..."
@@ -337,4 +346,3 @@ for ($attempt = 1; $attempt -le $MaxRetries; $attempt++) {
 Write-Error "Falha ao enviar relatório após $MaxRetries tentativas"
 
 exit 1
-

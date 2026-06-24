@@ -1,4 +1,5 @@
-"""Testes de rate limiting em uploads."""
+# --- Módulo: test_rate_limit ---
+# Testes de rate limiting em uploads.
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,19 +9,25 @@ from middleware import reset_rate_limit_buckets
 
 
 @pytest.fixture()
+# --- Fixture: cliente HTTP de teste ---
 def client():
     reset_rate_limit_buckets()
     return TestClient(api.app)
 
 
+# --- Testes de RateLimit ---
 class TestRateLimit:
+# --- Teste: verifica rate limit 429 ---
     def test_rate_limit_429(self, client, monkeypatch):
         monkeypatch.setenv("RATANALYZER_RATE_LIMIT_UPLOADS_PER_MIN", "2")
 
+# --- Classe Fake Analyzer ---
         class FakeAnalyzer:
+# --- Helper interno: init   ---
             def __init__(self, *args, **kwargs):
                 pass
 
+# --- Teste: analyze ---
             def analyze(self):
                 return {"risk_score": 0, "risk_level": "LOW"}
 

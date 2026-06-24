@@ -1,10 +1,12 @@
-﻿<#
+﻿# --- Script: Launch-AnalysisDetached.ps1 ---
+<#
 .SYNOPSIS
     Lança Run-MalwareAnalysis.ps1 num processo PowerShell separado (guest).
 .DESCRIPTION
     Usa cmd.exe "start /B" para criar um processo independente da sessão PowerShell Direct.
     Só reporta ok=true quando guest_alive.txt aparece (Run-MalwareAnalysis arrancou de facto).
 #>
+
 [CmdletBinding()]
 param(
     [Parameter()]
@@ -14,6 +16,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# --- Leitura de propriedades do JSON de arranque ---
 function Get-LaunchConfigProperty {
     param(
         [Parameter(Mandatory = $true)] $Config,
@@ -48,6 +51,7 @@ function Get-LaunchConfigBool {
     return [bool]$value
 }
 
+# --- Gravação do estado de arranque em ficheiro JSON ---
 function Write-LaunchStatusFile {
     param(
         [Parameter(Mandatory = $true)][string] $WorkDir,
@@ -64,6 +68,7 @@ function Write-LaunchStatusFile {
     } catch { }
 }
 
+# --- Escape seguro de argumentos para cmd.exe ---
 function Format-CmdArgument {
     param([string] $Value)
     if ($null -eq $Value) { return '""' }
@@ -75,6 +80,7 @@ function Format-CmdArgument {
     return $s
 }
 
+# --- Espera pelo ficheiro guest_alive.txt (prova de arranque) ---
 function Wait-ForGuestAliveFile {
     param(
         [Parameter(Mandatory = $true)][string] $AlivePath,
@@ -99,8 +105,10 @@ function Wait-ForGuestAliveFile {
     return 0
 }
 
+# --- Fluxo principal de arranque desacoplado ---
 $workDir = "C:\analysis_work"
 try {
+    # *Carrega e valida launch_params.json*
     if (-not (Test-Path -LiteralPath $ConfigPath)) {
         throw "Ficheiro de configuração não encontrado: $ConfigPath"
     }
@@ -130,13 +138,14 @@ try {
         $psExe = "powershell.exe"
     }
 
+    # *Compatibilidade com launch_params.json antigos (WaitForSampleExit)*
     $timeoutKill = Get-LaunchConfigBool -Config $cfg -Name "SampleTimeoutKill"
     if (-not $timeoutKill) {
-        # Compatibilidade com launch_params.json antigos.
         $waitExitVal = Get-LaunchConfigProperty -Config $cfg -Name "WaitForSampleExit"
         if ($null -ne $waitExitVal) { $timeoutKill = -not [bool]$waitExitVal }
     }
 
+    # *Monta a linha de comandos para Run-MalwareAnalysis.ps1*
     $psArgs = @(
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
@@ -174,6 +183,7 @@ try {
     $launchLog = Join-Path $workDir "analysis_launch.log"
     $alivePath = Join-Path $workDir "guest_alive.txt"
 
+    # *Limpa artefactos de arranques anteriores*
     try { if (Test-Path -LiteralPath $alivePath) { Remove-Item -LiteralPath $alivePath -Force -ErrorAction SilentlyContinue } } catch { }
     try { if (Test-Path -LiteralPath $launchLog) { Remove-Item -LiteralPath $launchLog -Force -ErrorAction SilentlyContinue } } catch { }
 
@@ -182,10 +192,11 @@ try {
         "started_at=$(Get-Date -Format 'yyyy-MM-ddTHH:mm:ssK')"
     ) -Encoding UTF8
 
-    # Start-Process evita quoting frágil de cmd.exe start /B.
+    # *Start-Process evita quoting frágil de cmd.exe start /B*
     $proc = Start-Process -FilePath $psExe -ArgumentList $psArgs -WorkingDirectory $workDir `
         -WindowStyle Hidden -PassThru
 
+    # *Só considera sucesso quando guest_alive.txt confirma o PID*
     $detachedPid = Wait-ForGuestAliveFile -AlivePath $alivePath -TimeoutSeconds 25
     if ($detachedPid -le 0) {
         $tail = ""

@@ -1,3 +1,4 @@
+# --- Script: Test-SerialPipeSimulation.ps1 ---
 #Requires -Version 5.1
 <#
 .SYNOPSIS
@@ -10,6 +11,7 @@
       4) Fallback: marcador REPORT_END; detetável
       5) PhaseF não bloqueada por global timeout
 #>
+
 [CmdletBinding()]
 param(
     [int] $LongGuestDelaySec = 15,
@@ -20,9 +22,11 @@ $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 Import-Module (Join-Path $root 'SandboxCommon.psm1') -Force -DisableNameChecking
 
+# --- Contadores de resultados ---
 $passed = 0
 $failed = 0
 
+# --- Registo de resultado por cenário ---
 function Write-CaseResult {
     param([string] $Name, [bool] $Ok, [string] $Detail = '')
     if ($Ok) {
@@ -35,6 +39,7 @@ function Write-CaseResult {
     }
 }
 
+# --- Simulador de guest (servidor Named Pipe) ---
 function Start-VmwpPipeSimulator {
     param(
         [string] $PipeName,
@@ -77,6 +82,7 @@ function Start-VmwpPipeSimulator {
     return $job
 }
 
+# --- Invoca a função real de recepção do módulo ---
 function Invoke-PipeReceiveTest {
     param(
         [string] $PipeName,
@@ -85,11 +91,10 @@ function Invoke-PipeReceiveTest {
         [int] $IdleReconnectSecLocal = 120
     )
 
-    # Injetar idle reconnect na função sem alterar produção permanentemente para o teste:
-    # usamos a função real importada do módulo.
     return Receive-SandboxReportFromPipe -PipeName $PipeName -OutputPath $OutPath -TimeoutSeconds $TimeoutSec
 }
 
+# --- Execução dos cenários de teste ---
 $tmp = Join-Path $env:TEMP ("sandbox_pipe_sim_" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tmp -Force | Out-Null
 
@@ -115,7 +120,7 @@ try {
     }
 
   if (-not $SkipSlow) {
-    # --- Cenário 2: guest após 8s, host ligado cedo (sem religação necessária) ---
+    # --- Cenário 2: guest após 8s, host ligado cedo ---
     $pipe2 = "SandboxPipeSim_" + ([guid]::NewGuid().ToString('N'))
     $out2 = Join-Path $tmp 'report2.txt'
     $sim2 = Start-VmwpPipeSimulator -PipeName $pipe2 -GuestDelaySec 8 -ReportBody @('delayed report')
@@ -131,7 +136,7 @@ try {
         Remove-Job $sim2 -Force -ErrorAction SilentlyContinue
     }
 
-    # --- Cenário 3: cliente cedo + guest após atraso longo (simula análise na VM) ---
+    # --- Cenário 3: atraso longo simula análise na VM ---
     $pipe3 = "SandboxPipeSim_" + ([guid]::NewGuid().ToString('N'))
     $out3 = Join-Path $tmp 'report3.txt'
     $sim3 = Start-VmwpPipeSimulator -PipeName $pipe3 -GuestDelaySec $LongGuestDelaySec -ReportBody @('apos analise')
@@ -153,7 +158,7 @@ try {
     Write-Host "[SKIP] Cenários 2-3 (lentos) omitidos (-SkipSlow)" -ForegroundColor DarkYellow
   }
 
-    # --- Cenário 4: Test-SandboxGuestAnalysisReportComplete (sem VM) ---
+    # --- Cenário 4: marcador REPORT_END; detetável ---
     $guestReport = Join-Path $tmp 'analysis_guest.txt'
     @(
         'Relatório simulado',
@@ -165,7 +170,7 @@ try {
     $hasMarker = $tail.Contains('REPORT_END;')
     Write-CaseResult 'Cenário 4: marcador REPORT_END; detetável' $hasMarker
 
-    # --- Cenário 5: global timeout não bloqueia fases E/F (lógica pura) ---
+    # --- Cenário 5: PhaseF não bloqueada por global timeout ---
     $phasesSkip = @('PhaseE-WaitReport.ps1', 'PhaseF-CollectResult.ps1', 'PhaseG-Finish.ps1')
     $deadline = (Get-Date).AddSeconds(-1)
     $wouldBlockF = ($deadline -lt (Get-Date)) -and ($phasesSkip -notcontains 'PhaseF-CollectResult.ps1')
@@ -177,5 +182,6 @@ try {
     if ($failed -gt 0) { exit 1 }
 }
 finally {
+    # *Limpeza da pasta temporária de testes*
     try { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue } catch { }
 }

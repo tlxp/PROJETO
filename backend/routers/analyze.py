@@ -1,4 +1,5 @@
-"""Endpoints de análise estática síncrona e streaming."""
+# --- Módulo: analyze ---
+# Endpoints de análise estática síncrona e streaming.
 
 from __future__ import annotations
 
@@ -39,6 +40,7 @@ logger = logging.getLogger("rat_analyzer_api")
 router = APIRouter(tags=["analyze"])
 
 
+# --- Análise estática síncrona (upload + RATAnalyzer) ---
 @router.post("/api/analyze", dependencies=[Depends(require_api_token)])
 async def analyze_file(request: Request, file: UploadFile = File(...)):
     increment("rat_analyzer_analyze_requests_total")
@@ -74,6 +76,7 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
             output_dir = tmp_dir / "out"
             output_dir.mkdir(exist_ok=True)
 
+# --- Log cb ---
             def log_cb(msg: str) -> None:
                 logger.info("[ANALYZE %s] %s", name, msg)
 
@@ -152,6 +155,7 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
+# --- Análise estática com streaming NDJSON de logs e resultado ---
 @router.post("/api/analyze_stream", dependencies=[Depends(require_api_token)])
 async def analyze_file_stream(request: Request, file: UploadFile = File(...)):
     increment("rat_analyzer_analyze_stream_requests_total")
@@ -184,9 +188,11 @@ async def analyze_file_stream(request: Request, file: UploadFile = File(...)):
     output_dir.mkdir(exist_ok=True)
     q: queue.Queue[object] = queue.Queue()
 
+# --- Log cb ---
     def log_cb(msg: str) -> None:
         q.put({"type": "log", "message": msg})
 
+    # --- Worker em thread separada para análise e envio de eventos ---
     def worker():
         try:
             analyzer = RATAnalyzer(
@@ -209,6 +215,7 @@ async def analyze_file_stream(request: Request, file: UploadFile = File(...)):
                     last = json.load(f)
                 report_path = last.get("report_path")
 
+# --- Helper interno: read local ---
                 def _read_local(path: str | None, encoding: str = "utf-8", errors: str = "replace") -> str:
                     if not path or not Path(path).exists():
                         return ""
@@ -272,6 +279,7 @@ async def analyze_file_stream(request: Request, file: UploadFile = File(...)):
 
     threading.Thread(target=worker, daemon=True).start()
 
+    # --- Gerador async que consome a fila e emite NDJSON ---
     async def streamer():
         import anyio
 

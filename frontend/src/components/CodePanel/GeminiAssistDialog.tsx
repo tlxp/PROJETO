@@ -1,3 +1,4 @@
+// --- Módulo: GeminiAssistDialog.tsx ---
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Send, Trash2 } from "lucide-react";
 import GeminiIcon from "@/components/GeminiIcon";
@@ -14,7 +15,7 @@ type GeminiAssistDialogProps = {
   open: boolean;
   onClose: () => void;
   codeExcerpt: CodeExcerpt;
-  /** Respostas simuladas — apenas no layout de demonstração mock. */
+  // *Respostas simuladas — apenas no layout mock*
   allowMock?: boolean;
 };
 
@@ -46,6 +47,7 @@ const GeminiMockToggle: React.FC<{
   </label>
 );
 
+// --- Diálogo de assistência Gemini para excerto de código C ---
 const GeminiAssistDialog: React.FC<GeminiAssistDialogProps> = ({
   open,
   onClose,

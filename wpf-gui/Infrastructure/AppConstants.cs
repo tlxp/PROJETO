@@ -1,19 +1,22 @@
+﻿// --- Módulo: AppConstants.cs ---
 namespace RatAnalyzer.Desktop.Infrastructure;
 
 using System;
 using System.Net.Http;
 using RatAnalyzer.Desktop.Localization;
 
-/// <summary>URLs e caminhos partilhados pela aplicação desktop.</summary>
+// --- URLs, tokens e utilitários HTTP partilhados ---
 internal static class AppConstants
 {
+    // --- Constantes de URL ---
     public const string ApiBaseUrl = "http://127.0.0.1:8000";
     public const string FrontendUrl = "http://localhost:8080";
 
-    /// <summary>Token opcional para endpoints de administração do backend (env RATANALYZER_API_TOKEN).</summary>
+    // --- Token de API opcional (variável RATANALYZER_API_TOKEN) ---
     public static string? BackendApiToken =>
         Environment.GetEnvironmentVariable("RATANALYZER_API_TOKEN");
 
+    // --- Adiciona cabeçalho X-API-Token ao HttpClient ---
     public static void ApplyAdminToken(HttpClient client)
     {
         var token = BackendApiToken;
@@ -21,13 +24,14 @@ internal static class AppConstants
             client.DefaultRequestHeaders.Add("X-API-Token", token);
     }
 
+    // --- Define Accept-Language conforme idioma da UI ---
     public static void ApplyLanguageHeader(HttpClient client)
     {
         client.DefaultRequestHeaders.Remove("Accept-Language");
         client.DefaultRequestHeaders.Add("Accept-Language", LocalizationManager.GetAcceptLanguage());
     }
 
-    /// <summary>URL do frontend com parâmetro <c>?lang=</c> para sincronizar i18n web.</summary>
+    // --- Constrói URL do frontend com parâmetro lang para i18n web ---
     public static string BuildFrontendUrl(string? pathAndQuery = null)
     {
         var lang = LocalizationManager.LanguageCode;
@@ -40,6 +44,7 @@ internal static class AppConstants
         return $"{baseUrl}{path}{sep}lang={lang}";
     }
 
+    // --- Propaga idioma para processos filhos (backend/frontend) ---
     public static void PropagateLanguageEnvironment(System.Diagnostics.ProcessStartInfo psi)
     {
         psi.Environment["RATANALYZER_LANG"] = LocalizationManager.LanguageCode;

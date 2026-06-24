@@ -1,3 +1,4 @@
+// --- Módulo: CodePanel.tsx ---
 import React, { useRef, useEffect, useMemo, useState, useCallback, useLayoutEffect } from "react";
 import { motion } from "framer-motion";
 import { Maximize2, Download, ChevronRight, ChevronDown } from "lucide-react";
@@ -12,6 +13,7 @@ import GeminiAssistDialog from "./CodePanel/GeminiAssistDialog";
 import GeminiIcon from "@/components/GeminiIcon";
 import { buildCodeExcerpt } from "@/lib/gemini";
 
+// --- Painel de código com syntax highlight, fold, janela e assistência Gemini ---
 const CodePanel: React.FC<CodePanelProps> = ({
   title,
   language,
@@ -221,7 +223,7 @@ const CodePanel: React.FC<CodePanelProps> = ({
     onWindowRangeChange({ start: windowStart, end: windowEnd, totalLines });
   }, [isWindowMode, onWindowRangeChange, totalLines, windowEnd, windowStart]);
 
-  /** Linhas a mostrar: modo janela (leve), ou ranges (funções com flag), ou tudo (com limite). */
+  // *Linhas a mostrar: modo janela, ranges de funções ou tudo (com limite)*
   const visibleRows = useMemo<Row[]>(() => {
     // 1) Modo janela (±N linhas à volta do foco)
     if (isWindowMode && windowStart != null && windowEnd != null && totalLines > 0) {

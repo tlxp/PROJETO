@@ -1,4 +1,7 @@
-# Instalar runtimes essenciais (offline) antes do snapshot
+# --- Script: PhaseE-Runtimes.ps1 ---
+# Fase E: instalar runtimes essenciais (offline) na VM antes do snapshot.
+
+# --- Instalar runtimes essenciais (offline) ---
 Write-LogHost ""
 Write-LogHost '       A instalar runtimes essenciais (offline) na VM (se disponíveis)...'
 
@@ -6,6 +9,7 @@ $offlineDir = Join-Path $scriptRoot "offline\runtimes"
 $toolsDir = Join-Path $scriptRoot "tools"
 $vmInstallDir = "C:\analysis_work\installers"
 
+# --- Staging opcional do WinUtil ---
 if ($StageWinutil) {
     try {
         $toolsDir = Join-Path $scriptRoot "tools"
@@ -13,6 +17,7 @@ if ($StageWinutil) {
         if (Test-Path -LiteralPath $winutil) {
             Write-LogHost ""
             Write-LogHost "       A copiar WinUtil (staging seguro, sem executar) para a VM..."
+            # *Copia WinUtil para a VM sem executar (instalação manual posterior)*
             Copy-SandboxVMFile -VMName $VMName -Credential $cred -SourcePath $winutil -DestinationPath "C:\analysis_work\deps\winutil.ps1"
             Write-LogHost "       WinUtil staged em: C:\analysis_work\deps\winutil.ps1"
             Write-LogHost "       Nota: execute manualmente apenas ações de INSTALL no WinUtil."
@@ -24,12 +29,13 @@ if ($StageWinutil) {
     }
 }
 
+# --- Verificar pastas de instaladores offline ---
 if (-not (Test-Path -LiteralPath $offlineDir) -and -not (Test-Path -LiteralPath $toolsDir)) {
     Write-LogWarning ('       Nenhuma pasta de runtimes offline encontrada ({0} ou {1}).' -f $offlineDir, $toolsDir)
     Write-LogWarning '       Vou prosseguir sem instalar runtimes. (Recomendado: scripts/hyperv-sandbox/tools/ ou offline/runtimes/)'
 }
 else {
-    # Garantir diretório destino na VM
+    # --- Criar diretório destino na VM ---
     try {
         Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
             param($Dir)
@@ -39,7 +45,7 @@ else {
         Write-LogWarning ('       Não foi possível criar ''{0}'' na VM: {1}' -f $vmInstallDir, $_.Exception.Message)
     }
 
-    # Instaladores suportados (colocar os ficheiros nesta pasta, com estes nomes).
+    # --- Lista de instaladores suportados ---
     $installers = @(
         @{ Name = "VC++ Redistributable (x86)"; File = "VC_redist.x86.exe"; Args = "/install /quiet /norestart" },
         @{ Name = "VC++ Redistributable (x64)"; File = "VC_redist.x64.exe"; Args = "/install /quiet /norestart" },
@@ -48,6 +54,7 @@ else {
         @{ Name = ".NET Desktop Runtime 8 (x64)"; File = "windowsdesktop-runtime-8.0.*-win-x64.exe"; Args = "/install /quiet /norestart"; AllowPattern = $true }
     )
 
+    # --- Copiar e executar cada instalador ---
     foreach ($it in $installers) {
         $src = Resolve-SandboxInstallerSource -FileName $it.File -SearchRoots @($offlineDir, $toolsDir) -AllowPattern:([bool]$it.AllowPattern)
 
@@ -69,6 +76,7 @@ else {
 
         try {
             Write-LogHost ('         [RUN]  {0}' -f $it.Name)
+            # *Executa instalador silenciosamente dentro da VM*
             $res = Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
                 param($PathExe, $InstallerArgs)
                 if (-not (Test-Path -LiteralPath $PathExe)) { return @{ ok = $false; code = -1; msg = "Instalador não encontrado no guest." } }
@@ -78,7 +86,7 @@ else {
             } -ArgumentList $dst, $it.Args -ErrorAction Stop
 
             $code = if ($res -and $res.code -ne $null) { [int]$res.code } else { 0 }
-            # Muitos instaladores devolvem 0 (OK) ou 3010 (reboot required)
+            # *ExitCode 0 = OK; 3010 = reboot necessário (aceitável)*
             if ($code -eq 0 -or $code -eq 3010) {
                 Write-LogHost ('               OK (ExitCode={0})' -f $code)
             } else {
@@ -89,7 +97,7 @@ else {
         }
     }
 
-    # Sanity check: dotnet --info (se existir)
+    # --- Verificação rápida do dotnet ---
     try {
         $dotnetInfo = Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
             $p = Get-Command dotnet -ErrorAction SilentlyContinue

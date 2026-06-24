@@ -1,3 +1,4 @@
+// --- Módulo: UploadView.tsx ---
 import React from "react";
 import { motion } from "framer-motion";
 import { Cpu } from "lucide-react";
@@ -23,6 +24,7 @@ type UploadViewProps = {
   stillRunning: StillRunningJob | null;
 };
 
+// --- Vista de upload: drop zone, modo de análise e logs ---
 const UploadView: React.FC<UploadViewProps> = ({
   file,
   onFileLoaded,

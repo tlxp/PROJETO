@@ -1,3 +1,4 @@
+' --- Diagrama: sequência integrada (estática + dinâmica + WPF) ---
 @startuml
 title Sequência integrada — RAT Analyzer (resumida)
 
@@ -29,6 +30,7 @@ group Job dinâmico ou combinado
   API -> JOBS : create_job
   JOBS -> DB : estado queued/running
   JOBS -> VMO : pipeline dinâmica
+  ' *Driver real ou stub conforme configuração*
   alt hyperv / proxmox
     VMO -> DRV : driver real
     DRV -> AGENT : upload, run, report

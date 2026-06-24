@@ -1,3 +1,4 @@
+﻿// --- Módulo: VmSandboxService.cs ---
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -21,7 +22,7 @@ public sealed record RunPreflight(
     string IsoPath,
     bool IsoExists);
 
-/// <summary>Execução PowerShell e preflight Hyper-V (sem dependências WPF).</summary>
+// --- Execução PowerShell e preflight Hyper-V (sem dependências WPF) ---
 public static class VmSandboxService
 {
     public static string? FindHyperVScriptsPath()

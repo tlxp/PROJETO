@@ -1,15 +1,18 @@
+﻿// --- Módulo: UserSettingsStore.cs ---
 using System;
 using System.IO;
 using System.Text.Json;
 
 namespace RatAnalyzer.Desktop.Infrastructure;
 
+// --- Modelo de preferências do utilizador ---
 public sealed class UserSettings
 {
     public string? Language { get; set; }
     public bool HasChosenLanguage { get; set; }
 }
 
+// --- Persistência de definições da UI em %LOCALAPPDATA%\RatAnalyzer ---
 public static class UserSettingsStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
@@ -20,6 +23,7 @@ public static class UserSettingsStore
             "RatAnalyzer",
             "ui-settings.json");
 
+    // --- Carrega definições ou devolve valores por omissão ---
     public static UserSettings Load()
     {
         try
@@ -36,6 +40,7 @@ public static class UserSettingsStore
         }
     }
 
+    // --- Grava idioma escolhido e marca HasChosenLanguage ---
     public static void SaveLanguage(string languageCode)
     {
         var settings = Load();

@@ -1,7 +1,9 @@
+// --- Módulo: vitest.config.ts ---
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 
+// --- Configuração do Vitest (testes unitários em jsdom) ---
 export default defineConfig({
   plugins: [react()],
   test: {
@@ -20,7 +22,7 @@ export default defineConfig({
         statements: 25,
       },
     },
-    // Evita flakiness no Windows/CI (arranque lento do jsdom com paralelismo)
+    // *evita flakiness no Windows/CI com arranque lento do jsdom*
     fileParallelism: false,
     testTimeout: 15_000,
     hookTimeout: 15_000,

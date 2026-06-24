@@ -1,4 +1,5 @@
-"""Routers FastAPI do RAT Analyzer."""
+# --- Módulo: __init__ ---
+# Routers FastAPI do RAT Analyzer.
 
 from . import analyze, health, jobs, storage
 

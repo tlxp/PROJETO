@@ -1,3 +1,4 @@
+# --- EditorConfig: convenções de formatação do monorepo ---
 root = true
 
 [*]

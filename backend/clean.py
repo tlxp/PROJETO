@@ -1,16 +1,7 @@
 #!/usr/bin/env python3
-"""
-Limpa caches, artefatos de testes e ficheiros temporários gerados.
-
-Não remove: código fonte (.cs em programa/), relatórios versionados, regras YARA.
-
-Remove:
-  - __pycache__, .pytest_cache (raiz, backend/ e subpastas)
-  - *.pyc / *.pyo
-  - programa/**/bin e programa/**/obj
-  - decompiled canónico em DATA_DIR (config.DECOMPILED_DIR)
-  - decompiled/ legado na raiz do repo (versões antigas, pré-DATA_DIR)
-"""
+# --- Módulo: clean ---
+# Limpa caches, artefatos de testes e ficheiros temporários gerados.
+# Não remove: código fonte, relatórios versionados, regras YARA.
 
 import shutil
 import sys
@@ -33,12 +24,13 @@ _SKIP_DIR_NAMES = frozenset(
 )
 
 
+# --- Verificação se path deve ser ignorado na limpeza ---
 def _skip_path(path: Path) -> bool:
     return any(part in _SKIP_DIR_NAMES for part in path.parts)
 
 
+# --- Contagem recursiva de ficheiros e pastas ---
 def count_items(path: Path) -> int:
-    """Conta ficheiros e pastas (recursivo para diretórios)."""
     if not path.exists():
         return 0
     if path.is_file():
@@ -46,8 +38,8 @@ def count_items(path: Path) -> int:
     return sum(1 for _ in path.rglob("*"))
 
 
+# --- Pastas decompiladas: DATA_DIR (canónico) + legado na raiz ---
 def _decompiled_targets() -> list[Path]:
-    """Pastas decompiladas: DATA_DIR (canónico) + legado na raiz do repo."""
     targets = [config.DECOMPILED_DIR]
     legacy = ROOT / "decompiled"
     if legacy.resolve() not in {t.resolve() for t in targets}:
@@ -55,6 +47,7 @@ def _decompiled_targets() -> list[Path]:
     return targets
 
 
+# --- Ponto de entrada da limpeza ---
 def main() -> int:
     dry_run = "--dry-run" in sys.argv or "-n" in sys.argv
     if dry_run:
@@ -62,7 +55,7 @@ def main() -> int:
 
     removed = 0
 
-    # 1) Python: __pycache__ (evitar .git)
+    # *1) Python: __pycache__ (evitar .git)*
     pycache_dirs = [
         d for d in ROOT.rglob("__pycache__")
         if d.is_dir() and not _skip_path(d)
@@ -74,7 +67,7 @@ def main() -> int:
         if not dry_run:
             shutil.rmtree(d)
 
-    # 2) pytest cache (raiz, backend/, etc.)
+    # *2) pytest cache (raiz, backend/, etc.)*
     pytest_caches = [
         d for d in ROOT.rglob(".pytest_cache")
         if d.is_dir() and not _skip_path(d)
@@ -86,7 +79,7 @@ def main() -> int:
         if not dry_run:
             shutil.rmtree(cache)
 
-    # 3) .pyc, .pyo (evitar .git)
+    # *3) .pyc, .pyo (evitar .git)*
     py_files = [
         f for ext in ("*.pyc", "*.pyo")
         for f in ROOT.rglob(ext)
@@ -98,7 +91,7 @@ def main() -> int:
         if not dry_run:
             f.unlink()
 
-    # 4) programa/**/bin e programa/**/obj (build e exe/dll gerados)
+    # *4) programa/**/bin e programa/**/obj (build e exe/dll gerados)*
     if config.SAMPLE_PROJECT_DIR.is_dir():
         for name in ("bin", "obj"):
             for d in config.SAMPLE_PROJECT_DIR.rglob(name):
@@ -109,7 +102,7 @@ def main() -> int:
                     if not dry_run:
                         shutil.rmtree(d)
 
-    # 5) decompiled (DATA_DIR + legado na raiz)
+    # *5) decompiled (DATA_DIR + legado na raiz)*
     for decompiled_dir in _decompiled_targets():
         if decompiled_dir.exists():
             c = count_items(decompiled_dir)

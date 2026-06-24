@@ -1,3 +1,4 @@
+# --- Script: 00-Reset-Sandbox.ps1 ---
 <#
 .SYNOPSIS
     Limpa completamente o ambiente PROJETOVM (VM + pasta D:\PROJETOVM).
@@ -10,12 +11,14 @@
 .EXAMPLE
     .\00-Reset-Sandbox.ps1
 #>
+
 #Requires -RunAsAdministrator
 
 Import-Module (Join-Path $PSScriptRoot "SandboxCommon.psm1") -ErrorAction Stop
 
 $ErrorActionPreference = "Stop"
 
+# --- Carregamento da configuração ---
 $configScript = Join-Path $PSScriptRoot "_Config.ps1"
 if (Test-Path $configScript) { . $configScript }
 
@@ -27,6 +30,7 @@ Write-Host "BasePath configurado: $BasePath"
 Write-Host "VM configurada:       $VMName"
 Write-Host ""
 
+# --- Verificação prévia ---
 if (-not (Test-Path $BasePath)) {
     Write-Host "A pasta '$BasePath' não existe. Nada para limpar."
     return
@@ -37,12 +41,14 @@ Write-Host "  - VM\ (ficheiro VHDX, configuração da VM)"
 Write-Host "  - Reports\, Samples\, Logs\"
 Write-Host ""
 
+# *Confirmação explícita antes de apagar tudo*
 $answer = Read-Host "Tem a CERTEZA que quer parar/remover a VM '$VMName' (se existir) e APAGAR TUDO em '$BasePath'? (escreva 'SIM' para confirmar)"
 if ($answer -ne "SIM") {
     Write-Host "Operação cancelada pelo utilizador. Nada foi alterado."
     return
 }
 
+# --- Remoção da VM Hyper-V ---
 Write-Host ""
 Write-Host "A parar e remover VM (se existir)..."
 try {
@@ -62,10 +68,11 @@ try {
     Write-Warning "Falha ao remover a VM '$VMName': $($_.Exception.Message)"
 }
 
+# --- Limpeza da pasta base ---
 Write-Host ""
 Write-Host "A apagar conteúdo da pasta '$BasePath'..."
 try {
-    # Melhor tentativa: remover tudo por baixo, mantendo a drive em si
+    # *Remove tudo por baixo da pasta base, mantendo a drive*
     Get-ChildItem -LiteralPath $BasePath -Force -ErrorAction SilentlyContinue | ForEach-Object {
         try {
             Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction Stop

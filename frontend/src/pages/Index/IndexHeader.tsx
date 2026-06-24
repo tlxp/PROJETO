@@ -1,6 +1,8 @@
+// --- Módulo: IndexHeader.tsx ---
 import { Terminal } from "lucide-react";
 import { useI18n } from "@/i18n";
 
+// --- Cabeçalho da página Index ---
 const IndexHeader = () => {
   const { t } = useI18n();
   return (

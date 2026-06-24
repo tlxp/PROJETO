@@ -1,13 +1,17 @@
-﻿# 6) Lançar análise na VM
+﻿# --- Script: PhaseD-Execute.ps1 ---
+# --- Lançamento da análise destacada na VM ---
+
 Write-LogHost "[6/7] A lançar análise na VM..."
 
 $analysisSuccess = $false
 
+# --- Primeira tentativa de lançamento ---
 try {
     $launchOut = Start-DetachedAnalysisInVm -VM $VMName -Cred $cred -VmSamplePath $VMSamplePath `
         -TimeoutSec $TimeoutSeconds -WaitForSampleExit:$WaitForSampleExit -VmScriptDir $VMScriptsPath -SampleSha256 $sampleSha256 -HostRunId $RunId
     $analysisSuccess = $true
     Add-LogLine -Path $HostLogPath -Value "Detached analysis launched successfully"
+    # *extrai o PID do processo destacado a partir do JSON devolvido*
     foreach ($item in @($launchOut)) {
         if ($null -eq $item) { continue }
         $raw = ($item | Out-String).Trim()
@@ -25,6 +29,7 @@ try {
     Write-LogWarning "Lançamento da análise destacada falhou (tentativa 1): $($_.Exception.Message)"
     Add-LogLine -Path $HostLogPath -Value "Detached launch failed (try1): $($_.Exception.Message)"
 
+    # --- Segunda tentativa se a VM ainda estiver em execução ---
     $vmState = (Get-VM -Name $VMName -ErrorAction SilentlyContinue).State
     if ($vmState -eq 'Running') {
         Write-LogWarning "VM ainda em execução. A tentar re-lançar análise..."
@@ -43,7 +48,7 @@ try {
     }
 }
 
-# Confirmar que o processo destacado arrancou de facto no guest.
+# --- Verificação de que o processo destacado arrancou no guest ---
 if ($analysisSuccess -and $cred -is [pscredential]) {
     Start-Sleep -Seconds 3
     try {
@@ -53,6 +58,7 @@ if ($analysisSuccess -and $cred -is [pscredential]) {
         if ($bootDiag.launchError) { $bootMsg += " err=$($bootDiag.launchError)" }
         Add-LogLine -Path $HostLogPath -Value $bootMsg
         Write-LogHost "      [GUEST] $bootMsg"
+        # *marca falha se o PID morreu sem criar ficheiros de vida nem relatório*
         if ($detachedAnalysisPid -gt 0 -and -not $bootDiag.pidRunning -and -not $bootDiag.aliveFile) {
             $analysisSuccess = $false
             Write-LogWarning "      Análise destacada não sobreviveu ao arranque no guest."

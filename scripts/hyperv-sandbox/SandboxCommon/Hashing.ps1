@@ -1,4 +1,7 @@
-﻿function Assert-FileSha1 {
+﻿# --- Script: Hashing.ps1 ---
+
+# --- Validação SHA-1 de ficheiro ---
+function Assert-FileSha1 {
     param(
         [Parameter(Mandatory = $true)][string] $Path,
         [Parameter(Mandatory = $true)][string] $ExpectedSha1,
@@ -9,6 +12,7 @@
         throw "O $Label n-o foi encontrado em: $Path"
     }
 
+    # *Normalizar hash esperado (sem espaços, minúsculas)*
     $expected = ($ExpectedSha1 -replace '\s', '').ToLowerInvariant()
     if ([string]::IsNullOrWhiteSpace($expected)) {
         throw "SHA-1 esperado vazio para o $Label (config inv-lida)."
@@ -26,10 +30,11 @@
         throw "SHA-1 do $Label N-O coincide. Esperado: $expected | Atual: $actual | Ficheiro: $Path"
     }
 
-    # Devolver o hash calculado para diagnóstico/logs
+    # *Devolver o hash calculado para diagnóstico/logs*
     return $actual
 }
 
+# --- Validação SHA-256 de ficheiro ---
 function Assert-FileSha256 {
     param(
         [Parameter(Mandatory = $true)][string] $Path,

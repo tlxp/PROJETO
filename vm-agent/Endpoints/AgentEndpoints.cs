@@ -1,3 +1,5 @@
+// --- Módulo: AgentEndpoints.cs ---
+
 using VmAgent.Configuration;
 using VmAgent.Models;
 using VmAgent.Services;
@@ -5,8 +7,10 @@ using VmAgent.State;
 
 namespace VmAgent.Endpoints;
 
+// --- Endpoints HTTP da API do agente ---
 internal static class AgentEndpoints
 {
+    // --- Mapeia rotas /api/* na aplicação ---
     public static void MapAgentEndpoints(this WebApplication app)
     {
         app.MapGet("/api/health", () => Results.Ok(new { status = "ok", component = "vm-agent" }));
@@ -36,6 +40,7 @@ internal static class AgentEndpoints
                 return Results.BadRequest(new { detail = pathError });
             }
 
+            // *nova amostra invalida estado de execuções anteriores*
             state.Reset();
 
             await using (var fs = File.Create(targetPath))
@@ -74,6 +79,7 @@ internal static class AgentEndpoints
                 return Results.BadRequest(new { detail = "Nenhuma execução registada ainda." });
             }
 
+            // *relatório mínimo — telemetria avançada ainda não implementada*
             var behavior = new
             {
                 status = state.LastBehavior.GetValueOrDefault("status") ?? "unknown",

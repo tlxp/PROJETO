@@ -1,3 +1,4 @@
+﻿// --- Módulo: LoadingView.xaml.cs ---
 using System;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
@@ -9,6 +10,7 @@ using RatAnalyzer.Desktop.Localization;
 
 namespace RatAnalyzer.Desktop.Views;
 
+// --- Ecrã de arranque: dependências, backend e frontend ---
 public partial class LoadingView : UserControl
 {
     public event EventHandler? LoadingCompleted;
@@ -22,11 +24,13 @@ public partial class LoadingView : UserControl
         Loaded += OnLoaded;
     }
 
+    // --- Inicia sequência de arranque ao carregar o controlo ---
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         _ = RunStartupSequenceAsync();
     }
 
+    // --- Corre StartupSequence e notifica conclusão (sucesso ou erro) ---
     private async Task RunStartupSequenceAsync()
     {
         try
@@ -47,10 +51,10 @@ public partial class LoadingView : UserControl
         LoadingCompleted?.Invoke(this, EventArgs.Empty);
     }
 
+    // --- Adiciona linha ao log visível (thread-safe via Dispatcher) ---
     private void AddLog(string message)
     {
         Application.Current.Dispatcher.Invoke(() =>
             SystemLogs.Add(ProcessOutputEncoding.NormalizeForDisplay(message)));
     }
 }
-

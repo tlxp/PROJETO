@@ -1,12 +1,7 @@
 #!/usr/bin/env python3
-"""
-Valida que todos os .ps1 em scripts/ são UTF-8 válidos (com ou sem BOM).
-
-Falha em:
-  - bytes que não decodificam como UTF-8
-  - carácter de substituição U+FFFD
-  - sequências típicas de mojibake (UTF-8 lido como Latin-1)
-"""
+# --- Módulo: check_ps1_utf8 ---
+# --- Valida que todos os .ps1 em scripts/ são UTF-8 válidos (com ou sem BOM) ---
+# *Falha em bytes inválidos, U+FFFD ou mojibake típico*
 
 from __future__ import annotations
 

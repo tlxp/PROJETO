@@ -1,4 +1,7 @@
-# Credenciais PowerShell Direct
+# --- Script: PhaseC-Boot.ps1 ---
+
+# --- Arranque da VM e validação PowerShell Direct ---
+# *Credenciais para comunicação directa com a VM.*
 $credCandidates = New-SandboxCredentialCandidates -UserName $GuestUser -Password $GuestPassword -ComputerName $VMName
 $cred = $credCandidates | Select-Object -First 1
 

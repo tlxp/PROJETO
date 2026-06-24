@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
-"""
-RAT Analyzer - Ferramenta de Análise Automática de DLLs e Executáveis
-Projeto de Licenciatura - Deteção de Remote Access Trojans
-"""
+# --- Módulo: rat_analyzer ---
+# --- Ferramenta de análise automática de DLLs e executáveis (deteção de RATs) ---
 
 import argparse
 import json
@@ -35,9 +33,10 @@ except ImportError:
     decompile_binary_to_c = None
 
 
+# --- Classe principal que orquestra toda a análise de RATs ---
 class RATAnalyzer:
-    """Classe principal que orquestra toda a análise de RATs"""
-    
+
+    # --- Inicializa analisadores (estático, YARA, deobfuscator, scoring) ---
     def __init__(
         self,
         target_file: str,
@@ -65,7 +64,7 @@ class RATAnalyzer:
         )
         self._log_callback = log_callback
         
-        # Resultados da análise
+        # *Estrutura acumulada com resultados de cada fase da análise*
         self.analysis_results = {
             "file_info": {},
             "static_analysis": {},
@@ -77,8 +76,8 @@ class RATAnalyzer:
             "timestamp": datetime.now().isoformat(),
         }
     
+    # --- Envia mensagem via callback (streaming/API) ou logger ---
     def _log(self, msg: str) -> None:
-        """Envia via callback (streaming/API) ou regista no logger do pipeline."""
         if self._log_callback is not None:
             try:
                 self._log_callback(msg)
@@ -87,8 +86,8 @@ class RATAnalyzer:
                 logger.warning("Callback de log falhou; a usar logger.", exc_info=True)
         logger.info("%s", msg)
 
+    # --- Regista resultado da descompilação .NET (sem stack traces) ---
     def _log_dotnet_decompilation(self, decomp_result: dict) -> None:
-        """Regista o resultado da descompilação .NET sem stack traces nem texto duplicado."""
         if decomp_result.get("success"):
             self._log(f"[+] Código C# descompilado para: {decomp_result.get('output_dir')}")
             return
@@ -107,8 +106,8 @@ class RATAnalyzer:
 
         self._log(f"[!] Descompilação .NET: {log_msg}")
 
+    # --- Executa pipeline completo de análise (7 fases) ---
     def analyze(self):
-        """Executa a análise completa do ficheiro"""
         self._log(f"[*] Iniciando análise de: {self.target_file.name}")
         self._log("[1/7] Extraindo informações do ficheiro...")
         self.analysis_results["file_info"] = self._get_file_info()
@@ -347,8 +346,8 @@ class RATAnalyzer:
         
         return self.analysis_results
     
+    # --- Extrai informações básicas do ficheiro ---
     def _get_file_info(self):
-        """Extrai informações básicas do ficheiro"""
         stat = self.target_file.stat()
         return {
             'filename': self.target_file.name,
@@ -358,8 +357,8 @@ class RATAnalyzer:
             'sha256': self._calculate_sha256()
         }
     
+    # --- Calcula hash MD5 do ficheiro ---
     def _calculate_md5(self):
-        """Calcula hash MD5 do ficheiro"""
         import hashlib
         hash_md5 = hashlib.md5()
         with open(self.target_file, "rb") as f:
@@ -367,8 +366,8 @@ class RATAnalyzer:
                 hash_md5.update(chunk)
         return hash_md5.hexdigest()
     
+    # --- Calcula hash SHA256 do ficheiro ---
     def _calculate_sha256(self):
-        """Calcula hash SHA256 do ficheiro"""
         import hashlib
         hash_sha256 = hashlib.sha256()
         with open(self.target_file, "rb") as b:
@@ -377,6 +376,7 @@ class RATAnalyzer:
         return hash_sha256.hexdigest()
 
 
+# --- Ponto de entrada ---
 def main():
     parser = argparse.ArgumentParser(
         description='RAT Analyzer - Ferramenta de Análise Automática de DLLs e Executáveis'

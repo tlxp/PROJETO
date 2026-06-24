@@ -1,13 +1,16 @@
+﻿// --- Módulo: RelayCommand.cs ---
 using System;
 using System.Windows.Input;
 
 namespace RatAnalyzer.Desktop.ViewModels;
 
+// --- Comando ICommand simples para ligação WPF ---
 public sealed class RelayCommand : ICommand
 {
     private readonly Action _execute;
     private readonly Func<bool>? _canExecute;
 
+    // --- Construtor com ação e predicado opcional ---
     public RelayCommand(Action execute, Func<bool>? canExecute = null)
     {
         _execute = execute ?? throw new ArgumentNullException(nameof(execute));

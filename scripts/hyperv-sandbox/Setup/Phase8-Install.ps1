@@ -1,8 +1,11 @@
-﻿# Instalação do Windows
+﻿# --- Script: Phase8-Install.ps1 ---
+# --- Instalação automática do Windows na VM ---
+
 Write-Host "[8/8] Instalação do Windows..."
 
 $snap = Get-VMSnapshot -VMName $VMName -Name $SnapshotName -ErrorAction SilentlyContinue
 
+# --- Verificação de snapshot ou modo manual ---
 if ($snap) {
     Write-Host "      Snapshot '$SnapshotName' ja existe. Nada a fazer."
 
@@ -20,16 +23,13 @@ if ($snap) {
         Start-Sleep -Seconds 5
     }
 
-    # Preparar autounattend.xml
+    # --- Preparação do autounattend.xml ---
     Log "A preparar autounattend.xml..."
     $unattendDir = Join-Path $VMPath "unattend"
     Ensure-DirectoryExists -Path $unattendDir
     $unattendXml = Join-Path $unattendDir "autounattend.xml"
 
-    # NOTA: este ficheiro (Phase8) é dot-sourced, por isso $PSScriptRoot = ...\hyperv-sandbox\Setup.
-    # O autounattend custom vive na pasta PAI (...\hyperv-sandbox\). Procurar primeiro na pai e,
-    # como fallback, em Setup\. Usar o caminho errado fazia o custom "nunca existir", forçando o
-    # XML gerado + Remove-UnattendInternationalSettings -> Setup deixava de ser silencioso.
+    # *Phase8 é dot-sourced: $PSScriptRoot = ...\Setup; o autounattend custom vive na pasta pai*
     $customUnattendName = "autounattend-malware-behavior-detection-user-gen1.xml"
     $customUnattendCandidates = @(
         (Join-Path (Split-Path -Parent $PSScriptRoot) $customUnattendName),
@@ -39,8 +39,7 @@ if ($snap) {
     if (-not $customUnattendPath) { $customUnattendPath = $customUnattendCandidates[0] }
     $usedSource = $null
 
-    # Verificar se o ficheiro customizado existe antes de começar a instalação.
-    # Se não existir (ou se a VM estiver em Gen2), usamos o "oficial" gerado por New-Windows10UnattendXml.
+    # --- Escolha da fonte do autounattend (custom Gen1 vs gerado) ---
     if ($VMGeneration -eq 1 -and (Test-Path -LiteralPath $customUnattendPath)) {
         Copy-Item -Path $customUnattendPath -Destination $unattendXml -Force -ErrorAction Stop
         $usedSource = "custom-file"
@@ -62,8 +61,8 @@ if ($snap) {
         throw "autounattend.xml não foi criado em '$unattendXml'. Abortando."
     }
 
-    # Credenciais do _Config / WPF (PROJETOVM_GuestUser/GuestPassword) têm de coincidir com a conta
-    # criada na VM — o ficheiro custom tem valores de exemplo embutidos (analyst / Analyst123!).
+    # --- Aplicação de credenciais guest ao autounattend ---
+    # *valores de _Config/WPF têm de coincidir com a conta criada na VM*
     try {
         Set-UnattendGuestCredentialsInPlace `
             -UnattendXmlPath $unattendXml `
@@ -76,7 +75,7 @@ if ($snap) {
         throw "Falha ao aplicar credenciais guest ao autounattend.xml: $($_.Exception.Message)"
     }
 
-    # Normalizar idioma/locale no autounattend para o idioma do ISO (evita falhas em ISOs não en-US).
+    # --- Normalização de idioma/locale conforme o ISO ---
     try {
         if ($isoLang) {
             Set-UnattendLanguageInPlace -UnattendXmlPath $unattendXml -UiLanguage $isoLang
@@ -86,9 +85,8 @@ if ($snap) {
         Log "AVISO: Não foi possível ajustar idioma no autounattend.xml: $($_.Exception.Message)" "WARN"
     }
 
-    # NUNCA remover International-Core-WinPE no autounattend custom Gen1: esse bloco inclui
-    # SetupUILanguage/UILanguage em windowsPE; sem ele o Setup deixa de aplicar o unattended
-    # correctamente (parece "não auto-instala") mesmo com ISO en-US.
+    # --- Remoção de international settings (apenas autounattend gerado) ---
+    # *no custom Gen1 manter International-Core-WinPE para Setup silencioso*
     if ($usedSource -eq "official-generated") {
         try {
             Remove-UnattendInternationalSettings -UnattendXmlPath $unattendXml
@@ -102,7 +100,7 @@ if ($snap) {
 
     Log "autounattend.xml pronto (source: $usedSource)."
 
-    # Hash para correlacionar o autounattend usado nesta execução
+    # --- Hash SHA256 para correlacionar a execução ---
     try {
         $unattendHash = (Get-FileHash -Path $unattendXml -Algorithm SHA256).Hash
         Log "autounattend.xml SHA256: $unattendHash"
@@ -111,10 +109,7 @@ if ($snap) {
     }
 
     if ($VMGeneration -eq 1) {
-        # Gen1: estratégia mais fiável = injetar autounattend.xml diretamente no ISO.
-        # O Windows Setup procura autounattend.xml na raiz do DVD ANTES de qualquer
-        # outra fonte (floppy, USB, etc). Criamos um novo ISO idêntico ao original
-        # mas com autounattend.xml na raiz usando oscdimg.exe (Windows ADK).
+        # --- Gen1: injeção de autounattend no ISO via oscdimg ---
 
         $isoWithUnattend = Join-Path $VMPath "Windows_unattend.iso"
 
@@ -136,7 +131,7 @@ if ($snap) {
             $isoToUse = $WindowsIsoPath
         }
 
-        # DVD em IDE -- usar o ISO com autounattend (ou original como fallback)
+        # --- DVD IDE com ISO (custom ou original como fallback) ---
         Log "A configurar DVD drive IDE (Gen1) com: $isoToUse"
         try { Set-VMDvdDrive -VMName $VMName -Path $isoToUse -ErrorAction Stop | Out-Null } catch {
             try { Add-VMDvdDrive -VMName $VMName -Path $isoToUse -ErrorAction Stop | Out-Null } catch { }
@@ -148,7 +143,7 @@ if ($snap) {
         Log "DVD -> $($dvd.Path)"
         Write-Host "      DVD: $($dvd.ControllerType)($($dvd.ControllerNumber),$($dvd.ControllerLocation)) -> $($dvd.Path)"
 
-        # Boot order Gen1: CD primeiro
+        # --- Ordem de boot Gen1: CD primeiro ---
         $bios = Get-VMBios -VMName $VMName -ErrorAction SilentlyContinue
         if ($bios) {
             Set-VMBios -VMName $VMName -StartupOrder @("CD", "IDE", "LegacyNetworkAdapter", "Floppy") | Out-Null
@@ -157,7 +152,7 @@ if ($snap) {
         }
 
     } else {
-        # Gen2: DVD em SCSI + autounattend via FAT32 no Sandbox.vhdx
+        # --- Gen2: autounattend em partição FAT32 + DVD SCSI ---
 
         Log "A injetar autounattend.xml no Sandbox.vhdx (particao FAT32, Gen2)..."
         $unattendInjected = $false
@@ -166,7 +161,6 @@ if ($snap) {
             $diskNum = $disk.DiskNumber
             try {
                 Initialize-Disk -Number $diskNum -PartitionStyle GPT -ErrorAction SilentlyContinue | Out-Null
-                # Verificar se já existe partição FAT32
                 $existingFat = Get-Partition -DiskNumber $diskNum -ErrorAction SilentlyContinue |
                                Where-Object { $_.Size -lt 600MB -and $_.Type -eq "Basic" } |
                                Select-Object -First 1
@@ -178,6 +172,7 @@ if ($snap) {
                         $dl = (Get-Partition -DiskNumber $diskNum -PartitionNumber $existingFat.PartitionNumber).DriveLetter
                     }
                 } else {
+                    # *cria partição FAT32 de 256 MB para o Windows Setup encontrar autounattend.xml*
                     $part = New-Partition -DiskNumber $diskNum -Size 256MB -AssignDriveLetter -ErrorAction Stop
                     Format-Volume -Partition $part -FileSystem FAT32 -NewFileSystemLabel "UNATTEND" -Confirm:$false -ErrorAction Stop | Out-Null
                     $dl = $null
@@ -200,7 +195,7 @@ if ($snap) {
             Write-Warning "      autounattend.xml não injetado."
         }
 
-        # DVD em SCSI (0,1)
+        # --- DVD em SCSI (0,1) ---
         Log "A configurar DVD drive SCSI (Gen2)..."
         $existingDvds = @(Get-VMDvdDrive -VMName $VMName -ErrorAction SilentlyContinue)
         foreach ($d in $existingDvds) {
@@ -215,19 +210,19 @@ if ($snap) {
         Log "DVD SCSI(0,1) -> $($dvd.Path)"
         Write-Host "      DVD: SCSI(0,1) -> $WindowsIsoPath"
 
-        # Remover HDD extras em slots > 0
+        # --- Remoção de HDD extras em slots > 0 ---
         $extraHdds = @(Get-VMHardDiskDrive -VMName $VMName -ErrorAction SilentlyContinue | Where-Object { $_.ControllerLocation -gt 0 })
         foreach ($ex in $extraHdds) {
             try { Remove-VMHardDiskDrive -VMName $VMName -ControllerType SCSI -ControllerNumber $ex.ControllerNumber -ControllerLocation $ex.ControllerLocation -ErrorAction SilentlyContinue | Out-Null } catch { }
         }
 
-        # Boot order Gen2
+        # --- Ordem de boot Gen2: DVD SCSI primeiro ---
         $dvdObj = Get-VMDvdDrive -VMName $VMName | Where-Object { $_.ControllerNumber -eq 0 -and $_.ControllerLocation -eq 1 } | Select-Object -First 1
         Set-VMFirmware -VMName $VMName -FirstBootDevice $dvdObj | Out-Null
         Log "FirstBootDevice definido para DVD SCSI(0,1)."
     }
 
-    # Resumo final
+    # --- Resumo da configuração final ---
     $dvdInfo  = Get-VMDvdDrive -VMName $VMName | Select-Object -First 1
     $hddInfo  = Get-VMHardDiskDrive -VMName $VMName | Select-Object -First 1
     Write-Host ""
@@ -241,7 +236,7 @@ if ($snap) {
     Write-Host "        HDD        : $($hddInfo.ControllerType)($($hddInfo.ControllerNumber),$($hddInfo.ControllerLocation)) -> $($hddInfo.Path)"
     Write-Host ""
 
-    # Arrancar
+    # --- Arranque da VM e espera por PowerShell Direct ---
     Write-Host "      A arrancar VM (instalação pode demorar 15-40 min)..."
     $dvdBootPath = $null
     try {
@@ -251,15 +246,13 @@ if ($snap) {
     Log "VM '$VMName' a arrancar (DVD ISO: $dvdBootPath)."
     Start-VM -Name $VMName | Out-Null
 
-    # Aguardar "pronto" via PowerShell Direct (mais fiável que Heartbeat e não depende de rede/WinRM)
-    # Durante instalação/OOBE, o logon ainda não está disponível, então isto falha até o Windows estar realmente utilizável.
+    # *PS Direct é mais fiável que Heartbeat; falha até o logon guest estar disponível*
     $secure = ConvertTo-SecureString $GuestPassword -AsPlainText -Force
     $cred = [pscredential]::new($GuestUser, $secure)
-    # Espera determinística: verificar PS Direct a cada 10s até estar OK (sem timeout)
     $ok = Wait-VMPowerShellDirectReady -VMName $VMName -Credential $cred -TimeoutSeconds 0 -LogPath $LogFile -LogIntervalSeconds 10
 
     if (-not $ok) {
-        # Fallback (diagnóstico): Heartbeat pode ficar OK mais cedo/tarde dependendo do setup
+        # --- Fallback de diagnóstico via Heartbeat ---
         $hbOk = $false
         try { $hbOk = Wait-VMHeartbeatOk -VMName $VMName -TimeoutSeconds 120 -LogPath $LogFile -LogIntervalSeconds 5 } catch { }
 
@@ -283,7 +276,7 @@ if ($snap) {
             try { Stop-VM -Name $VMName -TurnOff -Force -ErrorAction SilentlyContinue | Out-Null } catch { }
         }
 
-        # Hyper-V devolve InvalidState no Checkpoint-VM se a VM ainda não estiver totalmente Off.
+        # *Hyper-V exige VM totalmente Off antes de Checkpoint-VM*
         $waitOffDeadline = (Get-Date).AddMinutes(8)
         while ((Get-Date) -lt $waitOffDeadline) {
             $st = (Get-VM -Name $VMName -ErrorAction SilentlyContinue).State
@@ -296,6 +289,7 @@ if ($snap) {
         }
         Start-Sleep -Seconds 6
 
+        # --- Criação do snapshot com retentativas ---
         Write-Host "      A criar snapshot '$SnapshotName'..."
         $snapErr = $null
         for ($ti = 1; $ti -le 12; $ti++) {

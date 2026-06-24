@@ -1,3 +1,4 @@
+﻿// --- Módulo: BoolToVisibilityConverter.cs ---
 using System;
 using System.Globalization;
 using System.Windows;
@@ -5,6 +6,7 @@ using System.Windows.Data;
 
 namespace RatAnalyzer.Desktop.Views;
 
+// --- Converte bool true em Visibility.Visible ---
 public class BoolToVisibilityConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
@@ -28,6 +30,7 @@ public class BoolToVisibilityConverter : IValueConverter
     }
 }
 
+// --- Inverte valor booleano ---
 public class InverseBoolConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
@@ -41,6 +44,7 @@ public class InverseBoolConverter : IValueConverter
     }
 }
 
+// --- Converte bool true em Collapsed (inverso de visibilidade) ---
 public class InverseBoolToVisibilityConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
@@ -63,4 +67,3 @@ public class InverseBoolToVisibilityConverter : IValueConverter
         return true;
     }
 }
-

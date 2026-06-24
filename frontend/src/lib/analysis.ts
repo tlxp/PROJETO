@@ -1,7 +1,5 @@
-/**
- * Lógica de domínio da análise (tipos, normalização de resultados e parsing do relatório).
- * Partilhada entre a página principal, hooks de streaming/polling e o explorador de xrefs.
- */
+// --- Módulo: analysis.ts ---
+// *Lógica de domínio da análise (tipos, normalização de resultados e parsing do relatório)*
 
 import { getT } from "@/i18n";
 import { apiFetchJson } from "./api";
@@ -26,25 +24,25 @@ export type AnalysisResult = {
   fileName: string;
   riskScore: number;
   riskLevel: string;
-  /** Indicadores (funções/strings) que deram flag para highlight no pseudo-C (vindo do backend). */
+  // *Indicadores que deram flag para highlight no pseudo-C (vindo do backend)*
   flaggedIndicators?: string[];
-  /** Resumo opcional de análise dinâmica (quando existir). */
+  // *Resumo opcional de análise dinâmica*
   dynamicSummary?: string | null;
-  /** Relatório textual completo da análise na VM (Caminho B — Hyper-V). */
+  // *Relatório textual completo da análise na VM (Caminho B — Hyper-V)*
   vmReport?: string | null;
-  /** True quando a análise dinâmica está em curso mas o relatório ainda não chegou. */
+  // *True quando a análise dinâmica está em curso mas o relatório ainda não chegou*
   dynamicPending?: boolean;
-  /** True quando a análise estática está em curso mas o relatório ainda não chegou. */
+  // *True quando a análise estática está em curso mas o relatório ainda não chegou*
   staticPending?: boolean;
-  /** Progresso Ghidra (0–100) publicado pelo WPF durante análise estática. */
+  // *Progresso Ghidra (0–100) publicado pelo WPF durante análise estática*
   staticProgress?: number | null;
-  /** Funções suspeitas com ranges exatos no pseudo-C (vindo do backend). */
+  // *Funções suspeitas com ranges exatos no pseudo-C (vindo do backend)*
   flaggedFunctions?: FlaggedFunction[];
-  /** Caminho do ficheiro com trechos obfuscados extraídos (quando existir). */
+  // *Caminho do ficheiro com trechos obfuscados extraídos*
   obfuscatedSnippetsFile?: string;
-  /** Caminho do ficheiro com trechos deobfuscados (quando existir). */
+  // *Caminho do ficheiro com trechos deobfuscados*
   obfuscatedSnippetsDeobfuscatedFile?: string;
-  /** Número de indicadores de ofuscação (corresponde à categoria Obfuscation do relatório). */
+  // *Número de indicadores de ofuscação (categoria Obfuscation do relatório)*
   obfuscationIndicatorCount?: number;
 };
 
@@ -53,13 +51,13 @@ export type AnalysisMode = "static" | "dynamic" | "both";
 export type ExpandedPanel = "c" | "il" | "report" | "report-static" | "report-vm" | null;
 
 export type ReportCategory = {
-  /** Linha de resumo, ex.: "Suspicious Imports: 3 ocorrências = 15/15 pontos" */
+  // *Linha de resumo, ex.: "Suspicious Imports: 3 ocorrências = 15/15 pontos"*
   label: string;
-  /** ID estável para guardar o offset de navegação. */
+  // *ID estável para guardar o offset de navegação*
   id: string;
-  /** Linha do relatório onde o resumo aparece. */
+  // *Linha do relatório onde o resumo aparece*
   summaryLineIndex: number;
-  /** Linhas de código associadas a esta categoria (ocorrências). */
+  // *Linhas de código associadas a esta categoria (ocorrências)*
   lineNumbers: number[];
 };
 
@@ -68,6 +66,7 @@ export type ReportChapter = {
   line: number;
 };
 
+// --- Converte valor desconhecido em Record ou null ---
 export function asRecord(v: unknown): Record<string, unknown> | null {
   return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
 }
@@ -101,14 +100,12 @@ function normalizeFlaggedFunctions(v: unknown): FlaggedFunction[] {
     });
 }
 
-/** Indica se o range de uma função suspeita cabe no pseudo-C efectivamente carregado. */
+// --- Verifica se o range de função suspeita cabe no pseudo-C carregado ---
 export function isFlaggedRangeInCode(totalLines: number, f: FlaggedFunction): boolean {
   return f.startLine > 0 && f.endLine > 0 && f.startLine <= totalLines;
 }
 
-/**
- * Mantém apenas funções cujos ranges existem no texto C actual (ex.: após truncagem no backend).
- */
+// --- Filtra funções suspeitas cujos ranges existem no texto C actual ---
 export function clampFlaggedFunctionsToCode(
   cCode: string,
   flaggedFunctions: FlaggedFunction[] | undefined | null
@@ -124,10 +121,7 @@ export function clampFlaggedFunctionsToCode(
     }));
 }
 
-/**
- * Normalização única de um payload "tipo resultado estático" (streaming NDJSON,
- * `staticResult` de um job ou campos diretos no root) para `AnalysisResult`.
- */
+// --- Normaliza payload de resultado estático para AnalysisResult ---
 export function normalizeAnalysisResult(
   r: Record<string, unknown>,
   fallbackFileName?: string
@@ -160,7 +154,7 @@ export function normalizeAnalysisResult(
   };
 }
 
-/** Repara texto UTF-8 lido como Latin-1 (ex.: "alteraÃ§Ãµes" → "alterações"). */
+// --- Repara texto UTF-8 lido como Latin-1 (mojibake) ---
 function repairUtf8Mojibake(text: string): string {
   if (!/[ÃÂ]/.test(text)) return text;
   try {
@@ -177,7 +171,7 @@ function countPortugueseAccents(text: string): number {
   return (text.match(/[áàâãéêíóôõúçÁÀÂÃÉÊÍÓÔÕÚÇ]/g) || []).length;
 }
 
-/** Repara encoding linha a linha (evita corromper UTF-8 válido no resto do relatório). */
+// --- Repara encoding linha a linha (evita corromper UTF-8 válido) ---
 function repairVmReportText(text: string): string {
   if (!text) return "";
   return text
@@ -252,7 +246,7 @@ const VM_CLASSIFICATION_PT: Record<string, string> = {
   "execução falhou": "EXECUÇÃO INVÁLIDA",
 };
 
-/** Normaliza classificações VM (inglês legado ou PT) para rótulos em português. */
+// --- Normaliza classificações VM para rótulos em português ---
 export function translateVmClassification(raw: string | null | undefined): string | null {
   if (!raw?.trim()) return null;
   const trimmed = raw.trim();
@@ -260,7 +254,7 @@ export function translateVmClassification(raw: string | null | undefined): strin
   return mapped ?? trimmed.toUpperCase();
 }
 
-/** True quando a classificação VM indica comportamento benigno/inofensivo. */
+// --- Indica se a classificação VM é benigna ---
 export function isVmClassificationBenign(classification: string | null | undefined): boolean {
   if (!classification?.trim()) return false;
   const normalized = translateVmClassification(classification);
@@ -271,7 +265,7 @@ function localizeVmSectionTitle(title: string): string {
   return canonicalVmSectionTitle(title);
 }
 
-/** Extrai score/classificação do relatório textual da VM. */
+// --- Extrai score e classificação do relatório textual da VM ---
 export function parseVmScoringFromReport(report: string | null | undefined): VmScoringSummary | null {
   if (!report?.trim()) return null;
   const lines = repairVmReportText(report ?? "").split(/\r?\n/);
@@ -305,7 +299,7 @@ export function parseVmScoringFromReport(report: string | null | undefined): VmS
   return { score, scoreRaw, scoreMax, classification, knownValidationSample };
 }
 
-/** Compara scores estático vs VM quando ambos existem. */
+// --- Compara scores estático vs VM quando ambos existem ---
 export function compareAnalysisScores(
   staticScore: number,
   staticLevel: string,
@@ -827,10 +821,7 @@ function normalizeFormattedVmReport(text: string): string {
   return out.join("\n").trimEnd() + "\n";
 }
 
-/**
- * Normaliza o relatório textual da VM para o mesmo estilo visual do relatório estático:
- * cabeçalho, RESUMO, INFORMAÇÕES DO FICHEIRO, SCORE DE RISCO e secções com separadores.
- */
+// --- Formata relatório VM para o mesmo estilo visual do relatório estático ---
 export function formatVmReportForDisplay(raw: string): string {
   if (!raw?.trim()) return "";
   const repaired = repairVmReportText(raw);
@@ -851,12 +842,12 @@ export function formatVmReportForDisplay(raw: string): string {
   return buildStaticStyleVmReport(parsed);
 }
 
-/** Texto do relatório VM pronto para apresentação no frontend. */
+// --- Texto do relatório VM pronto para apresentação ---
 export function getDisplayVmReport(report: string | null | undefined): string {
   return formatVmReportForDisplay(report ?? "");
 }
 
-/** Extrai o texto do relatório dinâmico a partir do payload `dynamicResult`. */
+// --- Extrai texto do relatório dinâmico a partir do payload dynamicResult ---
 function extractVmReportFromDynamic(dr: Record<string, unknown> | null): string {
   if (!dr) return "";
   if (typeof dr.dynamicReportText === "string" && dr.dynamicReportText.trim()) {
@@ -913,7 +904,7 @@ function mergeDynamicFields(
   };
 }
 
-/** Constrói um AnalysisResult a partir do payload de um job da API /api/analysis. */
+// --- Constrói AnalysisResult a partir do payload de um job da API ---
 export function buildAnalysisResultFromJob(
   job: unknown,
   fallbackFileName?: string
@@ -1009,7 +1000,7 @@ export function buildAnalysisResultFromJob(
   return null;
 }
 
-/** Publica um resultado estático (obtido por streaming) no backend e devolve o jobId. */
+// --- Publica resultado estático no backend e devolve jobId ---
 export async function publishStaticAnalysisResult(
   result: AnalysisResult,
   signal?: AbortSignal | null
@@ -1035,12 +1026,12 @@ export async function publishStaticAnalysisResult(
   return data.jobId;
 }
 
-/** ID estável de uma função suspeita (para seleção e comparação). */
+// --- ID estável de função suspeita (seleção e comparação) ---
 export function resolveFlaggedFunctionId(f: FlaggedFunction): string {
   return (f.id && f.id.trim()) || `${f.name}:${f.startLine}-${f.endLine}`;
 }
 
-/** Assinatura compacta da lista de funções suspeitas (ignora referências de array). */
+// --- Assinatura compacta da lista de funções suspeitas ---
 export function flaggedFunctionsSignature(
   functions: FlaggedFunction[] | undefined | null
 ): string {
@@ -1048,7 +1039,7 @@ export function flaggedFunctionsSignature(
   return functions.map(resolveFlaggedFunctionId).join("\0");
 }
 
-/** Compara dois resultados de análise ignorando identidade de objeto (útil no polling). */
+// --- Compara dois resultados de análise (útil no polling) ---
 export function areAnalysisResultsEquivalent(a: AnalysisResult, b: AnalysisResult): boolean {
   if (a === b) return true;
   return (
@@ -1071,7 +1062,7 @@ export function areAnalysisResultsEquivalent(a: AnalysisResult, b: AnalysisResul
   );
 }
 
-/** Indica se a análise estática ainda não concluiu (streaming ou job em polling). */
+// --- Indica se a análise estática ainda está em curso ---
 export function isStaticAnalysisInProgress(
   result: AnalysisResult | null,
   isAnalyzing: boolean
@@ -1084,7 +1075,7 @@ export function isStaticAnalysisInProgress(
   return !hasReport || !hasCCode;
 }
 
-/** Encontra blocos top-level no código C por matching de chavetas (funções ou blocos). */
+// --- Encontra blocos top-level no código C por matching de chavetas ---
 export function getCBlocks(code: string): { start: number; end: number }[] {
   const lines = code.split("\n");
   const blocks: { start: number; end: number }[] = [];
@@ -1104,7 +1095,7 @@ export function getCBlocks(code: string): { start: number; end: number }[] {
   return blocks;
 }
 
-/** Junta intervalos sobrepostos ou adjacentes. */
+// --- Junta intervalos sobrepostos ou adjacentes ---
 export function mergeRanges(
   ranges: { start: number; end: number }[]
 ): { start: number; end: number }[] {
@@ -1123,7 +1114,7 @@ export function mergeRanges(
   return out;
 }
 
-/** Devolve o bloco (função) que contém a linha dada. */
+// --- Devolve o bloco (função) que contém a linha dada ---
 export function getBlockContainingLine(
   code: string,
   lineNumber: number
@@ -1135,7 +1126,7 @@ export function getBlockContainingLine(
   return null;
 }
 
-/** Calcula que intervalos do código C mostrar a partir de funções suspeitas. */
+// --- Calcula intervalos do código C a mostrar a partir de funções suspeitas ---
 export function getCDisplayRanges(
   cCode: string,
   flaggedFunctions: { startLine: number; endLine: number }[] | undefined | null
@@ -1152,7 +1143,7 @@ export function getCDisplayRanges(
   return mergeRanges(ranges);
 }
 
-/** Estatísticas de uma palavra selecionada no código (menções, tipo inferido, funções). */
+// --- Tipo WordStats (menções, tipo inferido, funções) ---
 export type WordStats = {
   mentions: number;
   inferredType: string | null;
@@ -1160,6 +1151,7 @@ export type WordStats = {
   maliciousCount: number;
 };
 
+// --- Estatísticas de palavra selecionada no código ---
 export function getWordStats(
   code: string,
   word: string,
@@ -1261,7 +1253,7 @@ export function getWordStats(
   return { mentions, inferredType, functionsCount, maliciousCount };
 }
 
-/** Agrupa o relatório em categorias tipo "Suspicious Imports: 3 ocorrências = 15/15 pontos". */
+// --- Agrupa o relatório em categorias com ocorrências ---
 export function parseReportCategories(report: string): ReportCategory[] {
   const lines = report.split("\n");
   const categories: ReportCategory[] = [];
@@ -1298,7 +1290,7 @@ export function parseReportCategories(report: string): ReportCategory[] {
   return categories;
 }
 
-/** Linhas da secção RESUMO do relatório (se existir). */
+// --- Extrai linhas da secção RESUMO do relatório ---
 export function parseReportResumoLines(report: string): string[] | null {
   if (!report) return null;
   const lines = report.split("\n");
@@ -1319,7 +1311,7 @@ export function parseReportResumoLines(report: string): string[] | null {
   return collected.length > 0 ? collected : null;
 }
 
-/** Extrai os "capítulos" principais do relatório (RESUMO, SCORE DE RISCO, ANÁLISE ESTÁTICA, etc.) */
+// --- Extrai capítulos principais do relatório ---
 export function parseReportChapters(report: string): ReportChapter[] {
   const lines = report.split("\n");
   const chapters: ReportChapter[] = [];
@@ -1338,13 +1330,10 @@ export function parseReportChapters(report: string): ReportChapter[] {
   return chapters;
 }
 
-/** Um par antes/depois da deobfuscação (um "caso"). */
+// --- Par antes/depois da deobfuscação (um caso) ---
 export type SnippetPair = { before: string; after: string; description?: string };
 
-/**
- * Faz o parse do conteúdo de ficheiro de snippets (formato backend: "--- snippet N ---", metadata, depois código).
- * Devolve array de { description?, code }.
- */
+// --- Parse do ficheiro de snippets (formato backend) ---
 export function parseSnippetFileSections(text: string): { description?: string; code: string }[] {
   if (!text?.trim()) return [];
   const sections = text.split(/\n--- snippet \d+ ---\n/).filter(Boolean);
@@ -1358,7 +1347,7 @@ export function parseSnippetFileSections(text: string): { description?: string; 
   });
 }
 
-/** Junta listas de snippets obfuscados e deobfuscados em pares antes/depois (por índice). */
+// --- Junta snippets obfuscados e deobfuscados em pares antes/depois ---
 export function zipSnippetPairs(
   obfSections: { description?: string; code: string }[],
   deobSections: { description?: string; code: string }[]
@@ -1377,7 +1366,7 @@ export function zipSnippetPairs(
   return pairs.filter((p) => p.before.trim() || p.after.trim());
 }
 
-/** Extrai a secção "Indicadores de Ofuscação" do relatório para mostrar quando não há ficheiro de trechos. */
+// --- Extrai secção Indicadores de Ofuscação do relatório ---
 export function extractObfuscationIndicatorsFromReport(report: string): string | null {
   if (!report?.trim()) return null;
   const lines = report.split("\n");

@@ -1,5 +1,7 @@
+﻿// --- Módulo: LocKeys.cs ---
 namespace RatAnalyzer.Desktop.Localization;
 
+// --- Chaves de localização (UI e logs) ---
 public static class LocKeys
 {
     public const string AppTitle = "AppTitle";

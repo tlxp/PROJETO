@@ -1,8 +1,8 @@
-// Utilitário: gerar nomes curtos, estáveis e "safe" para Windows/URLs.
-// Objetivo: evitar nomes gigantes (ex. símbolos/funcs longos) e manter unicidade via hash curto.
+// --- Módulo: artifactNaming.ts ---
+// *Nomes curtos, estáveis e seguros para Windows/URLs — unicidade via hash FNV-1a*
 
+// --- Hash FNV-1a 32-bit ---
 function fnv1a32(text: string): number {
-  // FNV-1a 32-bit
   let h = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {
     h ^= text.charCodeAt(i);
@@ -11,10 +11,12 @@ function fnv1a32(text: string): number {
   return h >>> 0;
 }
 
+// --- Hash hexadecimal de 8 caracteres ---
 export function hash8(text: string): string {
   return fnv1a32(text).toString(16).padStart(8, "0").slice(0, 8);
 }
 
+// --- Converte texto em slug seguro para nomes de ficheiro ---
 export function slugify(text: string, maxLen = 32): string {
   const raw = (text ?? "").trim();
   if (!raw) return "x";
@@ -28,6 +30,7 @@ export function slugify(text: string, maxLen = 32): string {
   return out.length > maxLen ? out.slice(0, maxLen) : out;
 }
 
+// --- Monta nome de ficheiro curto: base.kind.partes.hash.ext ---
 export function buildShortFileName(args: {
   baseName: string;
   kind: string;
@@ -43,15 +46,15 @@ export function buildShortFileName(args: {
   const fullKey = [args.baseName, args.kind, ...args.parts].join("|");
   const h = hash8(fullKey);
 
-  // Formato: <base>.<kind>.<p1>.<p2>.<hash><ext>
+  // *Formato completo: base.kind.p1.p2.hash.ext*
   let name = [base, kind, ...compactParts, h].filter(Boolean).join(".") + ext;
   if (name.length <= maxTotal) return name;
 
-  // Se ainda for grande, reduzir para base.kind.<hash><ext>
+  // *Reduz para base.kind.hash.ext*
   name = [base, kind, h].filter(Boolean).join(".") + ext;
   if (name.length <= maxTotal) return name;
 
-  // Último recurso: h<ext>
+  // *Último recurso: h<ext>*
   return `h${h}${ext}`.slice(0, maxTotal);
 }
 

@@ -1,4 +1,5 @@
-﻿<#
+﻿# --- Script: 04-Run-Sample.ps1 ---
+<#
 .SYNOPSIS
     Orquestração no host: restaura VM, copia amostra, executa análise, recolhe relatório via PsDirect, restaura snapshot.
 .DESCRIPTION
@@ -29,8 +30,11 @@ param(
     [switch]$AllowAutoSample
 )
 
+# *modo de espera: por omissão aguarda a amostra terminar; com -SampleTimeoutKill força timeout*
 $WaitForSampleExit = -not $SampleTimeoutKill
 
+# --- Inicialização de módulos e preferências ---
+# *carrega SandboxCommon e define paragem imediata em erros*
 try { Remove-Module SandboxCommon -ErrorAction SilentlyContinue } catch {}
 Import-Module (Join-Path $PSScriptRoot "SandboxCommon.psm1") -Force -DisableNameChecking -ErrorAction Stop
 
@@ -38,15 +42,14 @@ $ErrorActionPreference = "Stop"
 
 $analysisStart = Get-Date
 
+# --- Carregamento da configuração do sandbox ---
 $configScript = Join-Path $PSScriptRoot "_Config.ps1"
 if (Test-Path $configScript) { . $configScript }
 $BasePath = $script:PROJETOVM_BasePath
 $VMName = $script:PROJETOVM_VMName
 $SnapshotName = $script:PROJETOVM_SnapshotName
 $ReportsDir = $script:PROJETOVM_ReportsPath
-# Raiz da pasta hyperv-sandbox. As fases são dot-sourced a partir de .\RunSample\,
-# por isso DENTRO delas $PSScriptRoot aponta para ...\RunSample (e não para esta raiz).
-# Guardamos a raiz aqui para que as fases possam localizar SandboxCommon.psm1 e .\vm\.
+# *raiz hyperv-sandbox; nas fases dot-sourced $PSScriptRoot aponta para RunSample\*
 $SandboxRoot = $PSScriptRoot
 $VMScriptsPath = "C:\analysis_work"
 $GuestUser = $script:PROJETOVM_GuestUser
@@ -55,7 +58,8 @@ $PsDirectTimeoutSeconds = if ($script:PROJETOVM_PowerShellDirectTimeoutSeconds -
     $script:PROJETOVM_PowerShellDirectTimeoutSeconds
 } else { 240 }
 
-# Estender deadline global quando a amostra pode correr muito tempo.
+# --- Ajuste do deadline global conforme modo de espera da amostra ---
+# *amostras longas ou cópia PS Direct exigem mais tempo total*
 if ($WaitForSampleExit) {
     $minGlobal = 8100
     if ($GlobalTimeoutSeconds -lt $minGlobal) { $GlobalTimeoutSeconds = $minGlobal }
@@ -64,16 +68,15 @@ if ($WaitForSampleExit) {
     if ($GlobalTimeoutSeconds -lt $minGlobal) { $GlobalTimeoutSeconds = $minGlobal }
 }
 
-# Funções auxiliares (host)
-# Extraídas para .\RunSample\ e carregadas via dot-sourcing (mesmo scope deste
-# script). Têm de existir junto a este script (mesmo $PSScriptRoot).
+# --- Bibliotecas auxiliares (dot-sourcing) ---
+# *funções partilhadas carregadas no mesmo scope deste script*
 $RunSampleLibDir = Join-Path $PSScriptRoot 'RunSample'
 foreach ($lib in @('SampleResolve.ps1', 'ReportCheck.ps1', 'VmInvoke.ps1')) {
     . (Join-Path $RunSampleLibDir $lib)
 }
 
-# Fluxo de orquestração por fases
-# Cada fase é um fragmento procedural dot-sourced no MESMO scope deste script.
+# --- Limpeza de emergência ---
+# *garante paragem da VM e restauro do snapshot se o run abortar a meio*
 $script:SandboxRunCleanupDone = $false
 function Invoke-SandboxRunEmergencyCleanup {
     if ($script:SandboxRunCleanupDone) { return }
@@ -100,6 +103,8 @@ function Invoke-SandboxRunEmergencyCleanup {
     }
 }
 
+# --- Orquestração por fases ---
+# *cada fase é dot-sourced no mesmo scope; fases E–G ignoram o deadline global*
 try {
     $globalDeadline = if ($GlobalTimeoutSeconds -gt 0) { $analysisStart.AddSeconds($GlobalTimeoutSeconds) } else { $null }
     $phasesSkipGlobalDeadline = @(
@@ -122,8 +127,8 @@ try {
         . (Join-Path $RunSampleLibDir $phase)
     }
 } finally {
+    # *só faz cleanup de emergência se PhaseG não marcou conclusão normal*
     if (-not $script:SandboxRunCleanupDone) {
-        # PhaseG marca conclusão normal; só fazemos emergency cleanup se ainda não terminou.
         $vm = if ($VMName) { Get-VM -Name $VMName -ErrorAction SilentlyContinue } else { $null }
         if ($vm -and $vm.State -eq 'Running') {
             Invoke-SandboxRunEmergencyCleanup

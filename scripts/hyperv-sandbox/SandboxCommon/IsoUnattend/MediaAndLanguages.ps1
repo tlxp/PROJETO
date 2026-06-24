@@ -1,4 +1,7 @@
-﻿function Get-WindowsIsoInstallMediaCandidates {
+﻿# --- Script: MediaAndLanguages.ps1 ---
+
+# --- Candidatos de install.wim / install.esd num ISO ---
+function Get-WindowsIsoInstallMediaCandidates {
     param([Parameter(Mandatory = $true)][string] $IsoRoot)
     return @(
         (Join-Path $IsoRoot 'x64\sources\install.wim'),
@@ -10,6 +13,7 @@
     )
 }
 
+# --- Idiomas expostos pelo install.wim / install.esd ---
 function Get-WindowsImageLanguagesFromInstallMedia {
     <#
     .SYNOPSIS
@@ -23,8 +27,7 @@ function Get-WindowsImageLanguagesFromInstallMedia {
         try {
             $img = Get-WindowsImage -ImagePath $media -Index 1 -ErrorAction Stop
             if (-not $img.Languages) { continue }
-            # Get-WindowsImage pode devolver Languages como string "en-US". Se passar pelo pipeline,
-            # o PowerShell enumera CARACTERES — o primeiro "idioma" vira "e" e corrompe o autounattend.
+            # *Get-WindowsImage pode devolver Languages como string; evitar enumeração por caractere*
             $langList = @()
             if ($img.Languages -is [string]) {
                 $t = $img.Languages.Trim()
@@ -40,6 +43,7 @@ function Get-WindowsImageLanguagesFromInstallMedia {
     return @()
 }
 
+# --- Idiomas de UI disponíveis num ISO do Windows ---
 function Get-WindowsIsoUiLanguages {
     <#
     .SYNOPSIS
@@ -91,13 +95,14 @@ function Get-WindowsIsoUiLanguages {
                 }
                 if (-not $inSection) { continue }
                 if ([string]::IsNullOrWhiteSpace($t)) { continue }
-                # Linha só com tag (en-US) ou chave=valor (en-US = 1 / en-US=true)
+                # *Linha só com tag (en-US) ou chave=valor (en-US = 1)*
                 if ($t -match '^\s*([a-zA-Z]{2}-[a-zA-Z]{2,})\s*(=.*)?$') {
                     $langs += $matches[1]
                 }
             }
         }
 
+        # *Fallback: idiomas via install.wim / install.esd*
         if (@($langs).Count -eq 0) {
             foreach ($wl in (Get-WindowsImageLanguagesFromInstallMedia -IsoRoot $isoDrive)) {
                 $langs += $wl
@@ -116,4 +121,3 @@ function Get-WindowsIsoUiLanguages {
         }
     }
 }
-

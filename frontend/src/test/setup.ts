@@ -1,3 +1,5 @@
+// --- Módulo: setup.ts ---
+// *Configuração global do Vitest (jest-dom, matchMedia mock)*
 import "@testing-library/jest-dom";
 
 Object.defineProperty(window, "matchMedia", {

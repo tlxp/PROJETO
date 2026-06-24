@@ -1,3 +1,4 @@
+// --- Módulo: route-error-boundary.test.tsx ---
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -10,6 +11,7 @@ function ThrowOnce({ shouldThrow }: { shouldThrow: boolean }) {
   return <span>conteúdo ok</span>;
 }
 
+// --- Testes: RouteErrorBoundary ---
 describe("RouteErrorBoundary", () => {
   const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -21,6 +23,7 @@ describe("RouteErrorBoundary", () => {
     consoleError.mockClear();
   });
 
+// --- Verifica: renderiza filhos quando não há erro ---
   it("renderiza filhos quando não há erro", () => {
     render(
       <MemoryRouter>
@@ -32,6 +35,7 @@ describe("RouteErrorBoundary", () => {
     expect(screen.getByText("conteúdo ok")).toBeInTheDocument();
   });
 
+// --- Verifica: mostra fallback quando um filho lança erro ---
   it("mostra fallback quando um filho lança erro", () => {
     render(
       <MemoryRouter>
@@ -44,6 +48,7 @@ describe("RouteErrorBoundary", () => {
     expect(screen.getByText("falha de teste")).toBeInTheDocument();
   });
 
+// --- Verifica: permite tentar novamente após erro ---
   it("permite tentar novamente após erro", async () => {
     let throwNext = true;
     function MaybeThrow() {

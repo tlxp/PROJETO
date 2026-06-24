@@ -1,4 +1,6 @@
-# Cliente ligado cedo; guest só envia após N segundos (reproduz run 20260612_175346)
+# --- Script: Test-PipeIdleClient.ps1 ---
+# *Reproduz run real: cliente ligado cedo, guest envia após N segundos*
+
 param([int] $GuestDelaySec = 15)
 
 Remove-Item Env:PROJETOVM_PipeIdleReconnectSec -ErrorAction SilentlyContinue
@@ -7,6 +9,7 @@ Import-Module (Join-Path $PSScriptRoot 'SandboxCommon.psm1') -Force
 $pipe = 'SandboxPipeIdle_' + [guid]::NewGuid().ToString('N')
 $out = Join-Path $env:TEMP 'pipe_idle_client_test.txt'
 
+# --- Simulador de guest com atraso antes do envio ---
 $job = Start-Job -ArgumentList $pipe, $GuestDelaySec -ScriptBlock {
     param($Name, $Delay)
     $s = New-Object System.IO.Pipes.NamedPipeServerStream(
@@ -25,6 +28,7 @@ $job = Start-Job -ArgumentList $pipe, $GuestDelaySec -ScriptBlock {
     $s.Dispose()
 }
 
+# --- Cliente host liga cedo e aguarda o payload ---
 Start-Sleep -Milliseconds 300
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 try {

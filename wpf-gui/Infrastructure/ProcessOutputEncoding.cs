@@ -1,3 +1,4 @@
+﻿// --- Módulo: ProcessOutputEncoding.cs ---
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -7,18 +8,16 @@ using System.Text.RegularExpressions;
 
 namespace RatAnalyzer.Desktop.Infrastructure;
 
-/// <summary>
-/// Codificação de stdout/stderr de processos filhos no Windows e normalização para a UI WPF.
-/// </summary>
+// --- Codificação de stdout/stderr de processos filhos no Windows e normalização para a UI WPF ---
 public static class ProcessOutputEncoding
 {
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
     private static readonly Regex AnsiEscape = new(@"\x1B\[[0-9;?]*[ -/]*[@-~]|\x1B\][^\x07]*(?:\x07|\x1B\\)", RegexOptions.Compiled);
 
-    /// <summary>ANSI/OEM da consola (cmd, ferramentas legadas).</summary>
+    // --- ANSI/OEM da consola (cmd, ferramentas legadas) ---
     public static Encoding ConsoleEncoding => ResolveConsoleEncoding();
 
-    /// <summary>Windows-1252 — saída redirecionada típica do Windows PowerShell 5.x.</summary>
+    // --- Windows-1252 — saída redirecionada típica do Windows PowerShell 5.x ---
     public static Encoding WindowsAnsiEncoding => ResolveWindowsAnsiEncoding();
 
     public static void ApplyConsole(ProcessStartInfo psi)
@@ -51,13 +50,11 @@ public static class ProcessOutputEncoding
         psi.Environment["PYTHONUTF8"] = "1";
     }
 
-    /// <summary>Prefixo para cmd.exe emitir UTF-8 (npm, etc.).</summary>
+    // --- Prefixo para cmd.exe emitir UTF-8 (npm, etc.) ---
     public static string CmdUtf8Command(string command)
         => "/c chcp 65001 >nul & " + command;
 
-    /// <summary>
-    /// Resolve executáveis no PATH (ex.: <c>npm.cmd</c>) quando <c>UseShellExecute</c> é false.
-    /// </summary>
+    // --- Resolve executáveis no PATH (ex.: npm.cmd) quando UseShellExecute é false ---
     public static string ResolveExecutable(string command)
     {
         if (string.IsNullOrWhiteSpace(command))
@@ -98,7 +95,7 @@ public static class ProcessOutputEncoding
         return command;
     }
 
-    /// <summary>Limpa escapes ANSI, repara mojibake comum e remove caracteres inválidos.</summary>
+    // --- Limpa escapes ANSI, repara mojibake comum e remove caracteres inválidos ---
     public static string NormalizeForDisplay(string? text)
     {
         if (string.IsNullOrEmpty(text))

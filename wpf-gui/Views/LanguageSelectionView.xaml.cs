@@ -1,3 +1,4 @@
+﻿// --- Módulo: LanguageSelectionView.xaml.cs ---
 using System;
 using System.Windows;
 using System.Windows.Controls;
@@ -5,6 +6,7 @@ using RatAnalyzer.Desktop.Localization;
 
 namespace RatAnalyzer.Desktop.Views;
 
+// --- Ecrã de escolha de idioma (primeira execução ou alteração posterior) ---
 public partial class LanguageSelectionView : UserControl
 {
     public static readonly DependencyProperty ShowCancelProperty =
@@ -29,6 +31,7 @@ public partial class LanguageSelectionView : UserControl
         set => SetValue(ShowCancelProperty, value);
     }
 
+    // --- Sincroniza tabs com idioma atual do LocalizationManager ---
     private void SyncSelectionFromManager()
     {
         _selectedLanguage = LocalizationManager.LanguageCode;
@@ -50,6 +53,7 @@ public partial class LanguageSelectionView : UserControl
         ContinueButton.IsEnabled = true;
     }
 
+    // --- Atualiza estilos visuais das tabs conforme seleção ---
     private void UpdateTabStyles()
     {
         var selected = _selectedLanguage == LocalizationManager.English ? "en" : "pt";
@@ -61,6 +65,7 @@ public partial class LanguageSelectionView : UserControl
             : (Style)FindResource("LanguageTabStyle");
     }
 
+    // --- Persiste idioma e notifica confirmação ---
     private void ContinueButton_Click(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrEmpty(_selectedLanguage))

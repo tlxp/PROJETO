@@ -1,3 +1,4 @@
+﻿// --- Módulo: SandboxHostDependencies.cs ---
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -8,13 +9,10 @@ using RatAnalyzer.Desktop.Helpers;
 
 namespace RatAnalyzer.Desktop.Bootstrap;
 
-/// <summary>
-/// Verifica e, se o utilizador aceitar, instala o Windows ADK (Deployment Tools) para fornecer oscdimg.exe,
-/// alinhado com <c>scripts/hyperv-sandbox/SandboxCommon.psm1</c>.
-/// </summary>
+// --- Verifica/instala Windows ADK (Deployment Tools) para oscdimg.exe — alinhado com SandboxCommon.psm1 ---
 internal static class SandboxHostDependencies
 {
-    /// <summary>Link oficial usado nos scripts (redireciona para adksetup.exe).</summary>
+    // --- Link oficial usado nos scripts (redireciona para adksetup.exe) ---
     public const string AdkSetupDownloadUrl = "https://go.microsoft.com/fwlink/?linkid=2196127";
 
     private static readonly string[] OscdimgCandidatePaths =
@@ -24,7 +22,7 @@ internal static class SandboxHostDependencies
         @"C:\Program Files\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe",
     };
 
-    /// <summary>Localiza oscdimg.exe nos caminhos do ADK ou no PATH.</summary>
+    // --- Localiza oscdimg.exe nos caminhos do ADK ou no PATH ---
     public static string? FindOscdimgPath()
     {
         foreach (var p in OscdimgCandidatePaths)
@@ -51,10 +49,8 @@ internal static class SandboxHostDependencies
         return null;
     }
 
-    /// <summary>
-    /// Garante oscdimg: se em falta, pergunta ao utilizador e corre instalador silencioso do ADK (Deployment Tools).
-    /// </summary>
-    /// <returns>true se oscdimg ficou disponível; false se em falta após tentativa ou recusa.</returns>
+    // --- Garante oscdimg: se em falta, pergunta ao utilizador e corre instalador silencioso do ADK ---
+    // --- Devolve true se oscdimg ficou disponível; false se em falta após tentativa ou recusa ---
     public static async Task<bool> EnsureOscdimgAsync(
         Action<string> log,
         CancellationToken cancellationToken,
@@ -190,10 +186,7 @@ internal static class SandboxHostDependencies
         log($"[OK] Instalador ADK guardado ({len / 1024} KB).");
     }
 
-    /// <summary>
-    /// Executa adksetup com elevação. Em alguns sistemas <see cref="Process.Start(processStartInfo)"/> com Verb runas
-    /// não devolve o processo do filho elevado; nesse caso devolve null e confiamos no polling de oscdimg.
-    /// </summary>
+    // --- Executa adksetup com elevação; em alguns sistemas Process.Start com runas não devolve o filho elevado ---
     private static async Task<int?> RunElevatedInstallerAsync(string setupPath, CancellationToken cancellationToken)
     {
         var psi = new ProcessStartInfo

@@ -1,9 +1,8 @@
+// --- Módulo: BenignVmTestPaths.cs ---
+
 namespace BenignVmTest;
 
-/// <summary>
-/// Caminhos e chaves de registry usados pelo smoke test inofensivo.
-/// Valores alinhados com o que o relatório do Caminho B deve detetar.
-/// </summary>
+// --- Caminhos e chaves de registry do smoke test inofensivo ---
 public static class BenignVmTestPaths
 {
     public const string WorkDir = @"C:\analysis_work";

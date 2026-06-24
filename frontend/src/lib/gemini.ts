@@ -1,7 +1,10 @@
-/** Máximo de caracteres do excerto de código C enviado ao modelo. */
+// --- Módulo: gemini.ts ---
+// *Integração com API Gemini para assistência na análise de pseudo-C*
+
+// *Máximo de caracteres do excerto de código C enviado ao modelo*
 export const GEMINI_CODE_CHAR_LIMIT = 16_000;
 
-/** Máximo de caracteres da pergunta do utilizador. */
+// *Máximo de caracteres da pergunta do utilizador*
 export const GEMINI_USER_MESSAGE_CHAR_LIMIT = 1_000;
 
 export const GEMINI_MODEL = "gemini-2.0-flash";
@@ -17,6 +20,7 @@ export type CodeExcerpt = {
   truncated: boolean;
 };
 
+// --- Constrói excerto de código para enviar ao modelo ---
 export function buildCodeExcerpt(
   lines: string[],
   options: {
@@ -79,6 +83,7 @@ type GeminiGenerateResponse = {
   error?: { message?: string };
 };
 
+// --- Envia pergunta ao Gemini com contexto de código C ---
 export async function askGemini(
   apiKey: string,
   messages: GeminiChatMessage[],
@@ -132,7 +137,7 @@ export async function askGemini(
 
 const GEMINI_MOCK_DELAY_MS = 900;
 
-/** Resposta fixa para demonstração (sem chamada à API). */
+// --- Resposta fixa para demonstração (sem chamada à API) ---
 export function getGeminiMockReply(_question: string, lineInfo: string): string {
   return [
     "Este excerto de código C descompilado parece pertencer a um binário .NET reconstituído e apresenta vários comportamentos típicos de malware:",
@@ -147,7 +152,7 @@ export function getGeminiMockReply(_question: string, lineInfo: string): string 
   ].join("\n");
 }
 
-/** Simula latência de rede no modo demo. */
+// --- Simula latência de rede no modo demo ---
 export function askGeminiMock(question: string, lineInfo: string): Promise<string> {
   return new Promise((resolve) => {
     window.setTimeout(() => resolve(getGeminiMockReply(question, lineInfo)), GEMINI_MOCK_DELAY_MS);

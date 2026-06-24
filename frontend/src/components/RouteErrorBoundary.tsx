@@ -1,10 +1,11 @@
+// --- Módulo: RouteErrorBoundary.tsx ---
 import React, { Component, type ErrorInfo, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle } from "lucide-react";
 
 type RouteErrorBoundaryProps = {
   children: ReactNode;
-  /** Nome da rota para contexto no fallback (ex.: "Análise", "Xref"). */
+  // *Nome da rota para contexto no fallback*
   routeName?: string;
 };
 
@@ -12,9 +13,7 @@ type RouteErrorBoundaryState = {
   error: Error | null;
 };
 
-/**
- * Error boundary por rota — evita que um crash numa página derrube toda a app.
- */
+// --- Error boundary por rota — evita crash numa página derrubar toda a app ---
 export class RouteErrorBoundary extends Component<
   RouteErrorBoundaryProps,
   RouteErrorBoundaryState
@@ -83,7 +82,7 @@ export class RouteErrorBoundary extends Component<
   }
 }
 
-/** Helper para envolver elementos de rota com boundary dedicado. */
+// --- Envolve elemento de rota com boundary dedicado ---
 export function withRouteBoundary(
   routeName: string,
   element: ReactNode

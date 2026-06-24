@@ -1,4 +1,5 @@
-/** Análise de referências cruzadas no pseudo-C (blocos por chavetas, heurísticas tipo Ghidra/IDA). */
+// --- Módulo: cCodeXref.ts ---
+// *Referências cruzadas no pseudo-C (blocos por chavetas, heurísticas tipo Ghidra/IDA)*
 
 import { escapeRegex, isValidIdentifier } from "./identifiers";
 import { getCBlocks } from "./analysis";
@@ -12,7 +13,7 @@ export type XrefFunctionNode = {
   endLine: number;
   mentionLines: number[];
   isOrigin: boolean;
-  /** Linha exata da definição/assinatura do símbolo, quando aplicável. */
+  // *Linha exata da definição/assinatura do símbolo*
   originDeclLine?: number;
 };
 
@@ -24,9 +25,9 @@ export type XrefEdge = {
 export type XrefViewModel = {
   symbol: string;
   origin: XrefFunctionNode | null;
-  /** Linha exata da definição/assinatura do símbolo (quando encontrada). */
+  // *Linha exata da definição/assinatura do símbolo*
   originDeclLine: number | null;
-  /** Ordem de leitura / fluxo: origem primeiro, depois BFS por chamadas, restantes por linha. */
+  // *Ordem: origem primeiro, depois BFS por chamadas, restantes por linha*
   orderedNodes: XrefFunctionNode[];
   edges: XrefEdge[];
 };
@@ -85,7 +86,7 @@ function blockContainsLine(block: CBlock | { start: number; end: number }, line:
   return line >= block.start && line <= block.end;
 }
 
-/** Primeira linha que parece declaração/definição do símbolo (heurística alinhada com getWordStats). */
+// --- Primeira linha que parece declaração/definição do símbolo ---
 function findOriginLine(code: string, word: string): number | null {
   if (!word || word.length < 2) return null;
   const escaped = escapeRegex(word);
@@ -159,9 +160,7 @@ function buildCallEdges(
   return edges;
 }
 
-/**
- * Constrói nós (funções que referenciam o símbolo), arestas de chamada entre elas e ordem tipo fluxo IDA.
- */
+// --- Constrói nós, arestas de chamada e ordem tipo fluxo IDA ---
 export function buildXrefViewModel(code: string, word: string): XrefViewModel {
   const symbol = word.trim();
   // Validação do identificador (a palavra pode vir de um URL) antes de construir RegExp.
@@ -298,6 +297,7 @@ export type XrefSessionPayload = {
   flaggedIndicators?: string[];
 };
 
+// --- writeXrefSession ---
 export function writeXrefSession(payload: XrefSessionPayload): void {
   const raw = JSON.stringify(payload);
   // `sessionStorage` não é partilhado entre separadores; o explorador abre em novo tab.
@@ -315,6 +315,7 @@ export function writeXrefSession(payload: XrefSessionPayload): void {
   }
 }
 
+// --- readXrefSession ---
 export function readXrefSession(): XrefSessionPayload | null {
   try {
     const raw =
@@ -329,7 +330,7 @@ export function readXrefSession(): XrefSessionPayload | null {
   }
 }
 
-/** Abre o explorador de xrefs num novo separador. */
+// --- Abre explorador de xrefs num novo separador ---
 export function openXrefExplorerTab(
   href = "/xref",
   _options?: { forceNewTab?: boolean }

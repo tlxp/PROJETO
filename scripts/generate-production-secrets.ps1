@@ -1,4 +1,5 @@
-﻿<#
+﻿# --- Script: generate-production-secrets.ps1 ---
+<#
 .SYNOPSIS
     Gera segredos aleatórios para produção (API, vm-agent, password guest Hyper-V).
 .DESCRIPTION
@@ -16,22 +17,26 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# --- Geração de token seguro (Base64 URL-safe) ---
 function New-SecureToken {
     param([int] $Bytes = 32)
     $buf = New-Object byte[] $Bytes
     [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($buf)
-    # Base64 URL-safe sem padding — fácil de colar em env vars
+    # *Base64 URL-safe sem padding — fácil de colar em variáveis de ambiente*
     [Convert]::ToBase64String($buf).TrimEnd('=').Replace('+', '-').Replace('/', '_')
 }
 
+# --- Geração de password aleatória ---
 function New-SecurePassword {
     param([int] $Length = 24)
     $chars = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%&*'
     $buf = New-Object byte[] $Length
     [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($buf)
+    # *Mapeia bytes aleatórios para caracteres do alfabeto definido*
     -join (0..($Length - 1) | ForEach-Object { $chars[$buf[$_] % $chars.Length] })
 }
 
+# --- Geração dos segredos e escrita em ficheiros ---
 $apiToken = New-SecureToken
 $vmToken = New-SecureToken
 $guestPassword = New-SecurePassword

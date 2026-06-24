@@ -1,18 +1,18 @@
+﻿// --- Módulo: ProjetoVmPaths.cs ---
 using System;
 using System.IO;
 using System.Text.RegularExpressions;
 
 namespace RatAnalyzer.Desktop.Infrastructure;
 
-/// <summary>
-/// Resolve caminhos do sandbox Hyper-V a partir de _Config.ps1 ou variáveis de ambiente.
-/// </summary>
+// --- Resolve caminhos do sandbox Hyper-V (base, relatórios, logs) ---
 internal static class ProjetoVmPaths
 {
     private static readonly Regex BasePathRegex = new(
         @"PROJETOVM_BasePath\s*=\s*(?:if\s*\([^)]+\)\s*\{\s*\$env:PROJETOVM_BasePath\s*\}\s*else\s*\{\s*)?""([^""]+)""",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    // --- Obtém caminho base a partir de env ou _Config.ps1 ---
     public static string GetBasePath(string hypervScriptsPath)
     {
         var fromEnv = Environment.GetEnvironmentVariable("PROJETOVM_BasePath");

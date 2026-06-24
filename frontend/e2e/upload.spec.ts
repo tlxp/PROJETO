@@ -1,6 +1,9 @@
+// --- Módulo: upload.spec.ts ---
+// *Testes E2E Playwright: upload e fluxo de análise*
 import { test, expect } from "@playwright/test";
 
 test.describe("Página inicial", () => {
+// --- Verifica: carrega a zona de upload ---
   test("carrega a zona de upload", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("heading", { name: "Analise o seu código" })).toBeVisible({
@@ -9,6 +12,7 @@ test.describe("Página inicial", () => {
     await expect(page.getByText("Arraste o ficheiro para aqui")).toBeVisible();
   });
 
+// --- Verifica: rejeita extensão inválida via input de ficheiro ---
   test("rejeita extensão inválida via input de ficheiro", async ({ page }) => {
     await page.goto("/");
     const input = page.locator('input[type="file"]');
@@ -67,6 +71,7 @@ test.describe("Fluxo de análise (API mockada)", () => {
     });
   });
 
+// --- Verifica: upload de .exe mostra resultados após streaming ---
   test("upload de .exe mostra resultados após streaming", async ({ page }) => {
     await page.goto("/");
     const input = page.locator('input[type="file"]');

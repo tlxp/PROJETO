@@ -1,3 +1,4 @@
+﻿// --- Módulo: MainDashboardViewModel.cs ---
 using System;
 using System.Threading.Tasks;
 using System.Windows.Input;
@@ -7,6 +8,7 @@ using RatAnalyzer.Desktop.Services;
 
 namespace RatAnalyzer.Desktop.ViewModels;
 
+// --- ViewModel do dashboard: seleção de ficheiro, análise estática e VM ---
 public sealed class MainDashboardViewModel : ViewModelBase
 {
     private readonly IMainDashboardDialogs _dialogs;
@@ -34,6 +36,7 @@ public sealed class MainDashboardViewModel : ViewModelBase
     private bool _showOpenResults;
     private string? _lastResultsUrl;
 
+    // --- Construtor: regista comandos e serviços ---
     public MainDashboardViewModel(IMainDashboardDialogs dialogs, StaticAnalysisService? staticAnalysis = null)
     {
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
@@ -70,7 +73,7 @@ public sealed class MainDashboardViewModel : ViewModelBase
         set => SetProperty(ref _vmSampleTimeoutSeconds, Math.Clamp(value, 5, 7200));
     }
 
-    /// <summary>True enquanto a análise estática decorre (não bloqueia a VM).</summary>
+    // --- True enquanto a análise estática decorre (não bloqueia a VM) ---
     public bool IsStaticAnalysisBusy
     {
         get => _isStaticAnalysisBusy;
@@ -145,6 +148,7 @@ public sealed class MainDashboardViewModel : ViewModelBase
     public ICommand OpenResultsCommand { get; }
     public ICommand OpenStorageMaintenanceCommand { get; }
 
+    // --- Reage à seleção ou drop de ficheiro ---
     public void OnFileSelected(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -160,6 +164,7 @@ public sealed class MainDashboardViewModel : ViewModelBase
             OnFileSelected(path);
     }
 
+    // --- Executa análise estática via backend e abre resultados ---
     private async Task RunStaticAnalysisAsync()
     {
         if (string.IsNullOrEmpty(_selectedFilePath))
@@ -196,11 +201,10 @@ public sealed class MainDashboardViewModel : ViewModelBase
                 progressPct,
                 onJobIdKnown: knownJobId =>
                 {
-                    _lastResultsUrl = AppConstants.BuildFrontendUrl($"/analysis/{Uri.EscapeDataString(knownJobId)}");
-                    StaticJobIdText = LocalizationManager.Format(LocKeys.MsgJobIdFormat, knownJobId);
-                    StaticJobUrlText = _lastResultsUrl;
-                    ShowStaticJobDetails = true;
-                    ShowOpenResults = true;
+                    // Registar cedo para a VM poder reutilizar o mesmo jobId enquanto a estática decorre.
+                    _lastStaticJobId = knownJobId;
+                    _lastStaticFilePath = _selectedFilePath;
+                    SetResultsUrlForJob(knownJobId);
                 }).ConfigureAwait(true);
 
             _lastStaticJobId = jobId;
@@ -210,11 +214,7 @@ public sealed class MainDashboardViewModel : ViewModelBase
             StaticProgressIndeterminate = false;
             StaticProgressValue = 100;
 
-            _lastResultsUrl = AppConstants.BuildFrontendUrl($"/analysis/{Uri.EscapeDataString(jobId)}");
-            StaticJobIdText = LocalizationManager.Format(LocKeys.MsgJobIdFormat, jobId);
-            StaticJobUrlText = _lastResultsUrl;
-            ShowStaticJobDetails = true;
-            ShowOpenResults = true;
+            SetResultsUrlForJob(jobId);
 
             // Só abrir automaticamente se a estática foi a primeira análise deste job
             // (evita 2.ª abertura quando a VM já abriu ou quando a VM correr a seguir).
@@ -245,6 +245,7 @@ public sealed class MainDashboardViewModel : ViewModelBase
         }
     }
 
+    // --- Abre janela de análise comportamental em VM ---
     private void RunDynamicAnalysis()
     {
         if (string.IsNullOrEmpty(_selectedFilePath))
@@ -277,6 +278,7 @@ public sealed class MainDashboardViewModel : ViewModelBase
             {
                 _lastVmJobId = id;
                 _lastVmFilePath = _selectedFilePath;
+                SetResultsUrlForJob(id);
             });
     }
 
@@ -298,7 +300,12 @@ public sealed class MainDashboardViewModel : ViewModelBase
 
     private void OpenResults()
     {
-        if (string.IsNullOrWhiteSpace(_lastResultsUrl))
+        var jobId = ResolveLinkedJobId();
+        var url = !string.IsNullOrWhiteSpace(jobId)
+            ? AppConstants.BuildFrontendUrl($"/analysis/{Uri.EscapeDataString(jobId)}")
+            : _lastResultsUrl;
+
+        if (string.IsNullOrWhiteSpace(url))
         {
             _dialogs.ShowInfo(LocalizationManager.Get(LocKeys.MsgNoResults));
             return;
@@ -306,7 +313,7 @@ public sealed class MainDashboardViewModel : ViewModelBase
 
         try
         {
-            _dialogs.OpenBrowserUrl(_lastResultsUrl);
+            _dialogs.OpenBrowserUrl(url);
         }
         catch (Exception ex)
         {
@@ -328,6 +335,15 @@ public sealed class MainDashboardViewModel : ViewModelBase
                 LocalizationManager.Format(LocKeys.MsgMaintenanceFailed, ex.Message),
                 LocalizationManager.Get(LocKeys.AppTitle));
         }
+    }
+
+    private void SetResultsUrlForJob(string jobId)
+    {
+        _lastResultsUrl = AppConstants.BuildFrontendUrl($"/analysis/{Uri.EscapeDataString(jobId)}");
+        StaticJobIdText = LocalizationManager.Format(LocKeys.MsgJobIdFormat, jobId);
+        StaticJobUrlText = _lastResultsUrl;
+        ShowStaticJobDetails = true;
+        ShowOpenResults = true;
     }
 
     private void ResetStaticProgress()

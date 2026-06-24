@@ -1,11 +1,12 @@
+// --- Módulo: useAnalysisStream.ts ---
 import { useCallback, useEffect, useRef } from "react";
 import { apiFetch, readErrorDetail } from "@/lib/api";
 import { asRecord, normalizeAnalysisResult, type AnalysisResult } from "@/lib/analysis";
 
-/** Prefixo das linhas de log com progresso do Ghidra (streaming). */
+// *Prefixo das linhas de progresso Ghidra no stream NDJSON*
 export const GHIDRA_PROGRESS_PREFIX = "[GHIDRA_PROGRESS]";
 
-/** Limite de segurança do buffer NDJSON (linhas individuais nunca devem chegar perto disto). */
+// *Limite de segurança do buffer NDJSON*
 export const MAX_STREAM_BUFFER_BYTES = 10 * 1024 * 1024;
 
 export type AnalysisStreamCallbacks = {
@@ -15,11 +16,8 @@ export type AnalysisStreamCallbacks = {
   onResult: (result: AnalysisResult) => void;
 };
 
-/**
- * Hook para a análise estática por streaming NDJSON (`/api/analyze_stream`).
- * Gere o cancelamento via AbortController (nova execução cancela a anterior;
- * o unmount cancela qualquer streaming pendente).
- */
+// --- Análise estática por streaming NDJSON (`/api/analyze_stream`) ---
+// *AbortController: nova execução cancela a anterior; unmount cancela stream pendente*
 export function useAnalysisStream() {
   const abortRef = useRef<AbortController | null>(null);
 
@@ -35,10 +33,7 @@ export function useAnalysisStream() {
     abortRef.current = null;
   }, []);
 
-  /**
-   * Executa o streaming e devolve o último resultado recebido (ou null).
-   * Lança AbortError/TimeoutError (DOMException) quando cancelado.
-   */
+  // --- Executa streaming e devolve último resultado (ou null) ---
   const run = useCallback(
     async (file: File, callbacks: AnalysisStreamCallbacks): Promise<AnalysisResult | null> => {
       abortRef.current?.abort();
@@ -65,6 +60,7 @@ export function useAnalysisStream() {
       let buffer = "";
       let streamResult: AnalysisResult | null = null;
 
+      // --- Processa uma linha NDJSON do stream ---
       const handleLine = (raw: string) => {
         const line = raw.trim();
         if (!line) return;
@@ -112,7 +108,7 @@ export function useAnalysisStream() {
           buffer = lines.pop() ?? "";
           for (const raw of lines) handleLine(raw);
         }
-        // Última linha sem newline final (se existir).
+        // *Última linha sem newline final*
         if (buffer.trim()) handleLine(buffer);
       } finally {
         reader.releaseLock();

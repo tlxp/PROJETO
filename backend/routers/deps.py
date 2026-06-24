@@ -1,4 +1,5 @@
-"""Dependências e helpers partilhados pelos routers."""
+# --- Módulo: deps ---
+# Dependências e helpers partilhados pelos routers FastAPI.
 
 from __future__ import annotations
 
@@ -25,10 +26,10 @@ logger = logging.getLogger("rat_analyzer_api")
 ALLOWED_UPLOAD_EXTENSIONS = (".exe", ".dll", ".cs")
 
 
+# --- Validação do header X-API-Token ---
 def require_api_token(
     x_api_token: str | None = Header(default=None, alias="X-API-Token"),
 ) -> None:
-    """Valida X-API-Token quando RATANALYZER_API_TOKEN está definido."""
     token = (os.environ.get("RATANALYZER_API_TOKEN") or "").strip()
     if not token:
         if require_api_token_enforced():
@@ -42,17 +43,20 @@ def require_api_token(
         raise HTTPException(401, "Token de API inválido ou em falta (header X-API-Token).")
 
 
+# --- Validação de job_id como UUID v4 ---
 def require_valid_job_id(job_id: str) -> str:
     if not is_valid_job_id(job_id):
         raise HTTPException(400, "job_id inválido (esperado UUID v4).")
     return job_id
 
 
+# --- Diretório de saída do job ---
 def get_job_output_dir(job_id: str) -> Path:
     require_valid_job_id(job_id)
     return Path(config.SANDBOX_JOBS_DIR) / job_id / "out"
 
 
+# --- Sanitização de nome de upload com resposta HTTP 400 ---
 def sanitize_upload_name(raw_name: str | None) -> str:
     try:
         return sanitize_upload_filename(raw_name)
@@ -61,6 +65,7 @@ def sanitize_upload_name(raw_name: str | None) -> str:
         raise HTTPException(400, "Nome de ficheiro inválido.")
 
 
+# --- Verificação prévia do Content-Length ---
 def check_content_length(request: Request, max_bytes: int) -> None:
     raw = request.headers.get("content-length")
     if not raw:
@@ -73,6 +78,7 @@ def check_content_length(request: Request, max_bytes: int) -> None:
         raise HTTPException(413, f"Ficheiro excede o limite de upload ({max_bytes // (1024 * 1024)} MB).")
 
 
+# --- Escrita em streaming do upload para disco com limite de tamanho ---
 async def stream_upload_to_path(file: UploadFile, target_path: Path, max_bytes: int) -> int:
     total = 0
     try:
@@ -94,6 +100,7 @@ async def stream_upload_to_path(file: UploadFile, target_path: Path, max_bytes: 
     return total
 
 
+# --- Leitura completa do upload em memória com limite ---
 async def read_upload_bytes(file: UploadFile, max_bytes: int) -> bytes:
     buf = bytearray()
     while True:
@@ -106,6 +113,7 @@ async def read_upload_bytes(file: UploadFile, max_bytes: int) -> bytes:
     return bytes(buf)
 
 
+# --- Leitura segura de ficheiro (inclui fallback a artefactos arquivados em zip) ---
 def read_file_safe(path: str | None, encoding: str = "utf-8", errors: str = "replace") -> str:
     if not path:
         return ""
@@ -133,6 +141,7 @@ def read_file_safe(path: str | None, encoding: str = "utf-8", errors: str = "rep
         return ""
 
 
+# --- Resumo textual curto do relatório dinâmico ---
 def summarize_dynamic_report(report: str) -> str:
     if not report or not report.strip():
         return "Análise dinâmica na VM concluída."

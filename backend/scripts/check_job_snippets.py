@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
-"""
-Consulta a API para um job e mostra se existem ficheiros de trechos obfuscados.
-Uso: python scripts/check_job_snippets.py <job_id> [--base-url http://localhost:8000]
-"""
+# --- Módulo: check_job_snippets ---
+# Consulta a API para um job e mostra se existem ficheiros de trechos obfuscados.
+# Uso: python scripts/check_job_snippets.py <job_id> [--base-url http://localhost:8000]
+
 import argparse
 import json
 import sys
 from pathlib import Path
 
-# backend no path
+# *backend no path*
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import urllib.request
 
 
+# --- Ponto de entrada CLI ---
 def main():
     parser = argparse.ArgumentParser(description="Verifica payload do job (trechos obfuscados)")
     parser.add_argument("job_id", help="ID do job (ex.: 44daf45e-503c-4049-9d16-51064837da99)")

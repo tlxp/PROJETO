@@ -1,3 +1,4 @@
+﻿// --- Módulo: StorageMaintenanceService.cs ---
 using System;
 using System.Globalization;
 using System.Net.Http;
@@ -9,7 +10,7 @@ using RatAnalyzer.Desktop.Infrastructure;
 
 namespace RatAnalyzer.Desktop.Services;
 
-/// <summary>Operações de estimativa/limpeza no backend e artefatos locais.</summary>
+// --- Operações de estimativa/limpeza no backend e artefatos locais ---
 public sealed class StorageMaintenanceService
 {
     private static readonly JsonSerializerOptions JsonInsensitive = new()

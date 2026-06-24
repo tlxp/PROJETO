@@ -1,11 +1,11 @@
-"""Modelos Pydantic partilhados pelos routers."""
+# --- Módulo: schemas ---
+# Modelos Pydantic partilhados pelos routers.
 
 from pydantic import BaseModel
 
 
+# --- Payload de upload/atualização de análise estática ---
 class StaticAnalysisUpload(BaseModel):
-    """Publica (ou actualiza) análise estática — suporta estado `running`."""
-
     jobId: str | None = None
     fileName: str = ""
     report: str = ""
@@ -20,9 +20,8 @@ class StaticAnalysisUpload(BaseModel):
     error: str | None = None
 
 
+# --- Payload de upload/atualização de análise dinâmica (Caminho B) ---
 class DynamicAnalysisUpload(BaseModel):
-    """Publica (ou actualiza) o resultado de análise dinâmica na VM (Caminho B)."""
-
     jobId: str | None = None
     fileName: str = ""
     report: str = ""
@@ -32,10 +31,12 @@ class DynamicAnalysisUpload(BaseModel):
     error: str | None = None
 
 
+# --- Pedido de limpeza de storage ---
 class StorageCleanupRequest(BaseModel):
     retentionDays: int = 30
     keepMostRecent: int = 200
 
 
+# --- Pedido de arquivo frio de jobs ---
 class StorageArchiveRequest(BaseModel):
     olderThanDays: int = 30

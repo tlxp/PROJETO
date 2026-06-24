@@ -1,40 +1,6 @@
-"""
-Decompilação de binários nativos para pseudo-C usando PyGhidra (Ghidra).
-Converte o assembly/código de máquina em código C legível (decompilador Ghidra).
-Requer: Ghidra instalado e variável GHIDRA_INSTALL_DIR (ou install_dir).
-
---- O que se passa e porquê ---
-
-O decompilador do Ghidra analisa o fluxo de controlo (branches, jumps, switches).
-Por defeito tem limites conservadores para evitar explosão de tempo/memória.
-
-1) "Could not recover jumptable at 0x... Too many branches"
-   - Em C, um switch com muitos cases é compilado para uma "jumptable": uma tabela de
-     endereços e um salto indirecto (jmp [base+index]). O decompilador tenta recuperar
-     essa tabela para voltar a mostrar um switch em pseudo-C.
-   - O Ghidra limita o número de entradas que aceita numa jumptable (por defeito 1024).
-     Se a função tiver um switch com mais casos, ou o análisis encontrar mais branches
-     do que o limite, o decompilador desiste e não recupera o switch.
-   - Consequência: em vez de switch/case limpo, aparece código mais confuso e o aviso
-     em comentário. Aumentar DECOMPILER_MAX_JUMPTABLE_ENTRIES reduz este problema.
-
-2) "Treating indirect jump as call"
-   - Um "indirect jump" é um salto para um endereço calculado em tempo de execução
-     (ex.: jmp rax, ou call [r8+offset]). Pode ser um switch (jumptable), um call
-     através de função ponteiro, ou outro padrão.
-   - Se o decompilador não conseguir classificar o salto como jumptable (por ex. por
-     "Too many branches" ou análise incompleta), trata o indirect jump como se fosse
-     uma chamada de função (call), para não perder o fluxo. Daí o aviso.
-   - Com "eliminate unreachable" ativado, código que fica para lá desse "call" pode
-     ser considerado inalcançável e removido. Desativar (DECOMPILER_ELIMINATE_UNREACHABLE
-     = False) preserva esse código. Inferir ponteiros constantes (DECOMPILER_INFER_CONST_PTR)
-     ajuda a resolver alguns indirect jumps para endereços conhecidos.
-
-3) Melhorias possíveis (sem alterar o binário):
-   - Aumentar DECOMPILER_MAX_JUMPTABLE_ENTRIES (ex.: 4M–8M) se tiver memória; reduz "Too many branches".
-   - DECOMPILER_HIDE_JUMPTABLE_WARNINGS: esconder os comentários WARNING no pseudo-C (saída mais limpa).
-   - Na GUI do Ghidra: scripts FindUnrecoveredSwitchesScript e SwitchOverride para recuperar switches à mão.
-"""
+# --- Módulo: ghidra_decompiler ---
+# Decompilação de binários nativos para pseudo-C via PyGhidra (requer GHIDRA_INSTALL_DIR).
+# *Notas sobre jumptables/indirect jumps: ver DECOMPILER_* abaixo e comentários inline.*
 
 import os
 import shutil
@@ -46,11 +12,13 @@ from typing import Callable, Dict, Optional
 from artifact_naming import short_stem
 import config
 
+# --- Helper interno: jdk root has java bin ---
 def _jdk_root_has_java_bin(home: Path) -> bool:
     name = "java.exe" if sys.platform == "win32" else "java"
     return home.is_dir() and (home / "bin" / name).is_file()
 
 
+# --- Helper interno: prepend path ---
 def _prepend_path(directory: str) -> None:
     if not directory:
         return
@@ -63,12 +31,8 @@ def _prepend_path(directory: str) -> None:
     os.environ["PATH"] = norm + sep + path if path else norm
 
 
+# --- Descobre JDK 21 e define JAVA_HOME antes de importar pyghidra ---
 def _ensure_java_home_for_ghidra() -> None:
-    """
-    O Ghidra chama LaunchSupport com `-jdk_home`; o processo Python (uvicorn) pode ter
-    arrancado antes de JAVA_HOME existir no ambiente. Descobre JDK 21 em disco / registo
-    Windows e define os.environ antes de import pyghidra / pyghidra.start().
-    """
     existing = (os.environ.get("JAVA_HOME") or "").strip()
     if existing:
         p = Path(existing)
@@ -164,6 +128,7 @@ def _ensure_java_home_for_ghidra() -> None:
             pass
 
 
+# --- Helper interno: is valid ghidra directory ---
 def _is_valid_ghidra_directory(path: Path) -> bool:
     if not path.is_dir():
         return False
@@ -176,6 +141,7 @@ def _is_valid_ghidra_directory(path: Path) -> bool:
     return False
 
 
+# --- Helper interno: discover ghidra install dirs ---
 def _discover_ghidra_install_dirs() -> list[Path]:
     candidates: list[Path] = []
     local_app = (os.environ.get("LOCALAPPDATA") or "").strip()
@@ -191,11 +157,8 @@ def _discover_ghidra_install_dirs() -> list[Path]:
     return candidates
 
 
+# --- Resolve pasta de instalação do Ghidra (env ou %LOCALAPPDATA%\\RatAnalyzer\\Ghidra) ---
 def resolve_ghidra_install_dir(ghidra_install_dir: Optional[str] = None) -> tuple[Optional[str], str]:
-    """
-    Resolve a pasta de instalação do Ghidra, ignorando GHIDRA_INSTALL_DIR obsoleto e
-    procurando instalações em %LOCALAPPDATA%\\RatAnalyzer\\Ghidra.
-    """
     stale: list[str] = []
     for raw in (ghidra_install_dir, os.environ.get("GHIDRA_INSTALL_DIR")):
         if not raw or not str(raw).strip():
@@ -223,11 +186,8 @@ def resolve_ghidra_install_dir(ghidra_install_dir: Optional[str] = None) -> tupl
     return None, ""
 
 
+# --- Formata erros típicos de arranque (LaunchSupport, JDK em falta) ---
 def _format_pyghidra_start_error(exc: BaseException) -> str:
-    """
-    Erros típicos: LaunchSupport / -jdk_home / exit status 1 → JDK em falta ou versão errada.
-    Ghidra 12.x requer JDK 21 (64-bit).
-    """
     msg = str(exc)
     core = f"Falha ao iniciar Ghidra (verifique GHIDRA_INSTALL_DIR): {msg}"
     low = msg.lower()
@@ -289,11 +249,9 @@ DECOMPILER_INFER_CONST_PTR = True
 DECOMPILER_HIDE_JUMPTABLE_WARNINGS = True
 
 
+# --- Aplica limites DECOMPILER_* ao DecompileOptions ---
 def _apply_our_options(opts):
-    """
-    Aplica os nossos limites e opções ao DecompileOptions.
-    Cada setter é em try/except para não falhar em versões do Ghidra onde o método não exista.
-    """
+# --- Helper interno: set ---
     def _set(method, *args):
         if hasattr(opts, method):
             getattr(opts, method)(*args)
@@ -308,14 +266,8 @@ def _apply_our_options(opts):
         _set("setWARNCommentIncluded", False)
 
 
+# --- Constrói DecompileOptions com limites altos e opções de jumptable ---
 def _build_decompile_options(program=None):
-    """
-    Constrói DecompileOptions com limites altos e opções de recursão/branches para recuperar
-    jumptables (assembly -> switch) e tratar melhor indirect jumps.
-    Ordem: definir as nossas opções primeiro; depois grabFromProgram (linguagem/proto do programa);
-    por fim reaplicar as nossas opções para garantir que não foram sobrescritas.
-    As opções devem ser aplicadas ao DecompInterface *antes* de openProgram().
-    """
     try:
         from ghidra.app.decompiler import DecompileOptions
         opts = DecompileOptions()
@@ -334,8 +286,8 @@ def _build_decompile_options(program=None):
         return None
 
 
+# --- Remove artefatos de projeto Ghidra que podem deixar locks ---
 def _cleanup_ghidra_project_artifacts(workspace: Path, project_name: str) -> None:
-    """Remove artefatos de projeto Ghidra que podem deixar locks entre execuções."""
     candidates = [
         workspace / project_name,
         workspace / f"{project_name}.gpr",
@@ -357,6 +309,7 @@ def _cleanup_ghidra_project_artifacts(workspace: Path, project_name: str) -> Non
         pass
 
 
+# --- Helper interno: summarize ghidra error ---
 def _summarize_ghidra_error(exc: BaseException) -> str:
     msg = str(exc).strip()
     low = msg.lower()
@@ -370,6 +323,7 @@ def _summarize_ghidra_error(exc: BaseException) -> str:
     return msg
 
 
+# --- Helper interno: ghidra error type ---
 def _ghidra_error_type(exc: BaseException) -> str:
     low = str(exc).lower()
     if "unable to lock project" in low or "lockexception" in low:
@@ -377,6 +331,7 @@ def _ghidra_error_type(exc: BaseException) -> str:
     return ""
 
 
+# --- Decompila binário nativo para pseudo-C via PyGhidra ---
 def decompile_binary_to_c(
     binary_path: str,
     output_path: Optional[str] = None,
@@ -384,14 +339,6 @@ def decompile_binary_to_c(
     ghidra_install_dir: Optional[str] = None,
     progress_callback: Optional[Callable[[float], None]] = None,
 ) -> Dict:
-    """
-    Decompila um binário (exe/dll nativo) para pseudo-C usando o decompilador Ghidra via PyGhidra.
-    :param binary_path: Caminho para o .exe ou .dll
-    :param output_path: Ficheiro .c de saída (opcional)
-    :param output_root: Pasta base se output_path for None
-    :param ghidra_install_dir: Pasta de instalação do Ghidra (ou use env GHIDRA_INSTALL_DIR)
-    :return: { "success", "output_file", "error", "functions_decompiled" }
-    """
     result = {"success": False, "output_file": "", "error": "", "functions_decompiled": 0}
     path = Path(binary_path).resolve()
     if not path.exists():

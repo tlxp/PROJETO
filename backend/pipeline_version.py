@@ -1,3 +1,6 @@
+# --- Módulo: pipeline_version ---
+# Versão do pipeline para cache/deduplicação de análises.
+
 from __future__ import annotations
 
 import hashlib
@@ -9,12 +12,14 @@ import config
 APP_VERSION = "1.0.0"
 
 
+# --- Hash SHA-256 de texto ---
 def _sha256_text(s: str) -> str:
     h = hashlib.sha256()
     h.update(s.encode("utf-8", "ignore"))
     return h.hexdigest()
 
 
+# --- Hash SHA-256 de ficheiro (leitura em chunks) ---
 def _sha256_file(path: Path) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -23,15 +28,8 @@ def _sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+# --- Cálculo da versão do pipeline (YARA + flags + APP_VERSION) ---
 def compute_pipeline_version() -> str:
-    """
-    Versão do pipeline para efeitos de cache/deduplicação.
-
-    Deve mudar quando:
-      - regras YARA mudam
-      - lógica de análise muda (APP_VERSION)
-      - flags que alteram artefatos mudam
-    """
     yara_dir = Path(config.YARA_RULES_DIR)
     yara_hashes: list[str] = []
     if yara_dir.exists():
@@ -46,6 +44,7 @@ def compute_pipeline_version() -> str:
         "KEEP_GHIDRA_PROJECT": bool(getattr(config, "KEEP_GHIDRA_PROJECT", True)),
     }
 
+    # *Materializar string com versão, hashes YARA e flags*
     material = "\n".join(
         [
             f"app_version={APP_VERSION}",
@@ -57,4 +56,3 @@ def compute_pipeline_version() -> str:
 
 
 __all__ = ["compute_pipeline_version", "APP_VERSION"]
-

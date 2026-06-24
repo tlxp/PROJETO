@@ -1,3 +1,4 @@
+﻿// --- Módulo: JavaDependencyHelper.cs ---
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -13,16 +14,10 @@ using RatAnalyzer.Desktop.Infrastructure;
 
 namespace RatAnalyzer.Desktop.Helpers;
 
-/// <summary>
-/// Oferece instalação do JDK 21 (Ghidra 12 / PyGhidra) via <c>winget</c>, no mesmo espírito que
-/// <see cref="IlSpyDependencyHelper"/> e <see cref="GhidraDependencyHelper"/>.
-/// </summary>
+// --- Oferece instalação do JDK 21 (Ghidra 12 / PyGhidra) via winget, como IlSpy e Ghidra ---
 internal static class JavaDependencyHelper
 {
-    /// <summary>
-    /// JDK em disco ou nas variáveis de ambiente (Process/User/Machine), para o uvicorn herdar
-    /// <c>JAVA_HOME</c> mesmo quando o processo WPF arrancou antes da instalação do JDK.
-    /// </summary>
+    // --- JDK em disco ou nas variáveis de ambiente, para o uvicorn herdar JAVA_HOME ---
     internal static string? ResolveJavaHomeForBackend()
     {
         foreach (var target in new[]
@@ -55,17 +50,14 @@ internal static class JavaDependencyHelper
         return true;
     }
 
-    /// <summary>Ghidra 12.x documenta JDK 21 (64-bit).</summary>
+    // --- Ghidra 12.x documenta JDK 21 (64-bit) ---
     private const int MinimumJdkMajor = 21;
 
     private const string WingetPackageId = "EclipseAdoptium.Temurin.21.JDK";
 
     private const string ManualDownloadUrl = "https://adoptium.net/temurin/releases/?version=21";
 
-    /// <summary>
-    /// Se já existir <c>java</c> no PATH com major ≥ 21, regista no log. Caso contrário pergunta ao
-    /// utilizador e tenta <c>winget install EclipseAdoptium.Temurin.21.JDK</c>.
-    /// </summary>
+    // --- Se java no PATH com major ≥ 21 regista no log; senão pergunta e tenta winget install Temurin 21 ---
     public static async Task TryOfferInstallIfMissingAsync(Action<string> log, CancellationToken ct)
     {
         var probe = await ProbeJdkAsync(ct).ConfigureAwait(false);

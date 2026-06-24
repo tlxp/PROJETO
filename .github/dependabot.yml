@@ -1,8 +1,9 @@
-# Atualizações automáticas de dependências (Dependabot)
+# --- Dependabot: atualizações automáticas de dependências ---
 # https://docs.github.com/en/code-security/dependabot
 
 version: 2
 updates:
+  # *Dependências Python do backend (semanal, agrupadas dev)*
   - package-ecosystem: pip
     directory: /backend
     schedule:
@@ -16,17 +17,20 @@ updates:
           - pip-audit
           - pip-tools
 
+  # *Dependências npm do frontend*
   - package-ecosystem: npm
     directory: /frontend
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
 
+  # *Actions do GitHub (mensal)*
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
 
+  # *Pacotes NuGet (.NET — WPF, vm-agent, benign-vm-test)*
   - package-ecosystem: nuget
     directory: /
     schedule:

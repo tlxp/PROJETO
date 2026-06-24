@@ -1,7 +1,5 @@
-"""
-Módulo de Análise Estática
-Identifica imports suspeitos, strings de C&C, técnicas de evasão
-"""
+# --- Módulo: static_analyzer ---
+# --- Análise estática de PE: imports suspeitos, strings C&C, evasão ---
 
 import logging
 import re
@@ -13,10 +11,10 @@ import pefile
 logger = logging.getLogger("rat_analyzer_static")
 
 
+# --- Analisador de ficheiros PE (exe/dll) sem execução ---
 class StaticAnalyzer:
-    """Analisa ficheiros PE (exe/dll) sem executá-los"""
 
-    # DLLs de rede/download — sinal mais forte que DLLs genéricas do Windows
+    # *DLLs de rede/download — sinal mais forte que DLLs genéricas do Windows*
     SUSPICIOUS_IMPORTS = [
         "ws2_32.dll",
         "wininet.dll",
@@ -170,11 +168,12 @@ class StaticAnalyzer:
         "BlockInput",
     ]
 
+# --- Helper interno: init   ---
     def __init__(self):
         self.results = {}
 
+    # --- Executa análise estática completa do PE ---
     def analyze(self, file_path: str) -> Dict:
-        """Executa análise estática completa"""
         results = {
             "suspicious_imports": [],
             "suspicious_functions": [],
@@ -227,8 +226,8 @@ class StaticAnalyzer:
 
         return results
 
+    # --- Identifica imports de rede/download suspeitos ---
     def _analyze_imports(self, pe) -> List[str]:
-        """Identifica imports de rede/download suspeitos em RATs"""
         suspicious = []
         allowed = {imp.lower() for imp in self.SUSPICIOUS_IMPORTS}
 
@@ -242,8 +241,8 @@ class StaticAnalyzer:
 
         return list(set(suspicious))
 
+    # --- Identifica funções de alto risco importadas ---
     def _analyze_functions(self, pe) -> List[str]:
-        """Identifica funções de alto risco importadas"""
         suspicious = []
         allowed = set(self.SUSPICIOUS_FUNCTIONS)
 
@@ -259,6 +258,7 @@ class StaticAnalyzer:
 
         return list(set(suspicious))
 
+# --- Helper interno: read text blob ---
     def _read_text_blob(self, file_path: str) -> str:
         with open(file_path, "rb") as f:
             content = f.read()
@@ -267,6 +267,7 @@ class StaticAnalyzer:
         except (UnicodeDecodeError, ValueError):
             return content.decode("latin-1", errors="ignore")
 
+# --- Helper interno: is false positive c2 ---
     def _is_false_positive_c2(self, candidate: str) -> bool:
         sl = candidate.lower().strip()
         if len(sl) <= 3:
@@ -282,6 +283,7 @@ class StaticAnalyzer:
             return True
         return False
 
+# --- Helper interno: is high confidence url ---
     def _is_high_confidence_url(self, url: str) -> bool:
         if self._is_false_positive_c2(url):
             return False
@@ -309,8 +311,8 @@ class StaticAnalyzer:
             return True
         return False
 
+    # --- Extrai strings C&C com filtros anti falso positivo ---
     def _extract_c2_strings(self, file_path: str) -> List[str]:
-        """Extrai strings que podem ser C&C (com filtros anti falso positivo)"""
         c2_strings: List[str] = []
 
         try:
@@ -340,8 +342,8 @@ class StaticAnalyzer:
 
         return filtered[:50]
 
+    # --- Procura indicadores de stealer/persistência no ficheiro ---
     def _extract_indicators_in_file(self, file_path: str, indicators: List[str]) -> List[str]:
-        """Procura indicadores (stealer, persistência) no conteúdo do ficheiro."""
         found = []
         try:
             text = self._read_text_blob(file_path)
@@ -353,8 +355,8 @@ class StaticAnalyzer:
             logger.debug("Falha ao procurar indicadores em %s", file_path, exc_info=True)
         return list(set(found))
 
+    # --- Deteta evasão por strings (anti-VM/anti-análise) ---
     def _extract_evasion_from_strings(self, file_path: str) -> List[str]:
-        """Deteta evasão forte por strings (anti-VM/anti-análise)."""
         found = []
         try:
             text = self._read_text_blob(file_path)
@@ -365,8 +367,8 @@ class StaticAnalyzer:
             logger.debug("Falha ao procurar técnicas de evasão em %s", file_path, exc_info=True)
         return list(set(found))
 
+    # --- Deteta técnicas de evasão via imports PE ---
     def _detect_evasion(self, pe) -> List[str]:
-        """Deteta técnicas de evasão via imports PE"""
         evasion: List[str] = []
         weak_hits: List[str] = []
         if not hasattr(pe, "DIRECTORY_ENTRY_IMPORT"):
@@ -391,8 +393,8 @@ class StaticAnalyzer:
             evasion.extend(sorted(set(weak_hits)))
         return list(set(evasion))
 
+    # --- Analisa secções do PE (nome, tamanho, entropia) ---
     def _analyze_sections(self, pe) -> List[Dict]:
-        """Analisa secções do PE"""
         sections = []
 
         for section in pe.sections:
@@ -407,8 +409,8 @@ class StaticAnalyzer:
 
         return sections
 
+    # --- Calcula entropia das secções (indicador de packing) ---
     def _calculate_entropy(self, pe) -> Dict:
-        """Calcula entropia das secções (indicador de packing)"""
         import math
 
         entropy_data = {}
@@ -430,8 +432,8 @@ class StaticAnalyzer:
 
         return entropy_data
 
+    # --- Deteta indicadores de packers conhecidos ---
     def _detect_packers(self, pe) -> List[str]:
-        """Deteta indicadores de packers conhecidos"""
         packers = []
 
         entropy_data = self._calculate_entropy(pe)

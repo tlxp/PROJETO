@@ -1,10 +1,14 @@
+// --- Módulo: BenignVmTestRunnerTests.cs ---
+
 using System.Text;
 using Xunit;
 
 namespace BenignVmTest.Tests;
 
+// --- Testes do runner inofensivo ---
 public sealed class BenignVmTestRunnerTests
 {
+    // --- Run deve emitir sequência de log esperada no Windows ---
     [Fact]
     public void Run_WritesExpectedLogSequence()
     {

@@ -1,11 +1,15 @@
-﻿# 3) Restaurar snapshot limpo
+﻿# --- Script: PhaseB-VmBoot.ps1 ---
+# --- Restauro do snapshot e arranque da VM ---
+
+# *reverte a VM ao estado limpo antes de cada análise*
 Write-LogHost "[3/7] A restaurar snapshot '$SnapshotName'..."
 Stop-SandboxVM -VMName $VMName
 Start-Sleep -Milliseconds 400
 Restore-SandboxSnapshot -VMName $VMName -SnapshotName $SnapshotName
 Write-LogHost "      Snapshot restaurado."
 
-# 4) Arrancar VM (espera pelo arranque = PowerShell Direct, sem sleep fixo)
+# --- Arranque e espera por PowerShell Direct ---
+# *sem sleep fixo; aguarda até a sessão remota estar pronta*
 Write-LogHost "[4/7] A arrancar a VM..."
 $psDirectOk = Start-SandboxVM -VMName $VMName -CredentialCandidates $credCandidates -PowerShellDirectTimeoutSeconds $PsDirectTimeoutSeconds -LogPath $HostLogPath
 if ($psDirectOk -is [pscredential]) {
@@ -16,5 +20,6 @@ if ($psDirectOk -is [pscredential]) {
     Write-Warning "      PowerShell Direct não ficou pronto após timeout. A continuar com cautela..."
 }
 
-# Transferência host→guest via PowerShell Direct (Guest Services desactivados por política).
+# --- Preparação para transferência host→guest ---
+# *Guest Services desactivados por política; cópia via PS Direct*
 Write-LogHost "[5/7] Transferência host→guest via PowerShell Direct..."

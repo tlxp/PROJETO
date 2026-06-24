@@ -1,4 +1,5 @@
-"""Testes do endpoint /api/analysis/upload_dynamic."""
+# --- Módulo: test_upload_dynamic ---
+# Testes do endpoint /api/analysis/upload_dynamic.
 
 import uuid
 
@@ -9,11 +10,14 @@ import api
 
 
 @pytest.fixture()
+# --- Fixture: cliente HTTP de teste ---
 def client():
     return TestClient(api.app)
 
 
+# --- Testes de UploadDynamic ---
 class TestUploadDynamic:
+# --- Teste: verifica cria job dinamico com relatorio ---
     def test_cria_job_dinamico_com_relatorio(self, client):
         r = client.post(
             "/api/analysis/upload_dynamic",
@@ -36,6 +40,7 @@ class TestUploadDynamic:
         payload = detail.json()
         assert payload["dynamicResult"]["dynamicReportText"].startswith("RELATÓRIO VM")
 
+# --- Teste: verifica associa a job estatico existente ---
     def test_associa_a_job_estatico_existente(self, client):
         static = client.post(
             "/api/analysis/upload_static",
@@ -77,6 +82,7 @@ class TestUploadDynamic:
         assert detail["staticResult"]["report"] == "estático"
         assert "comportamento na VM" in detail["dynamicResult"]["dynamicReportText"]
 
+# --- Teste: verifica job inexistente 404 ---
     def test_job_inexistente_404(self, client):
         missing = str(uuid.uuid4())
         r = client.post(

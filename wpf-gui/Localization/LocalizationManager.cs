@@ -1,3 +1,4 @@
+﻿// --- Módulo: LocalizationManager.cs ---
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -6,6 +7,7 @@ using RatAnalyzer.Desktop.Infrastructure;
 
 namespace RatAnalyzer.Desktop.Localization;
 
+// --- Gestor central de idioma (pt/en) e catálogo de strings ---
 public static class LocalizationManager
 {
     public const string Portuguese = "pt";

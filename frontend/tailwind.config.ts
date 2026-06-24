@@ -1,6 +1,8 @@
+// --- Módulo: tailwind.config.ts ---
 import type { Config } from "tailwindcss";
 import animate from "tailwindcss-animate";
 
+// --- Tema Tailwind da aplicação (cores CSS vars, fontes, animações) ---
 export default {
   darkMode: ["class"],
   content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],

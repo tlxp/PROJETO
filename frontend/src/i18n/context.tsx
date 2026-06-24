@@ -1,3 +1,4 @@
+// --- Módulo: context.tsx ---
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import {
   CATALOG,
@@ -18,12 +19,14 @@ type I18nContextValue = {
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
+// --- Atualiza atributo lang do documento HTML ---
 function applyDocumentLang(lang: Lang) {
   if (typeof document !== "undefined") {
     document.documentElement.lang = lang === "en" ? "en" : "pt";
   }
 }
 
+// --- Provider de internacionalização (React Context) ---
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>(() => readInitialLang());
 
@@ -62,13 +65,14 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 
+// --- Hook de tradução dentro de componentes React ---
 export function useI18n(): I18nContextValue {
   const ctx = useContext(I18nContext);
   if (!ctx) throw new Error("useI18n must be used within I18nProvider");
   return ctx;
 }
 
-/** Tradução fora de componentes React (ex.: analysis.ts, api.ts). */
+// --- Tradução fora de componentes React (ex.: analysis.ts, api.ts) ---
 export function getLang(): Lang {
   if (typeof window !== "undefined") {
     const fromUrl = readLangFromUrl();
@@ -79,12 +83,14 @@ export function getLang(): Lang {
   return normalizeLang(import.meta.env.VITE_DEFAULT_LOCALE);
 }
 
+// --- Obtém mensagem traduzida por chave (fora de React) ---
 export function getT(key: keyof Messages, vars?: Record<string, string | number>): string {
   const lang = getLang();
   const template = CATALOG[lang][key] ?? CATALOG.pt[key] ?? String(key);
   return vars ? formatMessage(template, vars) : template;
 }
 
+// --- Cabeçalho Accept-Language para pedidos HTTP ---
 export function getAcceptLanguage(): string {
   return getLang() === "en" ? "en-US,en;q=0.9" : "pt-PT,pt;q=0.9";
 }

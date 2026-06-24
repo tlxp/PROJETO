@@ -1,3 +1,4 @@
+﻿// --- Módulo: GhidraDependencyHelper.cs ---
 using System;
 using System.IO;
 using System.IO.Compression;
@@ -10,18 +11,13 @@ using System.Windows;
 
 namespace RatAnalyzer.Desktop.Helpers;
 
-/// <summary>
-/// Oferece instalação guiada do Ghidra (transferência + extração) quando <c>GHIDRA_INSTALL_DIR</c>
-/// não aponta para uma instalação válida.
-/// </summary>
+// --- Oferece instalação guiada do Ghidra (transferência + extração) quando GHIDRA_INSTALL_DIR é inválido ---
 internal static class GhidraDependencyHelper
 {
     private const string GithubLatestApi =
         "https://api.github.com/repos/NationalSecurityAgency/ghidra/releases/latest";
 
-    /// <summary>
-    /// Resolve <c>GHIDRA_INSTALL_DIR</c> (processo, utilizador, máquina) se a pasta for uma instalação Ghidra válida.
-    /// </summary>
+    // --- Resolve GHIDRA_INSTALL_DIR (processo/utilizador/máquina) se a pasta for instalação Ghidra válida ---
     public static string? GetEffectiveGhidraInstallDir()
     {
         foreach (var target in new[]
@@ -54,9 +50,7 @@ internal static class GhidraDependencyHelper
         return best;
     }
 
-    /// <summary>
-    /// Instalação Ghidra válida para o processo uvicorn (ignora GHIDRA_INSTALL_DIR obsoleto).
-    /// </summary>
+    // --- Instalação Ghidra válida para o uvicorn (ignora GHIDRA_INSTALL_DIR obsoleto) ---
     internal static string? ResolveGhidraInstallDirForBackend() => GetEffectiveGhidraInstallDir();
 
     public static bool IsValidGhidraDirectory(string path)
@@ -84,9 +78,7 @@ internal static class GhidraDependencyHelper
         return false;
     }
 
-    /// <summary>
-    /// Se já existir Ghidra válido, regista no log. Caso contrário pergunta ao utilizador e tenta instalar.
-    /// </summary>
+    // --- Se já existir Ghidra válido regista no log; senão pergunta ao utilizador e tenta instalar ---
     public static async Task TryOfferInstallIfMissingAsync(Action<string> log, CancellationToken ct)
     {
         var existing = GetEffectiveGhidraInstallDir();
