@@ -116,27 +116,25 @@
 \begin{titlepage}
     \thispagestyle{empty}
     \centering
-    \vspace*{2.5cm}
+    \vspace*{1.2cm}
     {\Large \ubi\par}
-    \vspace{0.5cm}
+    \vspace{0.35cm}
     {\large Department of Computer Science\par}
-    \vspace{3.5cm}
+    \vspace{1.6cm}
     {\large Nº 1 - 2025/2026: RAT Analyzer --- Integrated Static and Dynamic Analysis\\Platform for Remote Access Trojan Detection\par}
-    \vspace{1.8cm}
-    \begin{center}
-        \includegraphics[width=0.38\textwidth]{logo.png}
-    \end{center}
-    \vspace{2.2cm}
+    \vspace{0.9cm}
+    \includegraphics[width=0.34\textwidth]{logo.png}
+    \vspace{1.1cm}
     {\large Developed by:\par}
-    \vspace{0.4cm}
+    \vspace{0.25cm}
     {\large José Miguel Gonçalves de Amoreira --- 51712\par}
-    \vspace{1.8cm}
+    \vspace{0.75cm}
     {\large Supervisor:\par}
-    \vspace{0.4cm}
+    \vspace{0.25cm}
     {\large Professor João Bernardo Ferreira Sequeiros\par}
     \vfill
     {\large June 24, 2026\par}
-    \vspace*{1.5cm}
+    \vspace*{0.8cm}
 \end{titlepage}
 \cleardoublepage
 
@@ -150,13 +148,13 @@
 \markboth{Abstract}{Abstract}
 
 This report presents \rat{}, an integrated static and dynamic analysis platform for detecting
-\emph{Remote Access Trojans} (RATs) in Windows executables and C\# source code, developed as
-the final-year project in Computer Science Engineering at \ubi{}. The solution combines a
-Python backend (FastAPI) with a seven-phase pipeline (PE metadata, decompilation, heuristics,
-deobfuscation, YARA, risk scoring, and reporting), a React web interface with an optional
-Gemini assistant, a WPF desktop application, and an isolated Hyper-V sandbox with two
-independent orchestration paths (HTTP vm-agent and PowerShell Direct with SHA-256 integrity
-checks). Validation relies on 188 automated tests, synthetic scoring profiles aligned with
+\emph{Remote Access Trojans} (RATs) in Windows executables (and C\# source with reduced scope),
+developed as the final-year project in Computer Science Engineering at \ubi{}. The solution
+combines a Python backend (FastAPI) with a seven-phase pipeline (PE metadata, ILSpy, heuristics,
+deobfuscation, YARA, risk scoring, native/Ghidra when needed, and reporting), a React web
+interface with an optional Gemini assistant, a WPF desktop application, and an isolated
+Hyper-V sandbox with two independent orchestration paths (HTTP vm-agent and PowerShell Direct
+with SHA-256 integrity checks). Validation relies on 188 automated tests, synthetic scoring profiles aligned with
 \texttt{test\_risk\_scoring.py}, and benign execution via \texttt{benign-vm-test.exe} on
 Path~B. The system emphasises explainability and local isolation over commercial cloud
 sandboxes, targeting academic and laboratory use.
@@ -257,7 +255,9 @@ all very much.
 This report presents the final-year project in Computer Science Engineering at \ubi,
 dedicated to the development of \rat: an integrated static and dynamic analysis platform
 for detecting \emph{Remote Access Trojans} (RATs) in Windows executables (\texttt{.exe},
-\texttt{.dll}) and C\# source files (\texttt{.cs}).
+\texttt{.dll}) and, with reduced scope, C\# source files (\texttt{.cs}): on the web/API,
+\texttt{.cs} files undergo string-based heuristics only (no PE imports or ILSpy); compilation
+to \texttt{.exe} is available via the optional Tkinter GUI or manual build before upload.
 
 RATs are among the most concerning classes of malware today: they allow an attacker to
 remotely control a compromised system, harvest credentials, exfiltrate data, and execute
@@ -519,9 +519,12 @@ native PE binaries, producing pseudo-C that is exposed in the web interface code
 The dynamic sandbox relies on \textbf{Hyper-V}, the native Windows hypervisor, with a VM named
 \texttt{MalwareSandbox}, connected to an \textbf{Internal} switch with no Internet connectivity
 on the guest and a \texttt{CleanState} snapshot that is restored before each analysis.
-\textbf{PowerShell} automates setup (\texttt{01-Setup-MalwareSandbox.ps1}), sample copy and
-execution (\texttt{04-Run-Sample.ps1}), and Hyper-V orchestration on
-Path~A. \textbf{SQLite} persists analysis jobs in \texttt{analysis.db}; \textbf{Redis}
+\textbf{PowerShell} automates one-time VM setup (\texttt{01-Setup-MalwareSandbox.ps1}) and,
+on \textbf{Path~B}, sample copy, guest execution, and report transfer
+(\texttt{04-Run-Sample.ps1}). On \textbf{Path~A}, the Python backend
+(\texttt{vm\_drivers/hyperv.py}) uses PowerShell only for snapshot restore and VM start;
+sample upload, execution, and report retrieval go through the HTTP vm-agent.
+\textbf{SQLite} persists analysis jobs in \texttt{analysis.db}; \textbf{Redis}
 with \textbf{RQ} is a configurable option for distributed queuing in environments with multiple workers.
 
 The backend selects the sandbox driver at runtime via \texttt{SANDBOX\_VM\_DRIVER}; the orchestrator
@@ -547,7 +550,9 @@ with rigour and consistency.
 
 The design adopts \emph{fail-closed} in production: the backend refuses to start without
 \texttt{RATANALYZER\_API\_TOKEN} when \texttt{RATANALYZER\_ENV=production}; the vm-agent
-terminates without \texttt{VM\_AGENT\_TOKEN}. Secrets reside in \texttt{secrets/} (gitignored),
+refuses to start without \texttt{VM\_AGENT\_TOKEN} (unless
+\texttt{VM\_AGENT\_ALLOW\_INSECURE=1} in local development). Secrets reside in
+\texttt{secrets/} (gitignored),
 generated by \texttt{scripts/generate-production-secrets.ps1}. HTTP uploads are authenticated,
 with name sanitisation, size limits, and storage in \texttt{DATA\_DIR} outside the repository.
 The canonical security documentation is in \texttt{docs/SEGURANCA.md}.
@@ -592,11 +597,14 @@ The following Functional Requirements (FR) were defined taking into account user
 \endhead
 \fr{01} &
 \textbf{Sample upload and validation.} The system must accept \texttt{.exe}, \texttt{.dll},
-and \texttt{.cs} files via web interface, WPF desktop, or REST API. Validates extension, maximum
-size (\texttt{RATANALYZER\_MAX\_UPLOAD\_MB}, default 100~MB), and sanitises file names. \\
+and \texttt{.cs} files via web interface, WPF desktop, or REST API. For \texttt{.cs}, the
+web/API path applies string heuristics only; full PE/ILSpy analysis requires a compiled
+\texttt{.exe}/\texttt{.dll}. Validates extension, maximum size
+(\texttt{RATANALYZER\_MAX\_UPLOAD\_MB}, default 100~MB), and sanitises file names. \\
 \fr{02} &
-\textbf{Complete static analysis.} 7-phase pipeline: PE metadata, decompilation (.NET/native),
-static analysis (imports, C2 strings, evasion), deobfuscation, YARA scan, scoring, and report. \\
+\textbf{Complete static analysis.} 7-phase pipeline: PE metadata, ILSpy (.NET, if applicable),
+static analysis (imports, C2 strings, evasion), deobfuscation, YARA scan, scoring, native
+disassembly/Ghidra (when ILSpy is unavailable), and report. \\
 \fr{03} &
 \textbf{Dynamic analysis in sandbox.} Run sample in an isolated Hyper-V VM (no Internet),
 monitor behaviour, and return behavioural report. Supports \texttt{static},
@@ -607,11 +615,13 @@ Persistence in SQLite with UUID v4; artefacts in \texttt{sandbox\_jobs/}. \\
 \fr{05} &
 \textbf{Results visualisation.} Web interface with three panels: pseudo-C (Ghidra),
 IL (.NET), and \emph{report} (split horizontally into static + VM when both exist
-in the same \texttt{jobId}); contextual navigation between indicators and code. Permalink
+in the same \texttt{jobId}); contextual navigation between indicators and code, including the
+\textbf{Xref Explorer} (\texttt{/analysis/\{jobId\}/xref}). Permalink
 \texttt{/analysis/\{jobId\}} with real-time updates while VM analysis is in progress. \\
 \fr{06} &
 \textbf{Risk scoring.} Calculate score 0--100 aggregating YARA, C2, evasion, packers, obfuscation,
-persistence, and entropy; classify as CRITICAL/HIGH/MEDIUM/LOW/VERY LOW. \\
+persistence, and entropy; classify as CRÍTICO/ALTO/MÉDIO/BAIXO/MUITO BAIXO with
+\texttt{strong\_evidence} gates for the two highest levels. \\
 \fr{07} &
 \textbf{Progress streaming.} \texttt{/api/analyze\_stream} endpoint in NDJSON with incremental
 logs during static analysis. \\
@@ -641,7 +651,8 @@ response exists, without API call. \\
         Function & Receive and validate \texttt{.exe}, \texttt{.dll}, or \texttt{.cs} files
                  submitted by the user. \\
         Inputs & Binary file or source code; analysis mode (\texttt{static},
-                   \texttt{dynamic}, \texttt{both}). \\
+                   \texttt{dynamic}, \texttt{both}). For \texttt{.cs} on web/API, only static
+                   string heuristics apply; dynamic analysis expects an executable. \\
         Outputs & Created job UUID; descriptive error message if rejected. \\
         Action & Validate extension and size; sanitise name; create database record;
                 return \texttt{job\_id}. \\
@@ -663,8 +674,10 @@ response exists, without API call. \\
         Inputs & Job ID; file stored in \texttt{DATA\_DIR}. \\
         Outputs & JSON report with PE metadata, suspicious imports, C2 strings, risk score,
                  YARA results, and decompiled code excerpts. \\
-        Action & Sequential phases: PE metadata → decompilation → analysis → deobfuscation →
-                YARA → scoring → report. \\
+        Action & Sequential phases: PE metadata $\rightarrow$ ILSpy (if \texttt{.exe/.dll})
+                $\rightarrow$ static analysis $\rightarrow$ deobfuscation $\rightarrow$
+                YARA $\rightarrow$ scoring $\rightarrow$ native disassembly/Ghidra (if needed)
+                $\rightarrow$ report. \\
         Preconditions & FR~01 completed successfully; ILSpy and Ghidra installed (for
                          decompilation). \\
         Side effects & Report saved in \texttt{last\_analysis.json}; job updated
@@ -743,7 +756,8 @@ functional requirements.
         Function & Aggregate indicators into a 0--100 score and qualitative level. \\
         Inputs & Static results, YARA, and deobfuscation. \\
         Outputs & \texttt{riskScore}, \texttt{riskLevel}, breakdown by factor. \\
-        Action & Apply per-factor caps (\texttt{risk\_scorer.py}); classify level. \\
+        Action & Apply per-factor caps (\texttt{risk\_scorer.py}); classify level using
+                score thresholds and \texttt{strong\_evidence} (YARA, C2, imports). \\
         Preconditions & FR~02 completed (analysis and YARA phases). \\
         \bottomrule
     \end{tabular}
@@ -811,15 +825,20 @@ account the quality attributes most relevant to the malware analysis context:
           (\texttt{RATANALYZER\_API\_TOKEN}, \texttt{VM\_AGENT\_TOKEN}); secrets
           never versioned in the Git repository.
     \item[\nfr{02} — Isolation] The sandbox VM must be connected to an \textbf{Internal} switch
-          with no Internet routing to the guest; network \emph{preflight} must exist before each run;
-          automatic restore to \texttt{CleanState} snapshot after each dynamic analysis.
+          with no Internet routing to the guest; on \textbf{Path~B}, a network \emph{preflight}
+          runs before each sample (\texttt{RunSample/PhaseA-Setup.ps1}); Path~A relies on
+          correct manual VM configuration; automatic restore to \texttt{CleanState} snapshot
+          after each dynamic analysis.
     \item[\nfr{03} — Usability] The web interface must support \emph{drag-and-drop};
           must provide real-time feedback during analysis; must be responsive and
           accessible in modern browsers. A user with basic information security knowledge
           should be able to submit and interpret an analysis without additional training.
     \item[\nfr{04} — Performance] The system must support at least 2 concurrent workers
-          in default mode (configurable); sandbox timeout must be configurable
-          (default 120~s) to accommodate samples with different execution times.
+          in default mode (configurable); execution timeouts must be configurable per path:
+          Path~A defaults to 300~s (\texttt{SANDBOX\_DYNAMIC\_TIMEOUT\_SECONDS});
+          Path~B defaults to 120~s per sample (\texttt{TimeoutSeconds} in
+          \texttt{04-Run-Sample.ps1}) with a 900~s global cap; VM restore/start operations
+          use a separate 120~s timeout (\texttt{SANDBOX\_VM\_OP\_TIMEOUT\_SECONDS}).
     \item[\nfr{05} — Maintainability] The project must include automated CI tests
           (pytest, Vitest, dotnet build); dependency locks with hashes for reproducible
           integrity; and extensive technical documentation versioned in the repository.
@@ -982,12 +1001,13 @@ def _validate_cfg(self) -> None:
         \toprule
         \textbf{Principle} & \textbf{Implementation} \\
         \midrule
-        Fail-closed & Backend and vm-agent refuse to start without tokens in production \\
+        Fail-closed & Backend refuses to start without token in production; vm-agent refuses
+          without \texttt{VM\_AGENT\_TOKEN} (except \texttt{VM\_AGENT\_ALLOW\_INSECURE=1} in dev) \\
         Malware isolated & Execution only in Hyper-V VM or \texttt{stub} driver \\
         Secrets outside Git & \texttt{secrets/}, \texttt{.env} gitignored \\
         Local bind & API on \texttt{127.0.0.1}; vm-agent on VM internal IP \\
         Least privilege & Guest with \texttt{analyst} user; host admin only for Hyper-V \\
-        Defence in depth & Auth + sanitisation + upload limits + clean snapshot \\
+        Defence in depth & Auth + rate limit + sanitisation + upload limits + clean snapshot \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -1021,7 +1041,8 @@ def _validate_cfg(self) -> None:
         \textbf{Surface} & \textbf{Risk} & \textbf{Mitigation} \\
         \midrule
         FastAPI API & Malware upload; report access &
-          Bind \texttt{127.0.0.1}; token; restricted CORS \\
+          Bind \texttt{127.0.0.1}; token; restricted CORS; upload rate limit
+          (\texttt{RATANALYZER\_RATE\_LIMIT\_UPLOADS\_PER\_MIN}, default 60) \\
         vm-agent & Remote execution on guest &
           Token; internal IP; isolated VM \\
         Gemini (frontend) & Code exfiltration &
@@ -1137,7 +1158,10 @@ its respective cap; the final score is limited to 100).
     \end{tabular}
 \end{table}
 
-\textbf{Levels:} 80--100 CRITICAL · 60--79 HIGH · 40--59 MEDIUM · 20--39 LOW · 0--19 VERY LOW.
+\textbf{Levels} (returned in Portuguese by the API): CRÍTICO if score $\geq 72$ and
+\texttt{strong\_evidence} (YARA match, or strong C2 combined with suspicious functions/imports);
+ALTO if score $\geq 48$ with at least one strong signal; MÉDIO if score $\geq 35$; BAIXO if
+score $\geq 15$; otherwise MUITO BAIXO.
 
 \section{Conclusions}
 
@@ -1191,13 +1215,18 @@ The \texttt{RATAnalyzer} class (\texttt{backend/rat\_analyzer.py}) orchestrates 
 
 \begin{enumerate}
     \item PE metadata extraction (\texttt{file\_info}).
-    \item .NET decompilation via ILSpy (if applicable).
+    \item .NET decompilation via ILSpy (for \texttt{.exe}/\texttt{.dll} only).
     \item Static analysis — suspicious imports, C2 strings, anti-debug/anti-VM, entropy.
     \item Deobfuscation — Base64, XOR, obfuscation indicators.
     \item YARA scan over \texttt{yara\_rules/}.
     \item Score calculation via \texttt{risk\_scorer.py}.
-    \item Report generation (\texttt{report\_generator.py}).
+    \item Report generation (\texttt{report\_generator.py}), preceded when needed by native
+          disassembly and Ghidra pseudo-C (sub-steps \texttt{[7a]/[7b]} in
+          \texttt{rat\_analyzer.py}, after scoring, if ILSpy did not produce managed code).
 \end{enumerate}
+
+For \texttt{.cs} uploads via the web/API, phase~2 is skipped and Ghidra is not applied;
+only string-based heuristics from phase~3 contribute to the report.
 
 The FastAPI API (\texttt{backend/api.py} via \texttt{app\_factory.py}) exposes REST endpoints
 documented in OpenAPI (\texttt{/docs}), organised in \texttt{routers/} (\texttt{analyze},
@@ -1215,6 +1244,7 @@ except \texttt{/api/health}.
         \toprule
         \textbf{Method} & \textbf{Route} & \textbf{Function} \\
         \midrule
+        POST & \texttt{/api/analyze} & Synchronous static analysis (JSON response) \\
         POST & \texttt{/api/analyze\_stream} & Static analysis with NDJSON streaming \\
         POST & \texttt{/api/analysis} & Create job (\texttt{static|dynamic|both}) \\
         POST & \texttt{/api/analysis/upload\_static} & Publish static result to existing job \\
@@ -1224,6 +1254,7 @@ except \texttt{/api/health}.
         GET & \texttt{/api/analyses} & Recent job listing \\
         GET & \texttt{/api/health} & Enriched \emph{health check} (no token) \\
         GET & \texttt{/metrics} & Prometheus metrics (in-memory counters) \\
+        GET & \texttt{/api/storage/estimate} & \texttt{DATA\_DIR} usage estimate \\
         POST & \texttt{/api/storage/cleanup|archive|purge} & \texttt{DATA\_DIR} management \\
         \bottomrule
     \end{tabular}
@@ -1239,6 +1270,7 @@ except \texttt{/api/health}.
         \textbf{Control} & \textbf{Detail} \\
         \midrule
         Authentication & \texttt{X-API-Token} on all uploads \\
+        Rate limit & \texttt{RATANALYZER\_RATE\_LIMIT\_UPLOADS\_PER\_MIN} (default 60/min per IP) \\
         File name & Rejects \texttt{..}, separators, absolute paths \\
         Size & \texttt{RATANALYZER\_MAX\_UPLOAD\_MB} (default 100~MB) \\
         Job ID & UUID v4 only \\
@@ -1271,7 +1303,9 @@ The \texttt{Index.tsx} page orchestrates upload (\texttt{FileDropZone}), streami
 report, pseudo-C, and IL. Hooks with \texttt{AbortController} cancel pending requests when
 navigating or re-analysing. The \texttt{src/i18n/} module provides a Portuguese or English
 interface: resolution via \texttt{?lang=}, \texttt{localStorage}, and \texttt{VITE\_DEFAULT\_LOCALE};
-\texttt{apiFetch} requests send \texttt{Accept-Language}. Figures~\ref{fig:web-upload}
+\texttt{apiFetch} requests send \texttt{Accept-Language}. The \textbf{Xref Explorer}
+(\texttt{/analysis/\{jobId\}/xref}) lets the analyst search and navigate cross-references in
+the pseudo-C panel. Figures~\ref{fig:web-upload}
 and~\ref{fig:web-results} illustrate the upload zone and results with score and code panels.
 
 \begin{figure}[H]
@@ -1450,6 +1484,7 @@ return Results.Ok(new { status = "finished", exitCode = proc.ExitCode });
         \texttt{VM\_AGENT\_BASE\_URL} & Agent URL (e.g.\ \texttt{http://192.168.100.10:5000}) \\
         \texttt{VM\_AGENT\_TOKEN} & Shared backend$\leftrightarrow$agent token \\
         \texttt{SANDBOX\_VM\_OP\_TIMEOUT\_SECONDS} & Restore/start timeout (default 120~s) \\
+        \texttt{SANDBOX\_DYNAMIC\_TIMEOUT\_SECONDS} & Sample execution timeout on guest (default 300~s) \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -1617,17 +1652,17 @@ run automatically in CI (pytest).
         \texttt{BenignVmTest.exe} &
         Benign binary &
         $<48$ &
-        LOW/MEDIUM &
+        BAIXO/MÉDIO &
         Known hash; \texttt{validation\_sample} annotation; no YARA matches \\
         Heuristic noise &
         Synthetic profile (pytest) &
         $<48$ &
-        $\neq$ HIGH &
-        Isolated evasion/noise does not raise to HIGH without strong signals \\
+        $\neq$ ALTO &
+        Isolated evasion/noise does not raise to ALTO without strong signals \\
         Synthetic RAT profile &
         Synthetic profile (pytest) &
         $\geq48$ &
-        HIGH/CRITICAL &
+        ALTO/CRÍTICO &
         C2 imports, persistence, YARA \texttt{RAT\_Generic} \\
         YARA rules v2.0.0 &
         CI (\texttt{test\_yara\_rules}) &
@@ -1651,7 +1686,8 @@ but telemetry is still more limited (see limitations in chapter~\ref{ch:concluso
 
 Analysis times depend on sample size and Ghidra/ILSpy availability. In a development environment
 (small PE samples, $<$5~MB), complete static analysis typically takes between 15 and 90~seconds;
-dynamic sandbox adds 2--4~minutes (VM restore, boot, default timeout 120~s). These values are
+dynamic sandbox adds 2--4~minutes (VM restore, boot, sample timeout: 300~s on Path~A,
+120~s default on Path~B). These values are
 indicative and do not constitute a formal \emph{benchmark}.
 
 \section{Tests}
@@ -1727,8 +1763,9 @@ Computer Science Engineering student and, certainly, as a future professional in
 static and dynamic analysis platform for RAT detection, with the following concrete results:
 
 \begin{itemize}
-    \item \textbf{Complete static pipeline} — 7 implemented phases (PE metadata, .NET/native
-          decompilation, import and C2 string analysis, deobfuscation, YARA scan, scoring, and report),
+    \item \textbf{Complete static pipeline} — 7 implemented phases (PE metadata, ILSpy,
+          import and C2 string analysis, deobfuscation, YARA scan, scoring, native/Ghidra when
+          needed, and report),
           with 84 automated backend tests.
     \item \textbf{Isolated Hyper-V sandbox} — Two independent and complementary orchestration paths
           (HTTP via vm-agent and PowerShell Direct), with automatic restore to clean snapshot
@@ -1754,7 +1791,10 @@ Despite the results obtained, relevant limitations are acknowledged:
 \begin{itemize}
     \item Empirical validation relies on benign samples and synthetic profiles; detection rates
           against real malware were not measured for legal and isolation reasons.
-    \item Path A (vm-agent) records more limited behavioural telemetry than Path B.
+    \item Path A (vm-agent) records more limited behavioural telemetry than Path B and does not
+          run the network-isolation preflight implemented on Path~B.
+    \item \texttt{.cs} uploads via the web/API receive string heuristics only; full ILSpy/Ghidra
+          analysis requires a compiled \texttt{.exe}/\texttt{.dll}.
     \item Heuristic scoring may produce false positives on legitimate binaries with network
           imports; filters were implemented (e.g.\ exclusion of Microsoft URLs in C2).
     \item Dynamic analysis requires Hyper-V and manual VM configuration, which limits portability.
