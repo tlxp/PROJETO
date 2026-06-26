@@ -31,8 +31,8 @@ jobs:
           pip install pip-tools
           python -m piptools compile requirements.txt -o /tmp/requirements.lock --strip-extras --generate-hashes --quiet
           python -m piptools compile requirements-dev.txt -o /tmp/requirements-dev.lock --strip-extras --generate-hashes --quiet
-          diff -u requirements.lock /tmp/requirements.lock
-          diff -u requirements-dev.lock /tmp/requirements-dev.lock
+          diff -u <(tail -n +7 requirements.lock) <(tail -n +7 /tmp/requirements.lock)
+          diff -u <(tail -n +7 requirements-dev.lock) <(tail -n +7 /tmp/requirements-dev.lock)
       - name: Compilar módulos
         run: python -m compileall backend
       - name: Auditoria de dependências Python
