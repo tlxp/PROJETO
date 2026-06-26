@@ -1,5 +1,5 @@
-# --- Script: SysmonResolve.ps1 ---
-# Resolução de Sysmon (exe + config) e download robusto (host).
+# --- Módulo: SysmonResolve.ps1 ---
+# --- Resolução de Sysmon.exe e ficheiro de configuração ---
 # Carregado via dot-sourcing (mesmo scope).
 
 # --- Download robusto de ficheiros via HTTP ---
@@ -13,7 +13,7 @@ function Download-FileRobust {
     $lastErr = $null
     for ($i = 1; $i -le $Retries; $i++) {
         try {
-            # *Remove destino anterior para evitar ficheiro corrompido de tentativa falhada*
+            # Remove destino anterior para evitar ficheiro corrompido de tentativa falhada
             if (Test-Path -LiteralPath $DestinationPath) {
                 Remove-Item -LiteralPath $DestinationPath -Force -ErrorAction SilentlyContinue
             }
@@ -24,7 +24,7 @@ function Download-FileRobust {
             return
         } catch {
             $lastErr = $_.Exception.Message
-            # *Espera exponencial entre tentativas (máx. 10 s)*
+            # Espera exponencial entre tentativas (máx. 10 s)
             if ($i -lt $Retries) { Start-Sleep -Seconds ([Math]::Min(10, 2 * $i)) }
         }
     }
@@ -35,12 +35,12 @@ function Download-FileRobust {
 function Resolve-SysmonExePath {
     param([string] $PreferredPath)
 
-    # *Usa caminho explícito se existir*
+    # Usa caminho explícito se existir
     if (-not [string]::IsNullOrWhiteSpace($PreferredPath) -and (Test-Path -LiteralPath $PreferredPath)) {
         return (Resolve-Path -LiteralPath $PreferredPath).Path
     }
 
-    # *Procura em locais conhecidos do projecto e do sistema*
+    # Procura em locais conhecidos do projecto e do sistema
     $candidates = @(
         "D:\Tools\Sysmon\Sysmon64.exe",
         "D:\Tools\Sysmon\Sysmon.exe",
@@ -60,7 +60,7 @@ function Resolve-SysmonExePath {
     Download-FileRobust -Url "https://download.sysinternals.com/files/Sysmon.zip" -DestinationPath $zipPath -Retries 3
     Expand-Archive -LiteralPath $zipPath -DestinationPath $tmpDir -Force
 
-    # *Preferir Sysmon64.exe; aceitar Sysmon.exe como alternativa*
+    # Preferir Sysmon64.exe; aceitar Sysmon.exe como alternativa
     $exe = @(
         (Join-Path $tmpDir "Sysmon64.exe"),
         (Join-Path $tmpDir "Sysmon.exe")
@@ -76,12 +76,12 @@ function Resolve-SysmonExePath {
 function Resolve-SysmonConfigPath {
     param([string] $PreferredPath, [string] $SysmonExeResolved)
 
-    # *Usa caminho explícito se existir*
+    # Usa caminho explícito se existir
     if (-not [string]::IsNullOrWhiteSpace($PreferredPath) -and (Test-Path -LiteralPath $PreferredPath)) {
         return (Resolve-Path -LiteralPath $PreferredPath).Path
     }
 
-    # *Procura em locais conhecidos do projecto e do sistema*
+    # Procura em locais conhecidos do projecto e do sistema
     $candidates = @(
         "D:\Tools\Sysmon\sysmon-config.xml",
         "D:\Tools\Sysmon\sysmonconfig.xml",
@@ -94,7 +94,7 @@ function Resolve-SysmonConfigPath {
     }
 
     # --- Fallback: descarregar config conhecida ou gerar mínima ---
-    # *Coloca a config junto do exe resolvido*
+    # Coloca a config junto do exe resolvido
     $tmpDir = Split-Path -Parent $SysmonExeResolved
     $cfgPath = Join-Path $tmpDir "sysmon-config.xml"
     try {
@@ -103,7 +103,7 @@ function Resolve-SysmonConfigPath {
         return $cfgPath
     } catch {
         Write-Warning "Não foi possível descarregar config default. A gerar config mínima: $($_.Exception.Message)"
-        # *Config mínima válida quando o download remoto falha*
+        # Config mínima válida quando o download remoto falha
         @"
 <Sysmon schemaversion="4.90">
   <HashAlgorithms>*</HashAlgorithms>

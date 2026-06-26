@@ -51,7 +51,7 @@ recebe relatórios detalhados a partir de um único ecossistema de ferramentas.
 | **Backend** | [`backend/`](backend/README.md) | Python · FastAPI | API e pipeline de análise (estática + orquestração da dinâmica). |
 | **Frontend** | [`frontend/`](frontend/README.md) | React · Vite · TS | Interface web *Drop & Analyze* (upload, relatórios, pseudo-C, IL, xrefs). |
 | **Desktop** | [`wpf-gui/`](wpf-gui/README.md) | .NET 8 · WPF | App `RatAnalyzer.Desktop`: ponto de entrada gráfico, bootstrap de dependências e VM. |
-| **GUI Tkinter** *(opcional)* | [`backend/gui/`](backend/gui/README.md) | Python · Tkinter | Interface gráfica leve: arrastar `.cs`/`.exe` sem Node nem WPF. |
+| **GUI Tkinter** *(deprecated / legacy)* | [`backend/gui/`](backend/gui/README.md) | Python · Tkinter | ~~Opcional~~ Mantida só para compatibilidade; usar **web** ou **WPF**. |
 | **VM Agent** | [`vm-agent/`](vm-agent/README.md) | .NET 8 · Minimal API | Agent HTTP que corre dentro da VM sandbox (upload/run/report). |
 | **Teste benigno** | [`benign-vm-test/`](benign-vm-test/README.md) | .NET 8 | Programa inofensivo para validar o pipeline da VM. |
 | **Exemplos .NET** *(opcional)* | [`programa/`](programa/README.md) | C# | Projetos de exemplo para testes manuais e fluxo *arrastar .cs → compilar*. |
@@ -73,7 +73,7 @@ PROJETO/
 │   ├── vm_orchestrator.py   #   Orquestração da análise dinâmica (escolhe driver)
 │   ├── modules/             #   Analisadores (static, yara, deobfuscator, decompilers, scoring…)
 │   ├── vm_drivers/          #   Drivers dinâmicos (stub, hyperv, proxmox)
-│   ├── gui/                 #   GUI Tkinter opcional - ver backend/gui/README.md
+│   ├── gui/                 #   GUI Tkinter deprecated (legacy) - ver backend/gui/README.md
 │   └── tests/               #   Testes (pytest)
 ├── frontend/                # Interface web React/Vite
 ├── wpf-gui/                 # App desktop WPF (.NET 8) - ver wpf-gui/README.md

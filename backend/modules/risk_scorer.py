@@ -25,7 +25,7 @@ class RiskScorer:
         "high_entropy": 5,
     }
 
-# --- Helper interno: init   ---
+# --- Inicialização sem estado persistente ---
     def __init__(self):
         pass
 
@@ -161,7 +161,7 @@ class RiskScorer:
         return result
 
     @staticmethod
-# --- Helper interno: tier score ---
+# --- Pontuação por patamares com teto máximo ---
     def _tier_score(count: int, per_item: int, maximum: int) -> int:
         if count <= 0:
             return 0

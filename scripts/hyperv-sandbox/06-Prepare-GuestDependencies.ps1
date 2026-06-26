@@ -1,4 +1,5 @@
-# --- Script: 06-Prepare-GuestDependencies.ps1 ---
+# --- Módulo: 06-Prepare-GuestDependencies.ps1 ---
+# --- Descarrega e prepara dependências no guest ---
 <#
 .SYNOPSIS
     Prepara dependências OFFLINE para análises futuras (sem internet na VM).
@@ -75,7 +76,7 @@ Write-LogHost ""
 $vm = Get-VM -Name $VMName -ErrorAction SilentlyContinue
 if (-not $vm) { throw "VM '$VMName' não encontrada." }
 
-# *Credenciais candidatas para PowerShell Direct e Copy-VMFile*
+# Credenciais candidatas para PowerShell Direct e Copy-VMFile
 $credCandidates = New-SandboxCredentialCandidates -UserName $GuestUser -Password $GuestPassword -ComputerName $VMName
 $cred = $credCandidates | Select-Object -First 1
 
@@ -87,7 +88,7 @@ try {
     . (Join-Path $PrepDepsLibDir 'Flow2-Stage.ps1')
 }
 finally {
-    # *Garante paragem da VM e remoção de adaptadores mesmo em caso de erro*
+    # Garante paragem da VM e remoção de adaptadores mesmo em caso de erro
     try {
         if (-not $HostOnly) {
             Stop-SandboxVM -VMName $VMName -ErrorAction SilentlyContinue

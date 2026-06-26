@@ -1,5 +1,5 @@
 # --- Módulo: deobfuscator ---
-# --- Deobfuscação: unpack UPX, patch XOR, decode Base64 em binários/C# ---
+# Deobfuscação: unpack UPX, patch XOR e decode Base64 em binários/C#.
 
 import base64
 import binascii
@@ -18,7 +18,7 @@ logger = logging.getLogger("rat_analyzer_deobfuscator")
 # --- Deobfuscador básico para strings e código ---
 class Deobfuscator:
 
-# --- Helper interno: init   ---
+# --- Inicializa registo de resultados de deobfuscação ---
     def __init__(self):
         self.deobfuscation_results = {}
     
@@ -72,8 +72,8 @@ class Deobfuscator:
             matches = re.findall(pattern, text, re.IGNORECASE)
             xor_strings.extend(matches[:15])
         return list(set(xor_strings))
-    
-    # Nomes de tipos/metadados .NET que não são Base64 (evitar falsos positivos)
+
+    # --- Metadados .NET que não são Base64 (evitar falsos positivos) ---
     BASE64_DOTNET_FALSE_POSITIVES = (
         'attribute', 'assembly', 'compiler', 'runtime', 'configuration',
         'version', 'framework', 'compatibility', 'generated', 'compilation',
@@ -81,7 +81,7 @@ class Deobfuscator:
         'product', 'company', 'title', 'target', 'informational', 'file',
     )
 
-# --- Helper interno: is probable base64 literal ---
+# --- Validação de literal Base64 provável ---
     def _is_probable_base64_literal(self, s: str) -> bool:
         if not s or not isinstance(s, str):
             return False
@@ -109,7 +109,7 @@ class Deobfuscator:
             return False
         return True
 
-# --- Helper interno: decode base64 to readable text ---
+# --- Decode Base64 para texto legível ---
     def _decode_base64_to_readable_text(self, s: str) -> str | None:
         if not self._is_probable_base64_literal(s):
             return None
@@ -187,7 +187,7 @@ class Deobfuscator:
             result.append(byte ^ key[i % len(key)])
         return bytes(result)
 
-    # Deobfuscação de binário (saída = ficheiro para Ghidra)
+    # --- Deobfuscação de binário para entrada do Ghidra ---
 
     # --- Deteta PE empacotado com UPX (secções UPX0/UPX1 ou assinatura UPX!) ---
     def _is_upx_packed(self, file_path: str) -> bool:
@@ -229,11 +229,11 @@ class Deobfuscator:
         except Exception as e:
             return False, str(e)
 
-# --- Helper interno: xor decrypt byte ---
+# --- Decriptação XOR byte a byte ---
     def _xor_decrypt_byte(self, data: bytes, key: int) -> bytes:
         return bytes([b ^ key for b in data])
 
-# --- Helper interno: printable ratio ---
+# --- Rácio de bytes imprimíveis no buffer ---
     def _printable_ratio(self, data: bytes) -> float:
         if not data:
             return 0.0

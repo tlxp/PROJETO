@@ -1,7 +1,9 @@
 // --- Módulo: NotFound.tsx ---
+// Página 404 para rotas inexistentes.
+
 import { Link } from "react-router-dom";
 
-// --- Página 404 ---
+// --- Componente ---
 const NotFound = () => (
   <div className="flex min-h-screen items-center justify-center bg-muted">
     <div className="text-center">

@@ -1,6 +1,5 @@
-# --- Script: compile_python_locks.ps1 ---
-# *Regenera requirements*.lock a partir dos ficheiros .txt editáveis (pip-tools).*
-# *Uso: .\scripts\ci\compile_python_locks.ps1 — requer: pip install pip-tools*
+# --- Módulo: compile_python_locks.ps1 ---
+# --- Regenera requirements*.lock via pip-tools (hashes reprodutíveis) ---
 
 $ErrorActionPreference = "Stop"
 $backend = Join-Path $PSScriptRoot "..\..\backend" | Resolve-Path
@@ -19,7 +18,7 @@ function Invoke-Compile {
     $srcPath = Join-Path $backend $Source
     $outPath = Join-Path $backend $Output
     Write-Host "pip-compile $Source -> $Output"
-    # *Compila dependências com hashes para reprodutibilidade*
+    # Compila dependências com hashes para reprodutibilidade
     python -m piptools compile $srcPath -o $outPath @compileArgs
 }
 

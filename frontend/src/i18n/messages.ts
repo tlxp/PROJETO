@@ -1,4 +1,6 @@
 // --- Módulo: messages.ts ---
+// Catálogo de mensagens da UI (PT e EN).
+
 import type { Lang, Messages } from "./types";
 
 const pt: Messages = {
@@ -141,19 +143,17 @@ export const CATALOG: Record<Lang, Messages> = { pt, en };
 
 export const STORAGE_KEY = "ratanalyzer-lang";
 
-// --- Normaliza código de idioma para pt ou en ---
+// --- Resolução de idioma ---
 export function normalizeLang(value: string | null | undefined): Lang {
   return value === "en" ? "en" : "pt";
 }
 
-// --- Lê idioma do parâmetro ?lang= na URL ---
 export function readLangFromUrl(): Lang | null {
   if (typeof window === "undefined") return null;
   const q = new URLSearchParams(window.location.search).get("lang");
   return q ? normalizeLang(q) : null;
 }
 
-// --- Idioma inicial: URL > localStorage > env ---
 export function readInitialLang(): Lang {
   const fromUrl = readLangFromUrl();
   if (fromUrl) return fromUrl;
@@ -165,7 +165,6 @@ export function readInitialLang(): Lang {
   return normalizeLang(typeof env === "string" ? env : null);
 }
 
-// --- Substitui placeholders {chave} nas mensagens ---
 export function formatMessage(template: string, vars: Record<string, string | number>): string {
   return Object.entries(vars).reduce(
     (acc, [key, value]) => acc.replaceAll(`{${key}}`, String(value)),

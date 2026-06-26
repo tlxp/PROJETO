@@ -1,10 +1,10 @@
-﻿# --- Script: PhaseB-Boot.ps1 ---
-# Fase B: parar VM, arrancar e aguardar PowerShell Direct + configuração automática do guest.
+﻿# --- Módulo: PhaseB-Boot.ps1 ---
+# --- Parar VM, arrancar e aguardar PowerShell Direct ---
 
 # --- [1/5] Parar VM para estado limpo ---
 Write-LogHost '[1/5] A parar a VM (estado limpo)...'
 if ($vm.State -ne "Off") {
-    # *Força desligamento para garantir ponto de partida consistente*
+    # Força desligamento para garantir ponto de partida consistente
     Stop-VM -Name $VMName -Force -ErrorAction SilentlyContinue
     Start-Sleep -Milliseconds 800
 }
@@ -39,7 +39,7 @@ if (-not $psDirectOk) {
     Abort-WithCleanup "Sem PowerShell Direct (timeout=${PowerShellDirectTimeoutSeconds}s)."
 }
 
-# *Se Start-SandboxVM devolveu a credencial aceite, reutilizá-la no resto do fluxo*
+# Se Start-SandboxVM devolveu a credencial aceite, reutilizá-la no resto do fluxo
 if ($psDirectOk -is [pscredential]) {
     $cred = $psDirectOk
 }
@@ -92,7 +92,7 @@ try {
 '@
 
 try {
-    # *Executa script de configuração remota via PowerShell Direct*
+    # Executa script de configuração remota via PowerShell Direct
     $autoResult = Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock ([scriptblock]::Create($autoAcceptScript))
     $autoResult | ForEach-Object { Write-LogHost "         $_" }
     Write-LogHost "       Configuração automática aplicada."

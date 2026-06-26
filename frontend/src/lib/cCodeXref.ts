@@ -1,5 +1,5 @@
 // --- Módulo: cCodeXref.ts ---
-// *Referências cruzadas no pseudo-C (blocos por chavetas, heurísticas tipo Ghidra/IDA)*
+// Referências cruzadas no pseudo-C (heurísticas tipo Ghidra/IDA).
 
 import { escapeRegex, isValidIdentifier } from "./identifiers";
 import { getCBlocks } from "./analysis";
@@ -86,7 +86,7 @@ function blockContainsLine(block: CBlock | { start: number; end: number }, line:
   return line >= block.start && line <= block.end;
 }
 
-// --- Primeira linha que parece declaração/definição do símbolo ---
+// --- Heurísticas de origem e grafo ---
 function findOriginLine(code: string, word: string): number | null {
   if (!word || word.length < 2) return null;
   const escaped = escapeRegex(word);
@@ -160,7 +160,6 @@ function buildCallEdges(
   return edges;
 }
 
-// --- Constrói nós, arestas de chamada e ordem tipo fluxo IDA ---
 export function buildXrefViewModel(code: string, word: string): XrefViewModel {
   const symbol = word.trim();
   // Validação do identificador (a palavra pode vir de um URL) antes de construir RegExp.
@@ -297,7 +296,7 @@ export type XrefSessionPayload = {
   flaggedIndicators?: string[];
 };
 
-// --- writeXrefSession ---
+// --- Sessão e navegação ---
 export function writeXrefSession(payload: XrefSessionPayload): void {
   const raw = JSON.stringify(payload);
   // `sessionStorage` não é partilhado entre separadores; o explorador abre em novo tab.
@@ -315,7 +314,6 @@ export function writeXrefSession(payload: XrefSessionPayload): void {
   }
 }
 
-// --- readXrefSession ---
 export function readXrefSession(): XrefSessionPayload | null {
   try {
     const raw =
@@ -330,7 +328,6 @@ export function readXrefSession(): XrefSessionPayload | null {
   }
 }
 
-// --- Abre explorador de xrefs num novo separador ---
 export function openXrefExplorerTab(
   href = "/xref",
   _options?: { forceNewTab?: boolean }

@@ -1,6 +1,10 @@
 // --- Módulo: AgentTokenMiddleware.cs ---
+// Autenticação por token via header X-Agent-Token.
+
 
 namespace VmAgent.Security;
+
+
 
 // --- Autenticação por token do agente ---
 internal static class AgentTokenMiddleware
@@ -11,6 +15,8 @@ internal static class AgentTokenMiddleware
         return Environment.GetEnvironmentVariable("VM_AGENT_TOKEN");
     }
 
+
+
     // --- Verifica se o modo inseguro de desenvolvimento está ativo ---
     public static bool IsInsecureDevMode()
     {
@@ -20,11 +26,15 @@ internal static class AgentTokenMiddleware
             StringComparison.Ordinal);
     }
 
+
+
     // --- Valida o token no arranque da aplicação ---
     public static bool ValidateStartupToken(string? agentToken, bool allowInsecure)
     {
         if (!string.IsNullOrWhiteSpace(agentToken))
             return true;
+
+
 
         if (!allowInsecure)
         {
@@ -36,10 +46,14 @@ internal static class AgentTokenMiddleware
             return false;
         }
 
+
+
         Console.Error.WriteLine(
             "[vm-agent] AVISO: VM_AGENT_ALLOW_INSECURE=1 — API aberta na rede da VM.");
         return true;
     }
+
+
 
     // --- Regista o middleware de autenticação por header ---
     public static void UseAgentTokenAuth(this WebApplication app, string? agentToken)
@@ -61,7 +75,10 @@ internal static class AgentTokenMiddleware
                 }
             }
 
+
+
             await next();
         });
     }
 }
+

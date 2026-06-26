@@ -1,4 +1,5 @@
-# --- Script: 02-Host-ReceiveReport.ps1 ---
+# --- Módulo: 02-Host-ReceiveReport.ps1 ---
+# --- Receptor no host do relatório via named pipe/COM1 ---
 <#
 .SYNOPSIS
     Servidor no host que recebe o relatório da VM via Named Pipe (porta serial virtual).
@@ -48,7 +49,7 @@ function Write-ReceiveLog {
 $startTime = Get-Date
 try {
     Write-ReceiveLog "A iniciar servidor Named Pipe: $PipeName"
-    # *Bloqueia até receber todas as linhas ou expirar o timeout*
+    # Bloqueia até receber todas as linhas ou expirar o timeout
     $receivedLines = Receive-SandboxReportFromPipe -PipeName $PipeName -OutputPath $OutputPath -TimeoutSeconds $TimeoutSeconds
 
     $duration = [int]((Get-Date) - $startTime).TotalSeconds

@@ -1,13 +1,19 @@
 ﻿// --- Módulo: DownloadIntegrityTests.cs ---
+// Testes de verificação SHA-256 de transferências.
 using RatAnalyzer.Desktop.Helpers;
 using Xunit;
 
+
+
 namespace RatAnalyzer.Desktop.Tests;
+
+
 
 // --- Testes de verificação SHA-256 e parsing de assets GitHub ---
 public sealed class DownloadIntegrityTests
 {
     [Fact]
+    // --- Calcula Sha 256 Hex Known conteúdo Matches esperada ---
     public void ComputeSha256Hex_KnownContent_MatchesExpected()
     {
         var path = Path.GetTempFileName();
@@ -15,8 +21,12 @@ public sealed class DownloadIntegrityTests
         {
             File.WriteAllText(path, "rat-analyzer-test");
 
+
+
             var first = DownloadIntegrity.ComputeSha256Hex(path);
             var second = DownloadIntegrity.ComputeSha256Hex(path);
+
+
 
             Assert.Equal(first, second);
             Assert.Matches("^[0-9A-F]{64}$", first);
@@ -27,7 +37,10 @@ public sealed class DownloadIntegrityTests
         }
     }
 
+
+
     [Fact]
+    // --- Verifica integridade de Sha 256 ou Throw Mismatch Throws ---
     public void VerifySha256OrThrow_Mismatch_Throws()
     {
         var path = Path.GetTempFileName();
@@ -35,8 +48,12 @@ public sealed class DownloadIntegrityTests
         {
             File.WriteAllText(path, "payload");
 
+
+
             var ex = Assert.Throws<InvalidOperationException>(() =>
                 DownloadIntegrity.VerifySha256OrThrow(path, new string('0', 64)));
+
+
 
             Assert.Contains("SHA-256", ex.Message);
         }
@@ -46,17 +63,27 @@ public sealed class DownloadIntegrityTests
         }
     }
 
+
+
     [Fact]
+    // --- Interpreta Sha 256 ficheiro conteúdo Gnu Format devolve Hash ---
     public void ParseSha256FileContent_GnuFormat_ReturnsHash()
     {
         const string content = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789  file.zip\n";
 
+
+
         var hash = DownloadIntegrity.ParseSha256FileContent(content);
+
+
 
         Assert.Equal("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789", hash);
     }
 
+
+
     [Fact]
+    // --- Tenta Find GitHub asset URL Finds Matching asset ---
     public void TryFindGithubAssetUrl_FindsMatchingAsset()
     {
         const string json = """
@@ -68,12 +95,19 @@ public sealed class DownloadIntegrityTests
             }
             """;
 
+
+
         var url = DownloadIntegrity.TryFindGithubAssetUrl(json, "tool.zip.sha256");
+
+
 
         Assert.Equal("https://example.com/tool.zip.sha256", url);
     }
 
+
+
     [Fact]
+    // --- Tenta Find GitHub Sha 256 asset URL Falls Back To Uppercase Extension ---
     public void TryFindGithubSha256AssetUrl_FallsBackToUppercaseExtension()
     {
         const string json = """
@@ -84,8 +118,13 @@ public sealed class DownloadIntegrityTests
             }
             """;
 
+
+
         var url = DownloadIntegrity.TryFindGithubSha256AssetUrl(json, "tool.zip");
+
+
 
         Assert.Equal("https://example.com/tool.zip.SHA256", url);
     }
 }
+

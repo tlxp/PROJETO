@@ -22,7 +22,6 @@ from modules.obfuscation_snippet_extractor import (
 
 # --- Testes de DetectObfuscation ---
 class TestDetectObfuscation(unittest.TestCase):
-# --- Teste: verifica base64 and concatenation ---
     def test_base64_and_concatenation(self):
         content = """
 using System;
@@ -42,7 +41,6 @@ class Program {
             self.assertGreater(len(s.snippet), 0)
             self.assertTrue(s.description)
 
-# --- Teste: verifica convert frombase64 ---
     def test_convert_frombase64(self):
         content = """
     var data = Convert.FromBase64String(encoded);
@@ -55,7 +53,6 @@ class Program {
 
 # --- Testes de BuildSummary ---
 class TestBuildSummary(unittest.TestCase):
-# --- Teste: verifica summary by description ---
     def test_summary_by_description(self):
         snippets = [
             ObfuscationSnippet("obf", "Base64 literal", 1, 3, "code", "f.cs"),
@@ -69,7 +66,6 @@ class TestBuildSummary(unittest.TestCase):
 
 # --- Testes de WriteSnippetFiles ---
 class TestWriteSnippetFiles(unittest.TestCase):
-# --- Teste: verifica write obfuscated snippets file ---
     def test_write_obfuscated_snippets_file(self):
         snippets = [
             ObfuscationSnippet("obf", "Test type", 1, 2, "line1\nline2", "source.cs"),
@@ -84,13 +80,12 @@ class TestWriteSnippetFiles(unittest.TestCase):
             self.assertIn("line1", text)
             self.assertIn("source.cs", text)
 
-# --- Teste: verifica write deobfuscated snippets file ---
     def test_write_deobfuscated_snippets_file(self):
         snippets = [
             ObfuscationSnippet("obf", "Test", 1, 2, "original", "s.cs"),
         ]
 
-# --- Teste: deob ---
+# --- Fixture: deob ---
         def deob(s: str) -> str:
             return s + "\n  // deobfuscated"
 

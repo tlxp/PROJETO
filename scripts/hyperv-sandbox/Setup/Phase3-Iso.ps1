@@ -1,4 +1,4 @@
-﻿# --- Script: Phase3-Iso.ps1 ---
+﻿# --- Módulo: Phase3-Iso.ps1 ---
 # --- Validação da ISO Windows (obrigatório en-US) ---
 
 Write-Host "[3/8] Verificando ISO..."
@@ -12,7 +12,7 @@ Write-Host "      ISO: $WindowsIsoPath ($isoSizeGB GB)"
 Write-Host "      ISO existe (sanity check rápido)."
 
 # --- Deteção do idioma default da ISO ---
-# *lê sources\lang.ini ou x64\sources\lang.ini; mensagens em ASCII para evitar erros de parse*
+# lê sources\lang.ini ou x64\sources\lang.ini; mensagens em ASCII para evitar erros de parse
 try {
     $isoLang = Get-WindowsIsoDefaultLanguage -IsoPath $WindowsIsoPath
     if ($isoLang) {
@@ -28,7 +28,7 @@ try {
 }
 
 # --- Verificação de en-US no unattended ---
-# *o autounattend deste projeto assume en-US; falha se a ISO não o incluir*
+# o autounattend deste projeto assume en-US; falha se a ISO não o incluir
 try {
     $uiLangs = Get-WindowsIsoUiLanguages -IsoPath $WindowsIsoPath
     if ($uiLangs -and ($uiLangs -contains 'en-US')) {

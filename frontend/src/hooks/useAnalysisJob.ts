@@ -1,4 +1,6 @@
 // --- Módulo: useAnalysisJob.ts ---
+// Submissão e polling de jobs de análise na API.
+
 import { useCallback, useEffect, useRef } from "react";
 import { getT } from "@/i18n";
 import { apiFetchJson } from "@/lib/api";
@@ -20,7 +22,6 @@ export type PollOutcome =
   // *Job ainda queued/running após timeout — não é erro*
   | { kind: "still-running"; lastStatus: string };
 
-// --- Aguarda com suporte a cancelamento via AbortSignal ---
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const onAbort = () => {
@@ -36,8 +37,8 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-// --- Submissão e polling de jobs de análise (`/api/analysis`) ---
-// *AbortController partilhado: nova operação cancela a anterior; unmount cancela polling*
+// --- Hook ---
+// *AbortController partilhado: nova operação cancela a anterior*
 export function useAnalysisJob() {
   const abortRef = useRef<AbortController | null>(null);
 

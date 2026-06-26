@@ -1,4 +1,6 @@
 // --- Módulo: RouteErrorBoundary.tsx ---
+// Error boundary por rota para isolar falhas de uma página.
+
 import React, { Component, type ErrorInfo, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle } from "lucide-react";
@@ -13,7 +15,7 @@ type RouteErrorBoundaryState = {
   error: Error | null;
 };
 
-// --- Error boundary por rota — evita crash numa página derrubar toda a app ---
+// --- Componente ---
 export class RouteErrorBoundary extends Component<
   RouteErrorBoundaryProps,
   RouteErrorBoundaryState
@@ -82,7 +84,7 @@ export class RouteErrorBoundary extends Component<
   }
 }
 
-// --- Envolve elemento de rota com boundary dedicado ---
+// --- Helper de rota ---
 export function withRouteBoundary(
   routeName: string,
   element: ReactNode

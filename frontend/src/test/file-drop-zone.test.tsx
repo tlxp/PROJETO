@@ -1,4 +1,6 @@
 // --- Módulo: file-drop-zone.test.tsx ---
+// Testes da zona de arrastar e selecionar ficheiros para análise.
+
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, fireEvent } from "@testing-library/react";
 import FileDropZone from "@/components/FileDropZone";
@@ -13,7 +15,6 @@ vi.mock("@/components/ui/sonner", () => ({
 
 import { toast } from "@/components/ui/sonner";
 
-// --- Testes: FileDropZone ---
 describe("FileDropZone", () => {
   const onFileLoaded = vi.fn();
   const onClear = vi.fn();
@@ -22,14 +23,12 @@ describe("FileDropZone", () => {
     vi.clearAllMocks();
   });
 
-// --- Verifica: renderiza zona de arrastar quando não há ficheiro ---
   it("renderiza zona de arrastar quando não há ficheiro", () => {
     renderWithI18n(<FileDropZone onFileLoaded={onFileLoaded} currentFile={null} onClear={onClear} />);
     expect(screen.getByText(/arrast/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/selecionar ficheiro/i)).toBeInTheDocument();
   });
 
-// --- Verifica: mostra ficheiro selecionado e botão de remover ---
   it("mostra ficheiro selecionado e botão de remover", () => {
     const file = new File(["MZ"], "test.exe", { type: "application/octet-stream" });
     renderWithI18n(<FileDropZone onFileLoaded={onFileLoaded} currentFile={file} onClear={onClear} />);
@@ -38,7 +37,6 @@ describe("FileDropZone", () => {
     expect(onClear).toHaveBeenCalledOnce();
   });
 
-// --- Verifica: rejeita extensão não suportada ---
   it("rejeita extensão não suportada", () => {
     renderWithI18n(<FileDropZone onFileLoaded={onFileLoaded} currentFile={null} onClear={onClear} />);
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
@@ -48,7 +46,6 @@ describe("FileDropZone", () => {
     expect(toast.error).toHaveBeenCalled();
   });
 
-// --- Verifica: aceita ficheiro .exe válido ---
   it("aceita ficheiro .exe válido", () => {
     renderWithI18n(<FileDropZone onFileLoaded={onFileLoaded} currentFile={null} onClear={onClear} />);
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;

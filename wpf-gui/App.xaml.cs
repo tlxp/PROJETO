@@ -1,13 +1,20 @@
 ﻿// --- Módulo: App.xaml.cs ---
+// Ponto de entrada WPF com verificação de privilégios de administrador.
 using System;
 using System.Diagnostics;
 using System.Security.Principal;
 using System.Windows;
 
+
+
 using RatAnalyzer.Desktop.Bootstrap;
 using RatAnalyzer.Desktop.Localization;
 
+
+
 namespace RatAnalyzer.Desktop;
+
+
 
 // --- Classe de aplicação WPF (ponto de entrada) ---
 public partial class App : Application
@@ -17,6 +24,8 @@ public partial class App : Application
     {
         SessionEnding += (_, _) => ShutdownManager.CleanupOnExit();
     }
+
+
 
     // --- Arranque: exige elevação de administrador ---
     protected override void OnStartup(StartupEventArgs e)
@@ -35,8 +44,12 @@ public partial class App : Application
             return;
         }
 
+
+
         base.OnStartup(e);
     }
+
+
 
     // --- Verifica se o processo corre com privilégios de administrador ---
     private static bool IsRunningAsAdministrator()
@@ -53,6 +66,8 @@ public partial class App : Application
         }
     }
 
+
+
     // --- Saída: limpa backend, frontend e artefatos temporários ---
     protected override void OnExit(ExitEventArgs e)
     {
@@ -60,3 +75,4 @@ public partial class App : Application
         base.OnExit(e);
     }
 }
+

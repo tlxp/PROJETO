@@ -1,4 +1,5 @@
 ﻿// --- Módulo: ShutdownManager.cs ---
+// Limpeza ao encerrar: termina processos geridos e liberta portas 8000/8080.
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -8,12 +9,12 @@ using RatAnalyzer.Desktop.Infrastructure;
 
 namespace RatAnalyzer.Desktop.Bootstrap;
 
+// --- Gestor de limpeza ao encerrar a aplicação ---
 internal static class ShutdownManager
 {
     private const int FrontendPort = 8080;
     private const int BackendPort = 8000;
     private static bool _cleanupCompleted;
-
     // --- Ao sair: termina backend/frontend geridos, liberta portas 8000/8080 e limpa artefatos locais ---
     public static void CleanupOnExit()
     {
@@ -21,21 +22,17 @@ internal static class ShutdownManager
         {
             return;
         }
-
         _cleanupCompleted = true;
-
         try
         {
             StartupSequence.StopManagedBackend();
         }
         catch { /* ignorar */ }
-
         try
         {
             StartupSequence.StopManagedFrontend();
         }
         catch { /* ignorar */ }
-
         // Garantir que as portas 8080 (frontend) e 8000 (backend) são libertadas,
         // mesmo que processos filhos (ex.: node do npm) tenham ficado ativos.
         try
@@ -43,20 +40,17 @@ internal static class ShutdownManager
             KillProcessesListeningOnPort(FrontendPort);
         }
         catch { /* ignorar */ }
-
         try
         {
             KillProcessesListeningOnPort(BackendPort);
         }
         catch { /* ignorar */ }
-
         try
         {
             LocalArtifactCleanup.CleanupOnApplicationExit();
         }
         catch { /* ignorar */ }
     }
-
     // --- Termina processos à escuta na porta (netstat no Windows) para libertar 8080/8000 ---
     private static void KillProcessesListeningOnPort(int port)
     {
@@ -65,7 +59,7 @@ internal static class ShutdownManager
             TerminateProcessTree(pid);
         }
     }
-
+    // --- Obtém PIDs à escuta na porta via netstat ---
     private static IEnumerable<int> GetListeningProcessIds(int port)
     {
         try
@@ -84,7 +78,6 @@ internal static class ShutdownManager
             process.Start();
             var output = process.StandardOutput.ReadToEnd();
             process.WaitForExit(2000);
-
             // Linhas LISTENING com :PORT exacto (evita :80801, :18080, etc.)
             var portPattern = new Regex($@"(?<!\d):{port}(\s|$)", RegexOptions.CultureInvariant);
             var currentPid = Environment.ProcessId;
@@ -107,7 +100,7 @@ internal static class ShutdownManager
             return Array.Empty<int>();
         }
     }
-
+    // --- Termina processo e árvore filha (taskkill como fallback) ---
     private static void TerminateProcessTree(int pid)
     {
         try
@@ -120,7 +113,6 @@ internal static class ShutdownManager
             }
         }
         catch { /* ignorar */ }
-
         try
         {
             using var killer = Process.Start(new ProcessStartInfo

@@ -1,4 +1,5 @@
-﻿# --- Script: Send-ReportViaCom.ps1 ---
+﻿# --- Módulo: Send-ReportViaCom.ps1 ---
+# --- Envio do relatório via porta COM1/pipe ---
 <#
 
 .SYNOPSIS
@@ -138,7 +139,7 @@ function Open-Com1Port {
 
             $port.RtsEnable = $true
 
-            # *Atraso progressivo entre tentativas de abertura*
+            # Atraso progressivo entre tentativas de abertura
             Start-Sleep -Milliseconds (400 * $openTry)
 
             $port.Open()
@@ -214,7 +215,7 @@ function Send-ReportSimple {
 
 
 
-        # *Aguarda estabilização do par virtual COM1<->pipe e receptor no host*
+        # Aguarda estabilização do par virtual COM1<->pipe e receptor no host
 
         Write-ComLog "A aguardar ${HostReadyDelayMs}ms antes do envio (host receptor COM1)"
 
@@ -232,7 +233,7 @@ function Send-ReportSimple {
 
 
 
-        # *Cabeçalho do protocolo de transferência*
+        # Cabeçalho do protocolo de transferência
         Write-SerialLine -Port $port -Line "VERSION=1" -DelayMs $DelayMs
 
         Write-SerialLine -Port $port -Line "TIMESTAMP=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -DelayMs $DelayMs
@@ -330,7 +331,7 @@ for ($attempt = 1; $attempt -le $MaxRetries; $attempt++) {
 
     if ($attempt -lt $MaxRetries) {
 
-        # *Espera crescente entre tentativas falhadas*
+        # Espera crescente entre tentativas falhadas
         $waitTime = [Math]::Min(15, 3 * $attempt)
 
         Write-Host "[INFO] A aguardar $waitTime segundos antes de retry COM1..."

@@ -1,4 +1,5 @@
 # --- Módulo: test_evaluation_metrics ---
+# Testes das métricas proxy de deteção (perfis sintéticos etiquetados).
 from pathlib import Path
 
 from scripts.run_evaluation_metrics import compute_metrics, PROFILES_PATH

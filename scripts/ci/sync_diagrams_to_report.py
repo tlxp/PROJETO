@@ -11,6 +11,7 @@ RENDER = Path(__file__).resolve().parents[2] / "relatório" / "imagens" / "rende
 
 
 def main() -> int:
+    # --- Delega para render_plantuml.py (modo check ou render) ---
     args = [sys.executable, str(RENDER)]
     if "--check" in sys.argv:
         args.append("--check")

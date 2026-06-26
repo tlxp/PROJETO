@@ -13,7 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 # *Dados do analisador mantidos no repositório*
 YARA_RULES_DIR = PROJECT_ROOT / "yara_rules"
 
-# *Projeto de exemplo para testes manuais (GUI Tkinter — ver backend/gui/README.md)*
+# *Projeto de exemplo para testes manuais (GUI Tkinter legacy — ver backend/gui/README.md)*
 SAMPLE_PROJECT_DIR = PROJECT_ROOT / "programa"
 
 

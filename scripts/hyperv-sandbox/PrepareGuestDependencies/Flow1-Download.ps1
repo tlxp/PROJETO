@@ -1,5 +1,5 @@
-# --- Script: Flow1-Download.ps1 ---
-# Parte 1 do fluxo: restore da VM, arranque isolado e preparação de Guest Services.
+# --- Módulo: Flow1-Download.ps1 ---
+# --- Restore VM, arranque e download de dependências ---
 # Downloads de dependências são feitos APENAS no host (Flow2); nunca via internet na VM.
 # Carregado via dot-sourcing dentro do try/finally do script principal (mesmo scope).
 
@@ -26,13 +26,13 @@ if ($DoVmOps) {
     if ([string]::IsNullOrWhiteSpace($expectedSwitch)) {
         throw "PROJETOVM_SwitchName não definido em _Config.ps1."
     }
-    # *Valida que a VM só está ligada ao switch interno esperado*
+    # Valida que a VM só está ligada ao switch interno esperado
     Assert-SandboxVmNetworkIsolation -VMName $VMName -ExpectedSwitchName $expectedSwitch
 
     Write-LogHost "[3/6] A arrancar VM e aguardar PowerShell Direct..."
     try {
         $psOk = Start-SandboxVM -VMName $VMName -CredentialCandidates $credCandidates -PowerShellDirectTimeoutSeconds $PsDirectTimeoutSeconds -LogPath $null
-        # *Start-SandboxVM pode devolver a credencial que funcionou*
+        # Start-SandboxVM pode devolver a credencial que funcionou
         if ($psOk -is [pscredential]) { $cred = $psOk }
     } catch {
         Write-LogWarning "Falha ao arrancar VM (ignorado; vou continuar em modo host-only): $($_.Exception.Message)"
@@ -52,7 +52,7 @@ if ($DoVmOps) {
         Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
             param($VmDepsDir)
             $ErrorActionPreference = "Stop"
-            # *Cria C:\analysis_work\deps na VM para receber os instaladores*
+            # Cria C:\analysis_work\deps na VM para receber os instaladores
             if (-not (Test-Path -LiteralPath $VmDepsDir)) {
                 New-Item -ItemType Directory -Path $VmDepsDir -Force | Out-Null
             }

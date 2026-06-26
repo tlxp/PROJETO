@@ -23,7 +23,7 @@ def extract_flagged_indicators(analysis_results: Dict) -> List[str]:
     seen: Set[str] = set()
     indicators: List[str] = []
 
-# --- Add ---
+# --- Acumula indicador seguro sem duplicar ---
     def add(s: str) -> None:
         if _is_safe_for_highlight(s) and s not in seen:
             seen.add(s)
@@ -130,7 +130,7 @@ def _parse_pseudo_c_functions(c_source: str) -> List[Dict[str, Any]]:
         re.IGNORECASE,
     )
 
-# --- Helper interno: is ignorable between sig and brace ---
+# --- Ignora tokens entre assinatura e chaveta ---
     def _is_ignorable_between_sig_and_brace(raw: str) -> bool:
         t = (raw or "").strip()
         if not t:
@@ -139,7 +139,7 @@ def _parse_pseudo_c_functions(c_source: str) -> List[Dict[str, Any]]:
             return True
         return False
 
-# --- Helper interno: expand start with banner ---
+# --- Expande início com banner Ghidra acima ---
     def _expand_start_with_banner(func_name: str, start_line: int) -> int:
         # *Inclui linha de banner da Ghidra imediatamente acima da assinatura*
         if start_line <= 1:
@@ -225,7 +225,7 @@ def _parse_pseudo_c_functions(c_source: str) -> List[Dict[str, Any]]:
     return results
 
 
-# --- Helper interno: stable func id ---
+# --- Identificador estável de função (nome+linhas) ---
 def _stable_func_id(name: str, start_line: int, end_line: int) -> str:
     return f"{name}:{int(start_line)}-{int(end_line)}"
 
@@ -374,7 +374,7 @@ def build_flagged_functions(
 
     lines = c_source.split("\n")
 
-# --- Helper interno: function body ---
+# --- Extrai corpo e linhas de uma função ---
     def _function_body(func: Dict[str, Any]) -> Tuple[str, List[str]]:
         start = max(1, int(func.get("startLine", 1)))
         end = max(start, int(func.get("endLine", start)))

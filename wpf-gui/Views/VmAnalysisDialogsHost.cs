@@ -1,4 +1,5 @@
 ﻿// --- Módulo: VmAnalysisDialogsHost.cs ---
+// Implementação WPF dos diálogos de análise VM.
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -7,15 +8,24 @@ using System.Windows;
 using RatAnalyzer.Desktop.Bootstrap;
 using RatAnalyzer.Desktop.ViewModels;
 
+
+
 namespace RatAnalyzer.Desktop.Views;
+
+
 
 // --- Implementação WPF de IVmAnalysisDialogs para a janela de análise VM ---
 internal sealed class VmAnalysisDialogsHost : IVmAnalysisDialogs
 {
     private readonly Window _owner;
 
+
+
     public VmAnalysisDialogsHost(Window owner) => _owner = owner;
 
+
+
+    // --- Confirm Yes No  ---
     public Task<bool> ConfirmYesNoAsync(string title, string message, bool warningIcon = false)
     {
         return _owner.Dispatcher.InvokeAsync(() =>
@@ -27,6 +37,9 @@ internal sealed class VmAnalysisDialogsHost : IVmAnalysisDialogs
                 warningIcon ? MessageBoxImage.Warning : MessageBoxImage.Question) == MessageBoxResult.Yes).Task;
     }
 
+
+
+    // --- Confirm Adk instalação  ---
     public Task<bool> ConfirmAdkInstallAsync()
     {
         return _owner.Dispatcher.InvokeAsync(() =>
@@ -44,18 +57,28 @@ internal sealed class VmAnalysisDialogsHost : IVmAnalysisDialogs
                 MessageBoxImage.Question) == MessageBoxResult.Yes).Task;
     }
 
+
+
+    // --- Exibe Iso Missing diálogo ---
     public void ShowIsoMissingDialog(string? configuredIsoPath)
     {
         _owner.Dispatcher.Invoke(() => ShowWindowsIsoMissingDialog(configuredIsoPath));
     }
 
+
+
+    // --- Exibe Windows Iso Missing diálogo ---
     private static void ShowWindowsIsoMissingDialog(string? configuredIsoPath)
     {
         const string downloadPage = "https://www.microsoft.com/pt-pt/software-download/windows10";
 
+
+
         var displayPath = string.IsNullOrWhiteSpace(configuredIsoPath)
             ? "(ver PROJETOVM_WindowsIsoPath em scripts/hyperv-sandbox/_Config.ps1)"
             : configuredIsoPath;
+
+
 
         try
         {
@@ -64,6 +87,8 @@ internal sealed class VmAnalysisDialogsHost : IVmAnalysisDialogs
                 : string.IsNullOrWhiteSpace(Path.GetDirectoryName(configuredIsoPath))
                     ? "Garanta que o caminho no _Config.ps1 inclui pasta e nome de ficheiro do .iso."
                     : "Crie esta pasta no disco se ainda não existir:\r\n" + Path.GetDirectoryName(configuredIsoPath);
+
+
 
             var msg =
                 "O programa não encontrou a imagem ISO do Windows aqui:\r\n\r\n" +
@@ -80,9 +105,13 @@ internal sealed class VmAnalysisDialogsHost : IVmAnalysisDialogs
                 "\r\n\r\n" +
                 "Deseja abrir a página da Microsoft no navegador agora?";
 
+
+
             if (MessageBox.Show(msg, "ISO do Windows em falta", MessageBoxButton.YesNo, MessageBoxImage.Warning) !=
                 MessageBoxResult.Yes)
                 return;
+
+
 
             Process.Start(new ProcessStartInfo { FileName = downloadPage, UseShellExecute = true });
         }
@@ -97,3 +126,4 @@ internal sealed class VmAnalysisDialogsHost : IVmAnalysisDialogs
         }
     }
 }
+

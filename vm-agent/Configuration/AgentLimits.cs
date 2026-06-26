@@ -1,6 +1,10 @@
 // --- Módulo: AgentLimits.cs ---
+// Limites de upload, timeout e captura de saída do agente.
+
 
 namespace VmAgent.Configuration;
+
+
 
 // --- Limites e constantes do agente ---
 internal static class AgentLimits
@@ -10,3 +14,4 @@ internal static class AgentLimits
     public const int MaxRunTimeoutSeconds = 600;
     public const int MaxCapturedOutputChars = 1024 * 1024;
 }
+

@@ -1,4 +1,5 @@
 ﻿// --- Módulo: SandboxHostDependencies.cs ---
+// Garante oscdimg.exe do Windows ADK para o sandbox Hyper-V.
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -7,7 +8,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using RatAnalyzer.Desktop.Helpers;
 
+
+
 namespace RatAnalyzer.Desktop.Bootstrap;
+
+
 
 // --- Verifica/instala Windows ADK (Deployment Tools) para oscdimg.exe — alinhado com SandboxCommon.psm1 ---
 internal static class SandboxHostDependencies
@@ -15,12 +20,16 @@ internal static class SandboxHostDependencies
     // --- Link oficial usado nos scripts (redireciona para adksetup.exe) ---
     public const string AdkSetupDownloadUrl = "https://go.microsoft.com/fwlink/?linkid=2196127";
 
+
+
     private static readonly string[] OscdimgCandidatePaths =
     {
         @"C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe",
         @"C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\x86\Oscdimg\oscdimg.exe",
         @"C:\Program Files\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe",
     };
+
+
 
     // --- Localiza oscdimg.exe nos caminhos do ADK ou no PATH ---
     public static string? FindOscdimgPath()
@@ -31,9 +40,13 @@ internal static class SandboxHostDependencies
                 return p;
         }
 
+
+
         var pathEnv = Environment.GetEnvironmentVariable("PATH");
         if (string.IsNullOrEmpty(pathEnv))
             return null;
+
+
 
         foreach (var dir in pathEnv.Split(';', StringSplitOptions.RemoveEmptyEntries))
         {
@@ -46,11 +59,14 @@ internal static class SandboxHostDependencies
             catch { /* ignorar */ }
         }
 
+
+
         return null;
     }
 
+
+
     // --- Garante oscdimg: se em falta, pergunta ao utilizador e corre instalador silencioso do ADK ---
-    // --- Devolve true se oscdimg ficou disponível; false se em falta após tentativa ou recusa ---
     public static async Task<bool> EnsureOscdimgAsync(
         Action<string> log,
         CancellationToken cancellationToken,
@@ -63,7 +79,11 @@ internal static class SandboxHostDependencies
             return true;
         }
 
+
+
         log("[AVISO] oscdimg.exe não encontrado — necessário para injetar autounattend.xml no ISO (Windows ADK Deployment Tools).");
+
+
 
         var confirm = await confirmInstallAsync().ConfigureAwait(true);
         if (!confirm)
@@ -72,11 +92,15 @@ internal static class SandboxHostDependencies
             return false;
         }
 
+
+
         // Nome de ficheiro único: evita "ficheiro em uso" se um adksetup anterior, antivírus ou 2.º arranque
         // tiverem ainda o adksetup.exe clássico aberto em Temp\RatAnalyzerAdk\adksetup.exe.
         var tempDir = Path.Combine(Path.GetTempPath(), "RatAnalyzerAdk");
         Directory.CreateDirectory(tempDir);
         var setupPath = Path.Combine(tempDir, $"adksetup-{Guid.NewGuid():N}.exe");
+
+
 
         try
         {
@@ -89,8 +113,12 @@ internal static class SandboxHostDependencies
             return false;
         }
 
+
+
         log("[INFO] A iniciar instalação silenciosa do ADK (Deployment Tools). Será pedida permissão de administrador.");
         log("[INFO] Isto pode demorar vários minutos; não feche a janela do instalador na barra de tarefas.");
+
+
 
         int? exitCode;
         try
@@ -103,10 +131,14 @@ internal static class SandboxHostDependencies
             exitCode = null;
         }
 
+
+
         if (exitCode.HasValue)
         {
             log($"[INFO] Instalador ADK terminou com código: {exitCode.Value} (3010 = concluído, pode exigir reinício).");
         }
+
+
 
         // O processo elevado pode terminar antes dos ficheiros aparecerem; o adksetup pode delegar a MSIs.
         log("[INFO] A aguardar conclusão da instalação (a verificar oscdimg.exe)…");
@@ -120,25 +152,38 @@ internal static class SandboxHostDependencies
                 return true;
             }
 
+
+
             await Task.Delay(10_000, cancellationToken).ConfigureAwait(false);
         }
+
+
 
         log("[ERRO] oscdimg.exe ainda não encontrado após a instalação. Instale manualmente o Windows ADK (Deployment Tools) a partir de: " +
             AdkSetupDownloadUrl);
         return false;
     }
 
+
+
+    // --- Transfere Adk setup ---
     private static async Task DownloadAdkSetupAsync(string destinationPath, Action<string> log, CancellationToken cancellationToken)
     {
         const int maxAttempts = 5;
         using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(30) };
 
+
+
         using var response = await http.GetAsync(AdkSetupDownloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
 
+
+
         // Buffer em memória: instalador web é pequeno e permite regravar se o disco estiver momentaneamente bloqueado.
         var data = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+
+
 
         for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
@@ -155,12 +200,18 @@ internal static class SandboxHostDependencies
             }
         }
 
+
+
         if (!File.Exists(destinationPath))
             throw new IOException($"Não foi possível gravar o instalador em '{destinationPath}' após {maxAttempts} tentativas.");
+
+
 
         var len = new FileInfo(destinationPath).Length;
         if (len < 50_000)
             throw new InvalidOperationException("Transferência demasiado pequena; possível página HTML em vez de adksetup.exe.");
+
+
 
         // Cabeçalho PE (MZ)
         await using (var check = File.OpenRead(destinationPath))
@@ -173,8 +224,12 @@ internal static class SandboxHostDependencies
             }
         }
 
+
+
         var sha256 = DownloadIntegrity.ComputeSha256Hex(destinationPath);
         log($"[INFO] ADK setup SHA-256: {sha256}");
+
+
 
         var expected = Environment.GetEnvironmentVariable("RATANALYZER_ADK_SETUP_SHA256");
         if (!string.IsNullOrWhiteSpace(expected))
@@ -183,8 +238,12 @@ internal static class SandboxHostDependencies
             log("[OK] ADK setup SHA-256 verificado (RATANALYZER_ADK_SETUP_SHA256).");
         }
 
+
+
         log($"[OK] Instalador ADK guardado ({len / 1024} KB).");
     }
+
+
 
     // --- Executa adksetup com elevação; em alguns sistemas Process.Start com runas não devolve o filho elevado ---
     private static async Task<int?> RunElevatedInstallerAsync(string setupPath, CancellationToken cancellationToken)
@@ -199,12 +258,16 @@ internal static class SandboxHostDependencies
             WorkingDirectory = Path.GetDirectoryName(setupPath) ?? Path.GetTempPath()
         };
 
+
+
         using var proc = Process.Start(psi);
         if (proc == null)
         {
             // Utilizador pode ter confirmado UAC; o processo de arranque pode não ser o mesmo.
             return null;
         }
+
+
 
         try
         {
@@ -217,3 +280,4 @@ internal static class SandboxHostDependencies
         }
     }
 }
+

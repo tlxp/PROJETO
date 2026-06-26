@@ -1,4 +1,6 @@
 // --- Módulo: XrefExplorerPage.tsx ---
+// Explorador de referências cruzadas no pseudo-C.
+
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -67,7 +69,7 @@ function downloadTextFile(text: string, fileName: string): void {
   URL.revokeObjectURL(a.href);
 }
 
-// --- Explorador de referências cruzadas no pseudo-C ---
+// --- Componente ---
 const XrefExplorerPage: React.FC = () => {
   const location = useLocation();
   const { jobId } = useParams<{ jobId?: string }>();

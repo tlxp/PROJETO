@@ -1,6 +1,6 @@
-﻿# --- Script: SampleResolve.ps1 ---
+﻿# --- Módulo: SampleResolve.ps1 ---
 # --- Resolução automática de amostra e leitura de header PE (host) ---
-# *carregado via dot-sourcing no mesmo scope do orquestrador*
+# carregado via dot-sourcing no mesmo scope do orquestrador
 
 # --- Função: Resolve-AutoSamplePath ---
 function Resolve-AutoSamplePath {
@@ -19,7 +19,7 @@ function Resolve-AutoSamplePath {
 
         try { New-Item -ItemType Directory -Path $Dir -Force | Out-Null } catch { }
 
-        # *compila um .exe inofensivo via Add-Type para fluxo automático de dev/teste*
+        # compila um .exe inofensivo via Add-Type para fluxo automático de dev/teste
         $src = @"
 using System;
 using System.IO;
@@ -48,7 +48,7 @@ public static class Program
         return $defaultPath
     }
 
-    # *caminho explícito fornecido pelo utilizador*
+    # caminho explícito fornecido pelo utilizador
     if (-not [string]::IsNullOrWhiteSpace($ProvidedPath)) {
         if ([System.IO.File]::Exists($ProvidedPath)) { return [System.IO.Path]::GetFullPath($ProvidedPath) }
         Write-Error "Amostra não encontrada: $ProvidedPath"
@@ -60,7 +60,7 @@ public static class Program
         exit 1
     }
 
-    # *selecciona o .exe/.dll mais recente na pasta de amostras*
+    # selecciona o .exe/.dll mais recente na pasta de amostras
     $candidate = Get-ChildItem -LiteralPath $SamplesDir -File -ErrorAction SilentlyContinue |
         Where-Object { $_.Extension -in @(".exe", ".dll") } |
         Sort-Object LastWriteTimeUtc -Descending |
@@ -82,7 +82,7 @@ public static class Program
 }
 
 # --- Função: Get-PeMachineInfo ---
-# *lê o header PE no host para identificar arquitectura (x86, x64, ARM, etc.)*
+# lê o header PE no host para identificar arquitectura (x86, x64, ARM, etc.)
 function Get-PeMachineInfo {
     param([Parameter(Mandatory = $true)][string] $Path)
     try {

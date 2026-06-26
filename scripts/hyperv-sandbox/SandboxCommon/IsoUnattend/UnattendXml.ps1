@@ -1,4 +1,5 @@
-﻿# --- Script: UnattendXml.ps1 ---
+﻿# --- Módulo: UnattendXml.ps1 ---
+# --- Geração de autounattend.xml (Gen1/Gen2) ---
 
 # --- Geração de autounattend.xml para Windows 10 ---
 function New-Windows10UnattendXml {
@@ -9,12 +10,12 @@ function New-Windows10UnattendXml {
         [string] $DisplayName = "Malware Analyst",
         [int] $VMGeneration = 1
     )
-    # *Chave genérica para instalar Windows 10 Pro (não ativa); ajuda a seleção de edição*
+    # Chave genérica para instalar Windows 10 Pro (não ativa); ajuda a seleção de edição
     $productKey = "VK7JG-NPHTM-C97JM-9MPGT-3V66T"
 
     # --- Layout de disco conforme geração da VM ---
-    # *Gen1 (BIOS/Legacy): MBR com 2 partições primárias*
-    # *Gen2 (UEFI): GPT com EFI System + MSR*
+    # Gen1 (BIOS/Legacy): MBR com 2 partições primárias
+    # Gen2 (UEFI): GPT com EFI System + MSR
     $osPartitionId = if ($VMGeneration -eq 2) { 3 } else { 2 }
     $diskConfigurationBlock = if ($VMGeneration -eq 2) {
         @"

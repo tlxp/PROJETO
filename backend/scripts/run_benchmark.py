@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Reproducible static benchmark; optional dynamic timing capture."""
+# --- Módulo: run_benchmark ---
+# Benchmark estático reprodutível; captura opcional de tempos dinâmicos.
 
 from __future__ import annotations
 
@@ -21,6 +22,7 @@ OUTPUT_PATH = BACKEND_ROOT / "evaluation" / "benchmark_results.json"
 DEFAULT_SAMPLE = REPO_ROOT / "wpf-gui" / "bin" / "Release" / "net8.0-windows" / "Rat Analyzer.exe"
 
 
+# --- Percentil interpolado de uma lista ordenada ---
 def _percentile(sorted_values: list[float], p: float) -> float:
     if not sorted_values:
         return 0.0
@@ -32,6 +34,7 @@ def _percentile(sorted_values: list[float], p: float) -> float:
     return sorted_values[f] + (sorted_values[c] - sorted_values[f]) * (k - f)
 
 
+# --- Estatísticas descritivas dos tempos de execução ---
 def _summarize_times(times: list[float]) -> dict:
     ordered = sorted(times)
     return {
@@ -45,6 +48,7 @@ def _summarize_times(times: list[float]) -> dict:
     }
 
 
+# --- Benchmark do pipeline estático (N execuções) ---
 def run_static_benchmark(sample: Path, runs: int) -> dict:
     if not sample.is_file():
         raise FileNotFoundError(f"Sample not found: {sample}")
@@ -61,6 +65,7 @@ def run_static_benchmark(sample: Path, runs: int) -> dict:
     }
 
 
+# --- Ponto de entrada: grava benchmark_results.json ---
 def main() -> int:
     runs = int(os.environ.get("BENCHMARK_STATIC_RUNS", "5"))
     sample = Path(os.environ.get("BENCHMARK_SAMPLE", str(DEFAULT_SAMPLE)))

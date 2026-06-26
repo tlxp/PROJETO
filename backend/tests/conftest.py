@@ -6,6 +6,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+# --- Configuração do ambiente de teste ---
+# *Adiciona backend ao sys.path e isola dados em directório temporário*
+
 # Backend no sys.path
 _BACKEND = Path(__file__).resolve().parent.parent
 if str(_BACKEND) not in sys.path:
@@ -16,7 +19,7 @@ _TEST_DATA_DIR = tempfile.mkdtemp(prefix="ratanalyzer_tests_")
 os.environ["RATANALYZER_DATA_DIR"] = _TEST_DATA_DIR
 
 
-# --- Teste: pytest configure ---
+# --- Registo de markers pytest ---
 def pytest_configure(config):
     config.addinivalue_line(
         "markers",

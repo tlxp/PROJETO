@@ -1,18 +1,17 @@
 ﻿// --- Módulo: IlSpyDependencyHelper.cs ---
+// Deteção e instalação opcional do ILSpy para descompilação .NET.
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
 
 using RatAnalyzer.Desktop.Infrastructure;
 
 namespace RatAnalyzer.Desktop.Helpers;
 
 // --- Oferece instalação guiada do ILSpy CLI quando ILSPY_CMD_PATH / PATH não resolvem ilspycmd ---
-internal static class IlSpyDependencyHelper
+internal sealed class IlSpyDependencyHelper : DependencyProbeHelperBase
 {
     private const string ManualInstallUrl = "https://www.nuget.org/packages/ilspycmd";
 
@@ -56,16 +55,13 @@ internal static class IlSpyDependencyHelper
             log("[INFO] ILSPY_CMD_PATH não definido (descompilação .NET para C# opcional).");
         }
 
-        var app = Application.Current;
-        if (app?.Dispatcher == null)
-        {
-            log("[INFO] ILSpy em falta — sem janela principal para confirmar a instalação; " +
-                "defina ILSPY_CMD_PATH manualmente ou reabra o arranque pela interface.");
-            return;
-        }
-
-        var confirm = await app.Dispatcher.InvokeAsync(() =>
-            MessageBox.Show(
+        await TryRunConfirmedInstallFlowAsync(
+            log,
+            ct,
+            noDispatcherLogMessage:
+                "[INFO] ILSpy em falta — sem janela principal para confirmar a instalação; " +
+                "defina ILSPY_CMD_PATH manualmente ou reabra o arranque pela interface.",
+            confirmMessage:
                 "O ILSpy não foi encontrado (variável ILSPY_CMD_PATH / comando ilspycmd).\n\n" +
                 "Para descompilar assemblies .NET para C# na análise estática, é necessário o ILSpy CLI.\n\n" +
                 "Deseja instalar automaticamente a ferramenta global oficial via NuGet?\n\n" +
@@ -75,39 +71,24 @@ internal static class IlSpyDependencyHelper
                 "Alternativa: execute manualmente «dotnet tool install -g ilspycmd --version " +
                 IlSpyCmdPreferredVersions[0] + "» (alinhado com .NET 8) " +
                 "ou defina ILSPY_CMD_PATH para ILSpyCmd.exe.",
-                "Instalar ILSpy",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question) == MessageBoxResult.Yes);
-
-        if (!confirm)
-        {
-            log("[INFO] Instalação automática do ILSpy cancelada.");
-            return;
-        }
-
-        try
-        {
-            await InstallIlSpyAsync(log, ct).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            log($"[ERRO] ILSpy: {ex.Message}");
-            await app.Dispatcher.InvokeAsync(() =>
-                MessageBox.Show(
-                    "Não foi possível instalar o ILSpy automaticamente.\n\n" + ex.Message + "\n\n" +
-                    "Instale manualmente (versão recomendada, .NET 8):\n" +
-                    "  dotnet tool install -g ilspycmd --version " + IlSpyCmdPreferredVersions[0] + "\n\n" +
-                    "Se o erro persistir, limpe a cache NuGet e repita:\n" +
-                    "  dotnet nuget locals http-cache --clear\n\n" +
-                    "Pacote NuGet:\n" + ManualInstallUrl,
-                    "Erro — ILSpy",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning));
-        }
+            confirmTitle: "Instalar ILSpy",
+            cancelLogMessage: "[INFO] Instalação automática do ILSpy cancelada.",
+            errorLogPrefix: "ILSpy",
+            errorDialogTitle: "Erro — ILSpy",
+            buildErrorDialogBody: ex =>
+                "Não foi possível instalar o ILSpy automaticamente.\n\n" + ex.Message + "\n\n" +
+                "Instale manualmente (versão recomendada, .NET 8):\n" +
+                "  dotnet tool install -g ilspycmd --version " + IlSpyCmdPreferredVersions[0] + "\n\n" +
+                "Se o erro persistir, limpe a cache NuGet e repita:\n" +
+                "  dotnet nuget locals http-cache --clear\n\n" +
+                "Pacote NuGet:\n" + ManualInstallUrl,
+            installAsync: InstallIlSpyAsync).ConfigureAwait(false);
     }
 
+    // --- Testa disponibilidade de resultado ---
     private sealed record ProbeResult(bool Working, string? ExecutablePath);
 
+    // --- Verifica integridade de Il Spy integridade se configurado ---
     private static void VerifyIlSpyIntegrityIfConfigured(string exePath, Action<string> log)
     {
         var resolved = ResolveAbsoluteIlSpyPath(exePath);
@@ -121,9 +102,10 @@ internal static class IlSpyDependencyHelper
             "ILSpy (ilspycmd)");
     }
 
+    // --- Instala Il Spy ---
     private static async Task InstallIlSpyAsync(Action<string> log, CancellationToken ct)
     {
-        if (!await IsDotNetSdkAvailableAsync(ct).ConfigureAwait(false))
+        if (!await IsCommandAvailableAsync("dotnet", "--version", ct).ConfigureAwait(false))
             throw new InvalidOperationException(
                 "SDK .NET não encontrado. Instale o .NET SDK para poder executar «dotnet tool install -g ilspycmd».");
 
@@ -131,7 +113,6 @@ internal static class IlSpyDependencyHelper
         await RunDotNetToolInstallOrUpdateAsync(log, ct).ConfigureAwait(false);
 
         await EnsureIlSpyShimFileExistsAsync(log, ct).ConfigureAwait(false);
-
         await WaitForIlSpyShimFileAsync(ct).ConfigureAwait(false);
 
         var probe = await ProbeIlSpyAsync(ct).ConfigureAwait(false);
@@ -140,8 +121,7 @@ internal static class IlSpyDependencyHelper
             exe = FindIlSpyShimOnDisk();
 
         if (string.IsNullOrEmpty(exe) || !File.Exists(exe))
-            throw new InvalidOperationException(
-                BuildPostInstallFailureHint());
+            throw new InvalidOperationException(BuildPostInstallFailureHint());
 
         if (!await IlSpyExecutableRespondsAsync(exe, ct).ConfigureAwait(false))
         {
@@ -157,16 +137,14 @@ internal static class IlSpyDependencyHelper
         log($"[OK] ILSpy instalado em: {exe}");
         log("[INFO] ILSPY_CMD_PATH definido para o utilizador e para esta sessão.");
 
-        Application.Current?.Dispatcher.Invoke(() =>
-            MessageBox.Show(
-                "ILSpy instalado em:\n" + exe + "\n\n" +
-                "A variável de utilizador ILSPY_CMD_PATH foi definida.\n\n" +
-                "Se o backend Python já estiver em execução, reinicie-o para aplicar o novo caminho.",
-                "ILSpy",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information));
+        ShowInstallSuccess(
+            "ILSpy instalado em:\n" + exe + "\n\n" +
+            "A variável de utilizador ILSPY_CMD_PATH foi definida.\n\n" +
+            "Se o backend Python já estiver em execução, reinicie-o para aplicar o novo caminho.",
+            "ILSpy");
     }
 
+    // --- Testa disponibilidade de Il Spy ---
     private static async Task<ProbeResult> ProbeIlSpyAsync(CancellationToken ct)
     {
         foreach (var target in new[]
@@ -236,6 +214,7 @@ internal static class IlSpyDependencyHelper
         return null;
     }
 
+    // --- Obtém Dot Net global Il Spy Cmd caminho ---
     private static string GetDotNetGlobalIlSpyCmdPath()
     {
         return Path.Combine(
@@ -243,22 +222,7 @@ internal static class IlSpyDependencyHelper
             ".dotnet", "tools", "ilspycmd.exe");
     }
 
-    // --- O WPF herda frequentemente PATH sem %USERPROFILE%\.dotnet\tools onde o dotnet coloca o shim ---
-    private static void EnsureDotNetGlobalToolsOnPath(ProcessStartInfo psi)
-    {
-        var tools = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".dotnet", "tools");
-        if (!Directory.Exists(tools))
-            return;
-
-        var existing = psi.Environment["PATH"] ?? Environment.GetEnvironmentVariable("PATH") ?? "";
-        if (existing.IndexOf(tools, StringComparison.OrdinalIgnoreCase) >= 0)
-            return;
-
-        psi.Environment["PATH"] = tools + Path.PathSeparator + existing;
-    }
-
+    // --- Aguarda para Il Spy shim ficheiro ---
     private static async Task WaitForIlSpyShimFileAsync(CancellationToken ct)
     {
         var p = GetDotNetGlobalIlSpyCmdPath();
@@ -296,7 +260,7 @@ internal static class IlSpyDependencyHelper
             var (code, stdout, stderr) = await RunProcessCaptureAsync(
                 "dotnet", $"tool install -g ilspycmd --version {pin}", ct).ConfigureAwait(false);
 
-            if (code != 0 && LooksLikeToolAlreadyInstalled(stdout + stderr))
+            if (code != 0 && LooksLikeDotnetToolAlreadyInstalled(stdout + stderr))
             {
                 log("[INFO] dotnet ainda reporta ferramenta instalada — a desinstalar novamente...");
                 await TryUninstallIlSpyCmdGlobalAsync(log, ct).ConfigureAwait(false);
@@ -325,6 +289,7 @@ internal static class IlSpyDependencyHelper
             "  dotnet tool install -g ilspycmd --version " + IlSpyCmdPreferredVersions[0]);
     }
 
+    // --- Dot Net ferramenta lista contém Il Spy Cmd  ---
     private static async Task<bool> DotNetToolListContainsIlSpyCmdAsync(CancellationToken ct)
     {
         var (code, stdout, _) = await RunProcessCaptureAsync("dotnet", "tool list -g", ct).ConfigureAwait(false);
@@ -333,6 +298,7 @@ internal static class IlSpyDependencyHelper
         return stdout.Contains("ilspycmd", StringComparison.OrdinalIgnoreCase);
     }
 
+    // --- Tenta Find Il Spy com Where ---
     private static async Task<string?> TryFindIlSpyWithWhereAsync(CancellationToken ct)
     {
         return await Task.Run(() =>
@@ -389,6 +355,7 @@ internal static class IlSpyDependencyHelper
         return File.Exists(globalExe) ? globalExe : null;
     }
 
+    // --- Constrói pós instalação falha dica ---
     private static string BuildPostInstallFailureHint()
     {
         return
@@ -416,6 +383,7 @@ internal static class IlSpyDependencyHelper
         return false;
     }
 
+    // --- Executa Il Spy sondagem única vez ---
     private static async Task<bool> RunIlSpyProbeOnceAsync(string fileNameOrCommand, string arguments, CancellationToken ct)
     {
         return await Task.Run(() =>
@@ -459,35 +427,7 @@ internal static class IlSpyDependencyHelper
         }, ct).ConfigureAwait(false);
     }
 
-    private static async Task<bool> IsDotNetSdkAvailableAsync(CancellationToken ct)
-    {
-        return await Task.Run(() =>
-        {
-            try
-            {
-                var psi = new ProcessStartInfo
-                {
-                    FileName = "dotnet",
-                    Arguments = "--version",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true
-                };
-                using var proc = Process.Start(psi);
-                if (proc is null)
-                    return false;
-                proc.WaitForExit(30_000);
-                ct.ThrowIfCancellationRequested();
-                return proc.ExitCode == 0;
-            }
-            catch
-            {
-                return false;
-            }
-        }, ct).ConfigureAwait(false);
-    }
-
+    // --- Executa Dot Net ferramenta instalação ou Update ---
     private static async Task RunDotNetToolInstallOrUpdateAsync(Action<string> log, CancellationToken ct)
     {
         foreach (var ver in IlSpyCmdPreferredVersions)
@@ -504,7 +444,7 @@ internal static class IlSpyDependencyHelper
                 return;
             }
 
-            if (LooksLikeToolAlreadyInstalled(combined))
+            if (LooksLikeDotnetToolAlreadyInstalled(combined))
             {
                 log("[INFO] dotnet reporta ilspycmd já instalado.");
                 if (File.Exists(GetDotNetGlobalIlSpyCmdPath()))
@@ -560,7 +500,7 @@ internal static class IlSpyDependencyHelper
             return;
         }
 
-        if (LooksLikeToolAlreadyInstalled(lastCombined))
+        if (LooksLikeDotnetToolAlreadyInstalled(lastCombined))
         {
             log("[INFO] dotnet reporta ilspycmd já instalado (instalação sem versão fixa).");
             if (File.Exists(GetDotNetGlobalIlSpyCmdPath()))
@@ -590,6 +530,7 @@ internal static class IlSpyDependencyHelper
             $"  dotnet tool install -g ilspycmd --version {pin}");
     }
 
+    // --- Verifica se Nu Get ferramenta Manifest Broken ---
     private static bool IsNuGetToolManifestBroken(string stderrOut)
     {
         if (string.IsNullOrEmpty(stderrOut))
@@ -600,57 +541,11 @@ internal static class IlSpyDependencyHelper
                    && s.Contains("invalid", StringComparison.OrdinalIgnoreCase));
     }
 
-    private static bool LooksLikeToolAlreadyInstalled(string output)
-    {
-        if (string.IsNullOrEmpty(output))
-            return false;
-        var lo = output.ToLowerInvariant();
-        return lo.Contains("already installed", StringComparison.Ordinal)
-               || lo.Contains("is already installed", StringComparison.Ordinal)
-               || lo.Contains("já está instalado", StringComparison.Ordinal)
-               || lo.Contains("already has", StringComparison.Ordinal);
-    }
-
+    // --- Tenta Uninstall Il Spy Cmd global ---
     private static async Task TryUninstallIlSpyCmdGlobalAsync(Action<string> log, CancellationToken ct)
     {
         var (code, _, _) = await RunProcessCaptureAsync("dotnet", "tool uninstall -g ilspycmd", ct).ConfigureAwait(false);
         if (code == 0)
             log("[INFO] ILSpy: removida a ferramenta global ilspycmd (reinstalação limpa).");
-    }
-
-    private static async Task<(int ExitCode, string StdOut, string StdErr)> RunProcessCaptureAsync(
-        string fileName,
-        string arguments,
-        CancellationToken ct)
-    {
-        return await Task.Run(() =>
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = fileName,
-                Arguments = arguments,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            };
-            ProcessOutputEncoding.ApplyConsole(psi);
-            using var proc = Process.Start(psi);
-            if (proc is null)
-                return (-1, "", "Process.Start devolveu null.");
-            var stdout = ProcessOutputEncoding.NormalizeForDisplay(proc.StandardOutput.ReadToEnd());
-            var stderr = ProcessOutputEncoding.NormalizeForDisplay(proc.StandardError.ReadToEnd());
-            proc.WaitForExit(300_000);
-            ct.ThrowIfCancellationRequested();
-            return (proc.ExitCode, stdout, stderr);
-        }, ct).ConfigureAwait(false);
-    }
-
-    private static string Truncate(string s, int max)
-    {
-        if (string.IsNullOrEmpty(s))
-            return "";
-        s = s.Trim();
-        return s.Length <= max ? s : s[..max] + "…";
     }
 }

@@ -1,4 +1,5 @@
 ﻿// --- Módulo: VmSandboxService.cs ---
+// Execução de scripts PowerShell Hyper-V e preflight de sandbox.
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -8,12 +9,20 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
+
+
 using RatAnalyzer.Desktop.Infrastructure;
+
+
 
 namespace RatAnalyzer.Desktop.Services;
 
+
+
+// --- Resultado de preflight de setup da VM ---
 public sealed record SetupPreflight(string VmName, bool VmExists, string VhdPath, bool VhdExists);
 
+// --- Resultado de preflight de execução na sandbox ---
 public sealed record RunPreflight(
     string VmName,
     bool VmExists,
@@ -22,9 +31,12 @@ public sealed record RunPreflight(
     string IsoPath,
     bool IsoExists);
 
+
+
 // --- Execução PowerShell e preflight Hyper-V (sem dependências WPF) ---
 public static class VmSandboxService
 {
+    // --- Localiza Hyper V scripts caminho ---
     public static string? FindHyperVScriptsPath()
     {
         var baseDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -37,9 +49,14 @@ public static class VmSandboxService
             dir = dir.Parent;
         }
 
+
+
         return null;
     }
 
+
+
+    // --- Executa script ---
     public static async Task<int> RunScriptAsync(
         string scriptPath,
         IReadOnlyList<string>? extraArgs,
@@ -71,7 +88,11 @@ public static class VmSandboxService
                 psi.ArgumentList.Add(arg);
         }
 
+
+
         using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
+
+
 
         process.OutputDataReceived += (_, e) =>
         {
@@ -84,9 +105,13 @@ public static class VmSandboxService
                 onLine(ProcessOutputEncoding.NormalizeForDisplay("[stderr] " + e.Data));
         };
 
+
+
         process.Start();
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
+
+
 
         await using var reg = cancellationToken.Register(() =>
         {
@@ -98,6 +123,8 @@ public static class VmSandboxService
             catch { /* ignorar */ }
         });
 
+
+
         try
         {
             await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
@@ -108,13 +135,20 @@ public static class VmSandboxService
             throw;
         }
 
+
+
         return process.ExitCode;
     }
 
+
+
+    // --- Tenta Read execução estado ---
     public static string? TryReadRunStatus(string? runJsonPath)
     {
         if (string.IsNullOrWhiteSpace(runJsonPath) || !File.Exists(runJsonPath))
             return null;
+
+
 
         try
         {
@@ -124,21 +158,32 @@ public static class VmSandboxService
         }
         catch { /* ignorar */ }
 
+
+
         return null;
     }
 
+
+
+    // --- Obtém execução preflight ---
     public static Task<RunPreflight?> GetRunPreflightAsync(string scriptsPath, CancellationToken ct, VmGuestCredentials? guestCredentials = null)
     {
         var configPath = Path.Combine(scriptsPath, "_Config.ps1");
         return RunPreflightQueryAsync<RunPreflight>(scriptsPath, BuildRunPreflightCommand(configPath), ct, guestCredentials);
     }
 
+
+
+    // --- Obtém setup preflight ---
     public static Task<SetupPreflight?> GetSetupPreflightAsync(string scriptsPath, CancellationToken ct, VmGuestCredentials? guestCredentials = null)
     {
         var configPath = Path.Combine(scriptsPath, "_Config.ps1");
         return RunPreflightQueryAsync<SetupPreflight>(scriptsPath, BuildSetupPreflightCommand(configPath), ct, guestCredentials);
     }
 
+
+
+    // --- Constrói execução preflight comando ---
     private static string BuildRunPreflightCommand(string configPath) =>
         "& { " +
         $"  . \"{configPath}\"; " +
@@ -151,6 +196,9 @@ public static class VmSandboxService
         "  $obj | ConvertTo-Json -Compress " +
         "} ";
 
+
+
+    // --- Constrói setup preflight comando ---
     private static string BuildSetupPreflightCommand(string configPath) =>
         "& { " +
         $"  . \"{configPath}\"; " +
@@ -160,6 +208,8 @@ public static class VmSandboxService
         "  $obj = [pscustomobject]@{ VmName = $vmName; VmExists = [bool]$vm; VhdPath = $vhdPath; VhdExists = (Test-Path $vhdPath) }; " +
         "  $obj | ConvertTo-Json -Compress " +
         "} ";
+
+
 
     private static Task<T?> RunPreflightQueryAsync<T>(string scriptsPath, string command, CancellationToken ct, VmGuestCredentials? guestCredentials)
         where T : class
@@ -171,6 +221,8 @@ public static class VmSandboxService
                 var configPath = Path.Combine(scriptsPath, "_Config.ps1");
                 if (!File.Exists(configPath))
                     return null;
+
+
 
                 var psi = new ProcessStartInfo
                 {
@@ -185,6 +237,8 @@ public static class VmSandboxService
                 ProcessOutputEncoding.ApplyWindowsAnsi(psi);
                 ApplyGuestCredentials(psi, guestCredentials);
 
+
+
                 using var process = new Process { StartInfo = psi };
                 process.Start();
                 var stdout = process.StandardOutput.ReadToEnd();
@@ -192,9 +246,13 @@ public static class VmSandboxService
                 if (process.ExitCode != 0)
                     return null;
 
+
+
                 stdout = stdout?.Trim();
                 if (string.IsNullOrWhiteSpace(stdout))
                     return null;
+
+
 
                 return JsonSerializer.Deserialize<T>(stdout, new JsonSerializerOptions
                 {
@@ -208,18 +266,27 @@ public static class VmSandboxService
         }, ct);
     }
 
+
+
+    // --- Converte para codificado comando ---
     private static string ToEncodedCommand(string command)
     {
         var bytes = Encoding.Unicode.GetBytes(command);
         return Convert.ToBase64String(bytes);
     }
 
+
+
+    // --- Aplica convidado credenciais ---
     private static void ApplyGuestCredentials(ProcessStartInfo psi, VmGuestCredentials? guestCredentials)
     {
         if (guestCredentials == null)
             return;
 
+
+
         psi.Environment["PROJETOVM_GuestUser"] = guestCredentials.Username;
         psi.Environment["PROJETOVM_GuestPassword"] = guestCredentials.Password;
     }
 }
+

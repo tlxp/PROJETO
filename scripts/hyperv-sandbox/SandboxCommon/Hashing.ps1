@@ -1,4 +1,5 @@
-﻿# --- Script: Hashing.ps1 ---
+﻿# --- Módulo: Hashing.ps1 ---
+# --- Funções SHA-1 para integridade de ficheiros ---
 
 # --- Validação SHA-1 de ficheiro ---
 function Assert-FileSha1 {
@@ -12,7 +13,7 @@ function Assert-FileSha1 {
         throw "O $Label n-o foi encontrado em: $Path"
     }
 
-    # *Normalizar hash esperado (sem espaços, minúsculas)*
+    # Normalizar hash esperado (sem espaços, minúsculas)
     $expected = ($ExpectedSha1 -replace '\s', '').ToLowerInvariant()
     if ([string]::IsNullOrWhiteSpace($expected)) {
         throw "SHA-1 esperado vazio para o $Label (config inv-lida)."
@@ -30,7 +31,7 @@ function Assert-FileSha1 {
         throw "SHA-1 do $Label N-O coincide. Esperado: $expected | Atual: $actual | Ficheiro: $Path"
     }
 
-    # *Devolver o hash calculado para diagnóstico/logs*
+    # Devolver o hash calculado para diagnóstico/logs
     return $actual
 }
 

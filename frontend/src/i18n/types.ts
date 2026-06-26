@@ -1,5 +1,5 @@
 // --- Módulo: types.ts ---
-// *Tipos de idioma e catálogo de mensagens da UI*
+// Tipos de idioma e catálogo de mensagens da UI.
 
 export type Lang = "pt" | "en";
 

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # --- Módulo: render_plantuml ---
-# --- Gera fig-4-*.png a partir de docs/diagrams/ (fonte única) ---
-# *Não mantém fig-4-*.puml duplicados no relatório*
+# --- Gera fig-4-*.png a partir de docs/diagrams/ (sem .puml duplicados) ---
 from __future__ import annotations
 
 import subprocess
@@ -9,7 +8,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-# *Raiz do repositório (dois níveis acima de relatório/imagens/)*
+# --- Raiz do repositório (dois níveis acima de relatório/imagens/) ---
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT / "scripts" / "ci") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "scripts" / "ci"))
@@ -31,7 +30,7 @@ def check() -> int:
             print(f"PNG EM FALTA: {png.relative_to(REPO_ROOT)} — execute render_plantuml.py", file=sys.stderr)
             errors += 1
             continue
-        # *PNG desatualizado se a fonte .puml foi modificada depois*
+        # PNG desatualizado se a fonte .puml foi modificada depois
         if png.stat().st_mtime < src.stat().st_mtime:
             print(f"DESATUALIZADO: {png.name} (fonte {source_name} mais recente)", file=sys.stderr)
             errors += 1
@@ -60,7 +59,7 @@ def render() -> int:
             print(f"Em falta: {src}", file=sys.stderr)
             return 1
 
-        # *Injeta @startuml com fig_id para nomear o PNG corretamente*
+        # Injeta @startuml com fig_id para nomear o PNG corretamente
         content = render_fig_puml(source_name, fig_id)
         with tempfile.NamedTemporaryFile(
             mode="w",
@@ -78,7 +77,7 @@ def render() -> int:
                 check=True,
                 cwd=folder,
             )
-            # *PlantUML nomeia o PNG pelo @startuml id, não pelo ficheiro temporário*
+            # PlantUML nomeia o PNG pelo @startuml id, não pelo ficheiro temporário
             generated = folder / f"{fig_id}.png"
             if not generated.is_file():
                 generated = tmp_path.with_suffix(".png")
@@ -92,7 +91,7 @@ def render() -> int:
             print(f"OK {source_name} -> {target.name} ({target.stat().st_size} bytes)")
         finally:
             tmp_path.unlink(missing_ok=True)
-            # *Remove PNGs órfãos gerados na pasta local*
+            # Remove PNGs órfãos gerados na pasta local
             for orphan in folder.glob(f"{fig_id}*.png"):
                 if orphan.resolve() != (REPORT_DIR / f"{fig_id}.png").resolve():
                     orphan.unlink(missing_ok=True)
@@ -106,7 +105,7 @@ def render() -> int:
 
 
 def main() -> int:
-    # *Modo --check: apenas valida; sem --check: renderiza*
+    # --- Modo CLI: --check valida; omissão renderiza ---
     if "--check" in sys.argv:
         return check()
     return render()

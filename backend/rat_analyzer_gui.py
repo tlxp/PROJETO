@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 # --- Módulo: rat_analyzer_gui ---
-# Ponto de entrada da GUI Tkinter opcional — ver gui/README.md.
+# DEPRECATED (legacy): wrapper fino — delega em gui.tkinter_app.main().
+#
+# Este ficheiro existe apenas para manter o comando habitual:
+#   python rat_analyzer_gui.py
+# A implementação está em gui/tkinter_app.py. Ver gui/README.md para substitutos
+# (frontend web e WPF).
 
 from gui.tkinter_app import main
 

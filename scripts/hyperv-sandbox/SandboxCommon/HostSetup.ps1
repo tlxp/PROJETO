@@ -1,4 +1,5 @@
-﻿# --- Script: HostSetup.ps1 ---
+﻿# --- Módulo: HostSetup.ps1 ---
+# --- Configuração de diretórios, rede e pré-requisitos do host ---
 
 # --- Criação de diretório se não existir ---
 function Ensure-DirectoryExists {
@@ -79,7 +80,7 @@ function Assert-SandboxVmNetworkIsolation {
         throw "VM '$VMName' não tem adaptadores de rede — isolamento não verificável."
     }
 
-    # *Cada adaptador deve estar no switch Internal esperado*
+    # Cada adaptador deve estar no switch Internal esperado
     foreach ($adapter in $adapters) {
         $swName = $adapter.SwitchName
         if ([string]::IsNullOrWhiteSpace($swName)) {
@@ -111,7 +112,7 @@ function Get-SandboxNetAdapter {
         $adapter = Get-NetAdapter -Name $expectedName -ErrorAction SilentlyContinue
     } catch { $adapter = $null }
 
-    # *Fallback: procurar por nome parcial*
+    # Fallback: procurar por nome parcial
     if (-not $adapter) {
         $adapter = Get-NetAdapter | Where-Object { $_.Name -eq "vEthernet ($SwitchName)" -or $_.Name -like "*$SwitchName*" } | Select-Object -First 1
     }

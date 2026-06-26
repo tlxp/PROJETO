@@ -1,26 +1,21 @@
 ﻿// --- Módulo: LocalizationManager.cs ---
+// Gestor central de idioma pt/en e catálogo de strings.
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Threading;
 using RatAnalyzer.Desktop.Infrastructure;
-
 namespace RatAnalyzer.Desktop.Localization;
-
 // --- Gestor central de idioma (pt/en) e catálogo de strings ---
 public static class LocalizationManager
 {
     public const string Portuguese = "pt";
     public const string English = "en";
-
     private static readonly Dictionary<string, Dictionary<string, string>> Catalog = BuildCatalog();
-
     public static string LanguageCode { get; private set; } = Portuguese;
-
     public static bool IsEnglish => LanguageCode == English;
-
     public static event EventHandler? LanguageChanged;
-
+    // --- Inicializa ---
     public static void Initialize(UserSettings settings)
     {
         if (settings.HasChosenLanguage && !string.IsNullOrWhiteSpace(settings.Language))
@@ -28,30 +23,27 @@ public static class LocalizationManager
         else
             ApplyCulture(Portuguese);
     }
-
+    // --- Define idioma ---
     public static void SetLanguage(string languageCode, bool persist = true)
     {
         languageCode = languageCode == English ? English : Portuguese;
         if (languageCode == LanguageCode && persist)
             return;
-
         LanguageCode = languageCode;
         ApplyCulture(languageCode);
-
         if (persist)
             UserSettingsStore.SaveLanguage(languageCode);
-
         LanguageChanged?.Invoke(null, EventArgs.Empty);
     }
-
+    // --- Obtém ---
     public static string Get(string key) =>
         Catalog.TryGetValue(LanguageCode, out var lang) && lang.TryGetValue(key, out var value)
             ? value
             : Catalog[Portuguese].TryGetValue(key, out var fallback) ? fallback : key;
-
+    // --- Formata ---
     public static string Format(string key, params object[] args) =>
         string.Format(CultureInfo.CurrentCulture, Get(key), args);
-
+    // --- Aplica cultura ---
     private static void ApplyCulture(string languageCode)
     {
         var culture = languageCode == English
@@ -62,10 +54,10 @@ public static class LocalizationManager
         Thread.CurrentThread.CurrentCulture = culture;
         Thread.CurrentThread.CurrentUICulture = culture;
     }
-
+    // --- Obtém Accept idioma ---
     public static string GetAcceptLanguage() =>
         LanguageCode == English ? "en-US,en;q=0.9" : "pt-PT,pt;q=0.9";
-
+    // --- Constrói catálogo ---
     private static Dictionary<string, Dictionary<string, string>> BuildCatalog()
     {
         var pt = Pt();
@@ -77,10 +69,11 @@ public static class LocalizationManager
             [English] = en
         };
     }
-
+    // --- português ---
     private static Dictionary<string, string> Pt() => new()
     {
         [LocKeys.AppTitle] = AppConstants.AppDisplayName,
+        [LocKeys.AppSubtitle] = "Análise estática e comportamental de executáveis",
         [LocKeys.LanguageSection] = "IDIOMA",
         [LocKeys.LanguageTitle] = "Escolha o idioma",
         [LocKeys.LanguageSubtitle] = "Pode alterar mais tarde no painel principal.",
@@ -88,6 +81,7 @@ public static class LocalizationManager
         [LocKeys.LanguageEnglish] = "English",
         [LocKeys.LanguageContinue] = "Continuar",
         [LocKeys.LanguageCancel] = "Cancelar",
+        [LocKeys.LanguageFooter] = "Ambiente local · análise estática e comportamental",
         [LocKeys.ChangeLanguage] = "Idioma",
         [LocKeys.LoadingSection] = "SANDBOX",
         [LocKeys.LoadingTitle] = "A preparar o ambiente de sandbox",
@@ -176,10 +170,11 @@ public static class LocalizationManager
         [LocKeys.MsgCredentialsUserRequired] = "Indique o nome de utilizador que existe (ou vai existir) na VM.",
         [LocKeys.MsgCredentialsPasswordRequired] = "Indique a palavra-passe da conta na VM.",
     };
-
+    // --- inglês ---
     private static Dictionary<string, string> En() => new()
     {
         [LocKeys.AppTitle] = AppConstants.AppDisplayName,
+        [LocKeys.AppSubtitle] = "Static and behavioral analysis of executables",
         [LocKeys.LanguageSection] = "LANGUAGE",
         [LocKeys.LanguageTitle] = "Choose your language",
         [LocKeys.LanguageSubtitle] = "You can change this later from the main dashboard.",
@@ -187,6 +182,7 @@ public static class LocalizationManager
         [LocKeys.LanguageEnglish] = "English",
         [LocKeys.LanguageContinue] = "Continue",
         [LocKeys.LanguageCancel] = "Cancel",
+        [LocKeys.LanguageFooter] = "Local environment · static and behavioral analysis",
         [LocKeys.ChangeLanguage] = "Language",
         [LocKeys.LoadingSection] = "SANDBOX",
         [LocKeys.LoadingTitle] = "Preparing the sandbox environment",

@@ -1,4 +1,4 @@
-﻿# --- Script: PhaseE-WaitReport.ps1 ---
+﻿# --- Módulo: PhaseE-WaitReport.ps1 ---
 # --- Espera activa pelo relatório do guest ---
 
 Write-LogHost "      A aguardar relatório (cópia guest->host, timeout: ${reportTimeoutSeconds}s)..."
@@ -87,7 +87,7 @@ if ($waitSec -gt 0) {
                     $reportUnchangedSince = $null
                 }
 
-                # *deteta relatório estagnado (bytes inalterados)*
+                # deteta relatório estagnado (bytes inalterados)
                 if ($guestState.reportBytes -eq $lastReportBytes) {
                     if ($guestState.reportBytes -gt 0 -and -not $reportUnchangedSince) {
                         $reportUnchangedSince = Get-Date
@@ -141,7 +141,7 @@ if ($waitSec -gt 0) {
 
         if ($guestAnalysisStalled) {
             $stallDetail = "pid morto/inactivo há $([int]((Get-Date) - $guestPidDeadSince).TotalSeconds)s, relatório=$($guestState.reportBytes) bytes, sem REPORT_END;"
-            # *tenta recuperar relatório parcial antes de abortar*
+            # tenta recuperar relatório parcial antes de abortar
             if ($guestState.reportBytes -gt 200) {
                 if (Try-PullGuestReport -AllowPartial:$true -Reason "análise parada no guest ($stallDetail)") {
                     $reportReceived = $true

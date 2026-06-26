@@ -1,4 +1,5 @@
-﻿# --- Script: _Config.ps1 ---
+﻿# --- Módulo: _Config.ps1 ---
+# --- Configuração central (pastas, VM, credenciais) ---
 <#
 .SYNOPSIS
     Configuração central do sandbox Hyper-V. Todas as pastas usam D:\PROJETOVM.
@@ -10,7 +11,7 @@
 #>
 
 # --- Pasta raiz do ambiente ---
-# *Sobreponível via variável de ambiente PROJETOVM_BasePath*
+# Sobreponível via variável de ambiente PROJETOVM_BasePath
 $script:PROJETOVM_BasePath = if ($env:PROJETOVM_BasePath) { $env:PROJETOVM_BasePath } else { "D:\PROJETOVM" }
 
 # --- Identificação da VM e rede ---
@@ -26,7 +27,7 @@ $script:PROJETOVM_VHDSizeGB           = 80
 $script:PROJETOVM_DynamicMemoryEnabled = $true
 
 # --- Instalação Windows unattended ---
-# *Apenas en-US suportado para autounattend*
+# Apenas en-US suportado para autounattend
 $script:PROJETOVM_WindowsIsoPath      = "D:\ISOs\Windows.iso"
 $script:PROJETOVM_AutoInstallWindows  = $true
 
@@ -48,7 +49,7 @@ $script:PROJETOVM_SamplesPath = Join-Path $script:PROJETOVM_BasePath "Samples"
 $script:PROJETOVM_LogsPath    = Join-Path $script:PROJETOVM_BasePath "Logs"
 
 # --- Comunicação host<->guest via COM1/pipe ---
-# *O script 04-Run-Sample acrescenta _<RunId> por execução*
+# O script 04-Run-Sample acrescenta _<RunId> por execução
 $script:PROJETOVM_PipeName = "SandboxReportPipe"
 
 # --- Timeouts e transferência de ficheiros ---
@@ -63,7 +64,7 @@ function Get-ProjetoVMResourceDefaults {
     $totalBytes  = if ($cs) { $cs.TotalPhysicalMemory } else { 8GB }
     $logicalProcs = if ($cs) { $cs.NumberOfLogicalProcessors } else { 2 }
     $totalGB     = [math]::Round($totalBytes / 1GB, 2)
-    # *25% da RAM do host, limitado entre 2-4 GB*
+    # 25% da RAM do host, limitado entre 2-4 GB
     $memMB       = [int]([math]::Min(4096, [math]::Max(2048, ($totalBytes * 0.25) / 1MB)))
     if (($memMB % 2) -ne 0) { $memMB-- }
     $procCount   = [int][math]::Min(2, [math]::Max(1, [math]::Floor($logicalProcs / 2)))

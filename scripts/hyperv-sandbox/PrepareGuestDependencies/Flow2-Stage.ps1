@@ -1,6 +1,6 @@
-# --- Script: Flow2-Stage.ps1 ---
-# --- Parte 2: cache no host, manifest, cópia para VM e snapshot ---
-# *Carregado via dot-sourcing dentro do try/finally do script principal (mesmo scope).*
+# --- Módulo: Flow2-Stage.ps1 ---
+# --- Staging de ficheiros no guest e snapshot ---
+# Carregado via dot-sourcing dentro do try/finally do script principal (mesmo scope).
 
     Write-LogHost "[6/6] A preparar ferramentas offline no projeto..."
 
@@ -16,7 +16,7 @@
         $vmPath = Join-Path $VmDepsDir $u.name
         $hostPath = Join-Path $HostToolsDir $u.name
 
-        # *Copy-VMFile só copia Host->Guest; o cache canónico fica no host (tools/)*
+        # Copy-VMFile só copia Host->Guest; o cache canónico fica no host (tools/)
         if (-not (Test-Path -LiteralPath $hostPath) -or $ForceRedownload) {
             Write-LogHost "      A descarregar no host: $($u.name)"
             Download-FileRobust -Url $u.url -DestinationPath $hostPath -Retries 3
@@ -34,8 +34,8 @@
     # --- Staging opcional do WinUtil (sem execução) ---
     if ($StageWinutil) {
         Write-LogHost "      A preparar WinUtil (modo seguro: apenas staging, sem executar/debloat)..."
-        # *Fonte oficial (atalho estável) para o script WinUtil*
-        # *NOTA: não executamos automaticamente para garantir que nada é removido*
+        # Fonte oficial (atalho estável) para o script WinUtil
+        # NOTA: não executamos automaticamente para garantir que nada é removido
         $winUrl = "https://christitus.com/win"
         if ((-not (Test-Path -LiteralPath $HostWinutilPath)) -or $ForceRedownload) {
             Download-FileRobust -Url $winUrl -DestinationPath $HostWinutilPath -Retries 3
@@ -97,7 +97,7 @@
     if ($UpdateCleanSnapshot) {
         Write-LogHost "      A atualizar snapshot '$SnapshotName' (VM desligada, isolamento restaurado)..."
         try {
-            # *Remove snapshot anterior antes de criar um novo*
+            # Remove snapshot anterior antes de criar um novo
             $old = Get-VMSnapshot -VMName $VMName -Name $SnapshotName -ErrorAction SilentlyContinue
             if ($old) { Remove-VMSnapshot -VMName $VMName -Name $SnapshotName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null }
         } catch { }

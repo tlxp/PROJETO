@@ -1,4 +1,5 @@
-# --- Script: 03-Install-SysmonInGuest.ps1 ---
+# --- Módulo: 03-Install-SysmonInGuest.ps1 ---
+# --- Instala Sysmon na VM e actualiza snapshot CleanState ---
 <#
 .SYNOPSIS
     Instala Sysmon dentro da VM MalwareSandbox e actualiza o snapshot CleanState.
@@ -33,7 +34,7 @@
 #Requires -RunAsAdministrator
 
 # --- Ponto de entrada: Sysmon na VM e snapshot limpo ---
-# *Instala Sysmon na VM sandbox e actualiza snapshot CleanState.*
+# Instala Sysmon na VM sandbox e actualiza snapshot CleanState.
 
 param(
     [string] $SysmonExePath = "",
@@ -51,7 +52,7 @@ Import-Module (Join-Path $PSScriptRoot "SandboxCommon.psm1") -Force -DisableName
 $configScript = Join-Path $PSScriptRoot "_Config.ps1"
 if (Test-Path $configScript) { . $configScript }
 
-# *Variáveis da VM sandbox definidas em _Config.ps1*
+# Variáveis da VM sandbox definidas em _Config.ps1
 $VMName       = $script:PROJETOVM_VMName
 $SnapshotName = $script:PROJETOVM_SnapshotName
 $GuestUser    = $script:PROJETOVM_GuestUser
@@ -72,7 +73,7 @@ Write-Host "=== Instalação do Sysmon na VM '$VMName' ==="
 Write-Host "Guest Services: desactivados (cópia via PowerShell Direct)."
 Write-Host ""
 
-# *Credenciais do convidado para PowerShell Direct*
+# Credenciais do convidado para PowerShell Direct
 $credCandidates = New-SandboxCredentialCandidates -UserName $GuestUser -Password $GuestPassword -ComputerName $VMName
 $cred = $credCandidates | Select-Object -First 1
 

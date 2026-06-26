@@ -1,4 +1,5 @@
-# --- Script: 05-FirstTimeVmSetup.ps1 ---
+# --- Módulo: 05-FirstTimeVmSetup.ps1 ---
+# --- Primeira entrada na VM: isolamento, runtimes, snapshot ---
 <#
 .SYNOPSIS
     Primeira entrada na VM: valida PowerShell Direct, instala Sysmon, garante isolamento
@@ -55,13 +56,13 @@ try { Remove-Module SandboxCommon -ErrorAction SilentlyContinue } catch {}
 Import-Module (Join-Path $scriptRoot "SandboxCommon.psm1") -Force -DisableNameChecking -ErrorAction Stop
 
 # --- Carregar funções auxiliares (host) ---
-# *Extraídas para .\FirstTimeVmSetup\ e carregadas via dot-sourcing (mesmo scope)*
+# Extraídas para .\FirstTimeVmSetup\ e carregadas via dot-sourcing (mesmo scope)
 $FirstTimeLibDir = Join-Path $scriptRoot 'FirstTimeVmSetup'
 . (Join-Path $FirstTimeLibDir 'Helpers.ps1')
 
 # --- Fluxo por fases ---
-# *Cada fase é um fragmento procedural dot-sourced no MESMO scope deste script*
-# *A ordem replica exatamente a execução original [1/5]..[5/5]*
+# Cada fase é um fragmento procedural dot-sourced no MESMO scope deste script
+# A ordem replica exatamente a execução original [1/5]..[5/5]
 foreach ($phase in @(
     'PhaseA-PreCheck.ps1',
     'PhaseB-Boot.ps1',

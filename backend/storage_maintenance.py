@@ -15,12 +15,12 @@ import config
 import job_store
 
 
-# --- Helper interno: utc now ---
+# --- Data/hora UTC actual ---
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-# --- Helper interno: parse iso ---
+# --- Parse de timestamp ISO 8601 ---
 def _parse_iso(ts: str) -> Optional[datetime]:
     if not ts:
         return None
@@ -30,7 +30,7 @@ def _parse_iso(ts: str) -> Optional[datetime]:
         return None
 
 
-# --- Helper interno: dir size bytes ---
+# --- Tamanho total recursivo de directório ---
 def _dir_size_bytes(path: Path) -> int:
     total = 0
     try:
@@ -61,7 +61,7 @@ class StorageEstimate:
     frontend_dist_bytes: int = 0
 
     @property
-# --- Total bytes ---
+    # --- Total de bytes ocupados pelo conjunto ---
     def total_bytes(self) -> int:
         return (
             self.sandbox_jobs_bytes
@@ -156,7 +156,7 @@ def cleanup_job_artifacts(retention_days: int, max_count: int) -> dict:
     return {"deletedJobs": deleted, "freedBytes": freed_bytes, "keptMostRecent": max_count, "retentionDays": retention_days}
 
 
-# --- Helper interno: zip dir ---
+# --- Compacta directório em ficheiro ZIP ---
 def _zip_dir(src_dir: Path, zip_path: Path, *, exclude_globs: Iterable[str] = ()) -> None:
     src_dir = Path(src_dir)
     zip_path = Path(zip_path)

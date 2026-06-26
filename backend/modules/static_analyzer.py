@@ -1,5 +1,5 @@
 # --- Módulo: static_analyzer ---
-# --- Análise estática de PE: imports suspeitos, strings C&C, evasão ---
+# Análise estática de PE: imports suspeitos, strings C&C e evasão.
 
 import logging
 import re
@@ -168,7 +168,7 @@ class StaticAnalyzer:
         "BlockInput",
     ]
 
-# --- Helper interno: init   ---
+# --- Inicializa dicionário de resultados da análise ---
     def __init__(self):
         self.results = {}
 
@@ -258,7 +258,7 @@ class StaticAnalyzer:
 
         return list(set(suspicious))
 
-# --- Helper interno: read text blob ---
+# --- Leitura do ficheiro como texto (UTF-8/latin-1) ---
     def _read_text_blob(self, file_path: str) -> str:
         with open(file_path, "rb") as f:
             content = f.read()
@@ -267,7 +267,7 @@ class StaticAnalyzer:
         except (UnicodeDecodeError, ValueError):
             return content.decode("latin-1", errors="ignore")
 
-# --- Helper interno: is false positive c2 ---
+# --- Filtro de falsos positivos C&C (metadados .NET) ---
     def _is_false_positive_c2(self, candidate: str) -> bool:
         sl = candidate.lower().strip()
         if len(sl) <= 3:
@@ -283,7 +283,7 @@ class StaticAnalyzer:
             return True
         return False
 
-# --- Helper interno: is high confidence url ---
+# --- Validação de URL C&C com confiança elevada ---
     def _is_high_confidence_url(self, url: str) -> bool:
         if self._is_false_positive_c2(url):
             return False

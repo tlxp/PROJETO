@@ -51,7 +51,7 @@ class HyperVConfig:
 class HyperVVMDriver:
     name = "hyperv"
 
-# --- Helper interno: init   ---
+# --- Associa configuração Hyper-V ao driver ---
     def __init__(self, cfg: HyperVConfig):
         self.cfg = cfg
 

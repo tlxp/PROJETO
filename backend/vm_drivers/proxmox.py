@@ -51,7 +51,7 @@ class ProxmoxConfig:
 class ProxmoxVMDriver:
     name = "proxmox"
 
-# --- Helper interno: init   ---
+# --- Associa configuração Proxmox ao driver ---
     def __init__(self, cfg: ProxmoxConfig):
         self.cfg = cfg
 

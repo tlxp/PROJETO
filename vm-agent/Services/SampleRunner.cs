@@ -1,4 +1,6 @@
 // --- Módulo: SampleRunner.cs ---
+// Executor de amostras com captura de stdout/stderr e timeout.
+
 
 using System.Diagnostics;
 using System.Text;
@@ -6,7 +8,11 @@ using VmAgent.Configuration;
 using VmAgent.Models;
 using VmAgent.State;
 
+
+
 namespace VmAgent.Services;
+
+
 
 // --- Executor de amostras na VM ---
 internal static class SampleRunner
@@ -22,9 +28,13 @@ internal static class SampleRunner
             return Results.BadRequest(new { detail = "Nenhuma amostra carregada. Chame /api/upload primeiro." });
         }
 
+
+
         // *aplica timeout dentro dos limites configurados*
         var timeoutSeconds = req.TimeoutSeconds > 0 ? req.TimeoutSeconds : AgentLimits.DefaultRunTimeoutSeconds;
         timeoutSeconds = Math.Min(timeoutSeconds, AgentLimits.MaxRunTimeoutSeconds);
+
+
 
         var psi = new ProcessStartInfo
         {
@@ -36,6 +46,8 @@ internal static class SampleRunner
             CreateNoWindow = true
         };
 
+
+
         using var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
         var startedAt = DateTime.UtcNow;
         state.LastBehavior = new Dictionary<string, object?>
@@ -45,8 +57,12 @@ internal static class SampleRunner
             ["fileName"] = state.SampleFileName
         };
 
+
+
         var stdout = new StringBuilder();
         var stderr = new StringBuilder();
+
+
 
         // *acumula saída até ao limite máximo de caracteres*
         proc.OutputDataReceived += (_, e) =>
@@ -60,12 +76,18 @@ internal static class SampleRunner
                 stderr.AppendLine(e.Data);
         };
 
+
+
         proc.Start();
         proc.BeginOutputReadLine();
         proc.BeginErrorReadLine();
 
+
+
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+
+
 
         try
         {
@@ -83,6 +105,8 @@ internal static class SampleRunner
                 // *ignora falha ao terminar processo após timeout*
             }
 
+
+
             state.LastBehavior["status"] = "timeout";
             state.LastBehavior["exitCode"] = null;
             state.LastBehavior["stdout"] = stdout.ToString();
@@ -91,12 +115,17 @@ internal static class SampleRunner
             return Results.Ok(new { status = "timeout" });
         }
 
+
+
         state.LastBehavior["status"] = "finished";
         state.LastBehavior["exitCode"] = proc.ExitCode;
         state.LastBehavior["stdout"] = stdout.ToString();
         state.LastBehavior["stderr"] = stderr.ToString();
         state.LastBehavior["finishedAt"] = DateTime.UtcNow.ToString("O");
 
+
+
         return Results.Ok(new { status = "finished", exitCode = proc.ExitCode });
     }
 }
+

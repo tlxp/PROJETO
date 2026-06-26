@@ -1,4 +1,6 @@
 // --- Módulo: SnippetModal.tsx ---
+// Modal antes/depois da deobfuscação com navegação entre casos.
+
 import React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
@@ -23,7 +25,7 @@ type SnippetModalProps = {
   onNavigate: (delta: number) => void;
 };
 
-// --- Modal antes/depois da deobfuscação com navegação entre casos ---
+// --- Componente ---
 const SnippetModal: React.FC<SnippetModalProps> = ({ state, onOpenChange, onNavigate }) => (
   <Dialog open={state.open} onOpenChange={onOpenChange}>
     <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">

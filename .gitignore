@@ -90,6 +90,13 @@ secrets/
 backend/.env
 frontend/.env
 
+# MalwareBazaar samples (manual download — never commit)
+backend/evaluation/malwarebazaar_samples/**
+!backend/evaluation/malwarebazaar_samples/README.md
+
+# Benign sample builds (regenerate with benign-samples/build.ps1)
+benign-samples/dist/
+
 # Diagramas — fonte única docs/diagrams/; não versionar .puml derivados do relatório
 relatório/imagens/fig-4-*.puml
 relatório/imagens/plantuml.jar

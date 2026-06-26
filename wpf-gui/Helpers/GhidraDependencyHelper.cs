@@ -1,4 +1,5 @@
 ﻿// --- Módulo: GhidraDependencyHelper.cs ---
+// Deteção e instalação opcional do Ghidra para o backend.
 using System;
 using System.IO;
 using System.IO.Compression;
@@ -7,12 +8,11 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
 
 namespace RatAnalyzer.Desktop.Helpers;
 
 // --- Oferece instalação guiada do Ghidra (transferência + extração) quando GHIDRA_INSTALL_DIR é inválido ---
-internal static class GhidraDependencyHelper
+internal sealed class GhidraDependencyHelper : DependencyProbeHelperBase
 {
     private const string GithubLatestApi =
         "https://api.github.com/repos/NationalSecurityAgency/ghidra/releases/latest";
@@ -53,20 +53,17 @@ internal static class GhidraDependencyHelper
     // --- Instalação Ghidra válida para o uvicorn (ignora GHIDRA_INSTALL_DIR obsoleto) ---
     internal static string? ResolveGhidraInstallDirForBackend() => GetEffectiveGhidraInstallDir();
 
+    // --- Verifica se válido Ghidra pasta ---
     public static bool IsValidGhidraDirectory(string path)
     {
         if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
             return false;
 
         // ghidraRun.bat está na RAIZ da pasta do Ghidra (não em support\).
-        // Estrutura real do ZIP: ghidra_X.Y_PUBLIC\ghidraRun.bat
-        //                        ghidra_X.Y_PUBLIC\support\ghidra.ico
-        //                        ghidra_X.Y_PUBLIC\Ghidra\  (módulos principais)
         if (File.Exists(Path.Combine(path, "ghidraRun.bat")))
             return true;
 
         // Fallback: validação alternativa pela presença de Ghidra\ + support\launch.properties
-        // (cobre edge cases onde o .bat pode não existir, ex: builds headless-only)
         if (Directory.Exists(Path.Combine(path, "Ghidra")) &&
             File.Exists(Path.Combine(path, "support", "launch.properties")))
             return true;
@@ -99,16 +96,13 @@ internal static class GhidraDependencyHelper
             log("[INFO] GHIDRA_INSTALL_DIR não definido (pseudo-C nativo opcional).");
         }
 
-        var app = Application.Current;
-        if (app?.Dispatcher == null)
-        {
-            log("[INFO] Ghidra em falta — sem janela principal para confirmar a transferência; " +
-                "defina GHIDRA_INSTALL_DIR manualmente ou reabra o arranque pela interface.");
-            return;
-        }
-
-        var confirm = await app.Dispatcher.InvokeAsync(() =>
-            MessageBox.Show(
+        await TryRunConfirmedInstallFlowAsync(
+            log,
+            ct,
+            noDispatcherLogMessage:
+                "[INFO] Ghidra em falta — sem janela principal para confirmar a transferência; " +
+                "defina GHIDRA_INSTALL_DIR manualmente ou reabra o arranque pela interface.",
+            confirmMessage:
                 "O Ghidra não foi encontrado (variável de ambiente GHIDRA_INSTALL_DIR).\n\n" +
                 "Para decompilação nativa (pseudo-C), é necessário o Ghidra.\n\n" +
                 "Deseja transferir e extrair automaticamente a versão mais recente dos releases oficiais " +
@@ -116,33 +110,17 @@ internal static class GhidraDependencyHelper
                 "• Download grande (várias centenas de MB)\n" +
                 "• Pode demorar vários minutos\n\n" +
                 "Alternativa: instale manualmente e defina GHIDRA_INSTALL_DIR para a pasta extraída.",
-                "Instalar Ghidra",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question) == MessageBoxResult.Yes);
-
-        if (!confirm)
-        {
-            log("[INFO] Instalação automática do Ghidra cancelada.");
-            return;
-        }
-
-        try
-        {
-            await DownloadAndInstallAsync(log, ct).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            log($"[ERRO] Ghidra: {ex.Message}");
-            await app.Dispatcher.InvokeAsync(() =>
-                MessageBox.Show(
-                    "Não foi possível instalar o Ghidra automaticamente.\n\n" + ex.Message + "\n\n" +
-                    "Instale manualmente a partir de:\nhttps://github.com/NationalSecurityAgency/ghidra/releases",
-                    "Erro — Ghidra",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning));
-        }
+            confirmTitle: "Instalar Ghidra",
+            cancelLogMessage: "[INFO] Instalação automática do Ghidra cancelada.",
+            errorLogPrefix: "Ghidra",
+            errorDialogTitle: "Erro — Ghidra",
+            buildErrorDialogBody: ex =>
+                "Não foi possível instalar o Ghidra automaticamente.\n\n" + ex.Message + "\n\n" +
+                "Instale manualmente a partir de:\nhttps://github.com/NationalSecurityAgency/ghidra/releases",
+            installAsync: DownloadAndInstallAsync).ConfigureAwait(false);
     }
 
+    // --- Transfere e instalação ---
     private static async Task DownloadAndInstallAsync(Action<string> log, CancellationToken ct)
     {
         using var http = new HttpClient();
@@ -239,14 +217,11 @@ internal static class GhidraDependencyHelper
         log($"[OK] Ghidra instalado em: {finalDir}");
         log("[INFO] GHIDRA_INSTALL_DIR definido para o utilizador e para esta sessão.");
 
-        Application.Current?.Dispatcher.Invoke(() =>
-            MessageBox.Show(
-                "Ghidra extraído para:\n" + finalDir + "\n\n" +
-                "A variável de utilizador GHIDRA_INSTALL_DIR foi definida.\n\n" +
-                "Se o backend Python já estiver em execução, reinicie-o para aplicar o novo caminho.",
-                "Ghidra",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information));
+        ShowInstallSuccess(
+            "Ghidra extraído para:\n" + finalDir + "\n\n" +
+            "A variável de utilizador GHIDRA_INSTALL_DIR foi definida.\n\n" +
+            "Se o backend Python já estiver em execução, reinicie-o para aplicar o novo caminho.",
+            "Ghidra");
 
         try
         {
@@ -255,6 +230,7 @@ internal static class GhidraDependencyHelper
         catch { /* ignorar */ }
     }
 
+    // --- Localiza Ghidra raiz em extract ---
     private static string? FindGhidraRootInExtract(string extractRoot)
     {
         foreach (var d in Directory.GetDirectories(extractRoot))
@@ -315,6 +291,7 @@ internal static class GhidraDependencyHelper
         return (bestUrl, bestName);
     }
 
+    // --- Transfere ficheiro com progresso ---
     private static async Task DownloadFileWithProgressAsync(
         HttpClient http,
         string url,

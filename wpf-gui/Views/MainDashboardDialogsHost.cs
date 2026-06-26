@@ -1,4 +1,5 @@
 ﻿// --- Módulo: MainDashboardDialogsHost.cs ---
+// Implementação WPF dos diálogos do dashboard.
 using System;
 using System.Diagnostics;
 using System.Security.Principal;
@@ -8,16 +9,26 @@ using RatAnalyzer.Desktop.Localization;
 using RatAnalyzer.Desktop.Services;
 using RatAnalyzer.Desktop.ViewModels;
 
+
+
 namespace RatAnalyzer.Desktop.Views;
+
+
 
 // --- Implementação WPF de IMainDashboardDialogs (diálogos e navegação) ---
 internal sealed class MainDashboardDialogsHost : IMainDashboardDialogs
 {
     private readonly UserControl _view;
 
+
+
     public MainDashboardDialogsHost(UserControl view) => _view = view;
 
+
+
     private Window? Owner => Window.GetWindow(_view);
+
+
 
     // --- Abre diálogo de seleção de ficheiro para análise ---
     public string? PickAnalysisFile()
@@ -31,14 +42,25 @@ internal sealed class MainDashboardDialogsHost : IMainDashboardDialogs
         return dialog.ShowDialog() == true ? dialog.FileName : null;
     }
 
+
+
+    // --- Exibe Info ---
     public void ShowInfo(string message, string? title = null) =>
         MessageBox.Show(Owner, message, title ?? LocalizationManager.Get(LocKeys.AppTitle), MessageBoxButton.OK, MessageBoxImage.Information);
 
+
+
+    // --- Exibe erro ---
     public void ShowError(string message, string title) =>
         MessageBox.Show(Owner, message, title, MessageBoxButton.OK, MessageBoxImage.Error);
 
+
+
+    // --- Exibe Warning ---
     public void ShowWarning(string message, string title) =>
         MessageBox.Show(Owner, message, title, MessageBoxButton.OK, MessageBoxImage.Warning);
+
+
 
     // --- Verifica elevação de administrador (necessária para Hyper-V) ---
     public bool IsAdministrator()
@@ -55,10 +77,15 @@ internal sealed class MainDashboardDialogsHost : IMainDashboardDialogs
         }
     }
 
+
+
+    // --- Exibe Administrator Required ---
     public void ShowAdministratorRequired() =>
         ShowWarning(
             LocalizationManager.Get(LocKeys.MsgAdminRequired),
             LocalizationManager.Get(LocKeys.MsgAdminRequiredTitle));
+
+
 
     // --- Abre janela de análise VM após resolver credenciais ---
     public void OpenVmAnalysis(
@@ -73,6 +100,8 @@ internal sealed class MainDashboardDialogsHost : IMainDashboardDialogs
         if (credentials == null)
             return;
 
+
+
         var vmWindow = new VmAnalysisWindow(
             samplePath,
             runFirstTimeSetup,
@@ -85,6 +114,8 @@ internal sealed class MainDashboardDialogsHost : IMainDashboardDialogs
         vmWindow.Show();
     }
 
+
+
     // --- Obtém credenciais da VM: env, sessão ou diálogo modal ---
     private VmGuestCredentials? ResolveGuestCredentials()
     {
@@ -92,27 +123,42 @@ internal sealed class MainDashboardDialogsHost : IMainDashboardDialogs
         if (fromEnv != null)
             return fromEnv;
 
+
+
         var fromSession = VmGuestCredentialStore.TryGetSession();
         if (fromSession != null)
             return fromSession;
+
+
 
         var dialog = new VmGuestCredentialsWindow("analyst") { Owner = Owner };
         if (dialog.ShowDialog() != true)
             return null;
 
+
+
         var credentials = new VmGuestCredentials(dialog.GuestUser.Trim(), dialog.GuestPassword);
         if (dialog.RememberForSession)
             VmGuestCredentialStore.SetSession(credentials);
 
+
+
         return credentials;
     }
 
+
+
+    // --- Abre armazenamento manutenção ---
     public void OpenStorageMaintenance()
     {
         var w = new StorageMaintenanceWindow { Owner = Owner };
         w.ShowDialog();
     }
 
+
+
+    // --- Abre browser URL ---
     public void OpenBrowserUrl(string url) =>
         Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
 }
+

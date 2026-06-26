@@ -1,4 +1,5 @@
-﻿# --- Script: Logging.ps1 ---
+﻿# --- Módulo: Logging.ps1 ---
+# --- Funções de logging estruturado do sandbox ---
 
 # --- Timestamp para mensagens de log ---
 function Get-LogTimestamp {
@@ -8,7 +9,7 @@ function Get-LogTimestamp {
 # --- Log simples no consola (host) ---
 function Write-LogHost {
     param([string] $Message)
-    # *Formatar mensagem com timestamp e escrever no host*
+    # Formatar mensagem com timestamp e escrever no host
     $t = Get-LogTimestamp
     Write-Host "[$t] $Message"
 }
@@ -31,7 +32,7 @@ function Write-SandboxLog {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $line = "[$timestamp][$Level] $Message"
     Write-Host $line
-    # *Anexar linha ao ficheiro de log se o caminho foi fornecido*
+    # Anexar linha ao ficheiro de log se o caminho foi fornecido
     if ($LogPath) {
         try {
             Add-Content -Path $LogPath -Value $line -ErrorAction SilentlyContinue

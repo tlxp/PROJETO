@@ -1,5 +1,5 @@
-# --- Script: Installers.ps1 ---
-
+# --- Módulo: Installers.ps1 ---
+# --- Localização e cópia de instaladores offline ---
 # --- Localização de instalador no host ---
 function Find-InstallerOnHost {
     param(
@@ -28,7 +28,7 @@ function Find-InstallerOnHost {
         if (-not $isPattern) {
             $p2 = Join-Path $SourceDir $FileName
             if (Test-Path -LiteralPath $p2) { return $p2 }
-            # *Fallback: procurar por nome exacto em subpastas.*
+            # Fallback: procurar por nome exacto em subpastas.
             try {
                 $hit = Get-ChildItem -LiteralPath $SourceDir -File -Recurse -ErrorAction SilentlyContinue |
                     Where-Object { $_.Name -ieq $FileName } |
@@ -46,7 +46,7 @@ function Find-InstallerOnHost {
     }
 
     # --- 3) Package Cache do Windows ---
-    # *Procurar instaladores já descarregados por instalações anteriores no host.*
+    # Procurar instaladores já descarregados por instalações anteriores no host.
     $pkgRoot = "C:\ProgramData\Package Cache"
     if (Test-Path -LiteralPath $pkgRoot) {
         $leafs = @($FileName) + @($PackageCacheLeafNames)
@@ -77,7 +77,7 @@ function Ensure-SharedInstaller {
         [string[]] $CacheLeafs = @()
     )
 
-    # *Com wildcards, o ficheiro real pode incluir versão no nome.*
+    # Com wildcards, o ficheiro real pode incluir versão no nome.
     if (-not ($AllowPattern -and ($FileName -match "[\*\?]"))) {
         $dst = Join-Path $SharedDir $FileName
         if (Test-Path -LiteralPath $dst) {
@@ -88,7 +88,7 @@ function Ensure-SharedInstaller {
     $src = Find-InstallerOnHost -FileName $FileName -AllowPattern:$AllowPattern -PackageCacheLeafNames $CacheLeafs
     if (-not $src) { return $null }
 
-    # *Copiar para pasta partilhável com o nome real do ficheiro.*
+    # Copiar para pasta partilhável com o nome real do ficheiro.
     $realName = Split-Path -Leaf $src
     $dst = Join-Path $SharedDir $realName
     Copy-Item -LiteralPath $src -Destination $dst -Force

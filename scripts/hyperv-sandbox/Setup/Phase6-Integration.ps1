@@ -1,4 +1,4 @@
-# --- Script: Phase6-Integration.ps1 ---
+# --- Módulo: Phase6-Integration.ps1 ---
 # --- Integration Services e porta serial (Gen1) ---
 
 Write-Host "[6/8] Integration Services e porta serial..."
@@ -8,7 +8,7 @@ if ([string]::IsNullOrWhiteSpace($PipeNameSetup)) { $PipeNameSetup = "SandboxRep
 
 # --- Configuração da porta COM1 (apenas Gen1) ---
 if ($VMGeneration -eq 1) {
-    # *COM1 aponta para named pipe usado pelo relatório de análise*
+    # COM1 aponta para named pipe usado pelo relatório de análise
     Set-VMComPort -VMName $VMName -Number 1 -Path "\\.\pipe\$PipeNameSetup" -ErrorAction Stop
     Write-Host "      COM1 -> \\.\pipe\$PipeNameSetup"
 } else {

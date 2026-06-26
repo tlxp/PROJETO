@@ -12,7 +12,7 @@ from analysis_jobs import AnalysisJob, AnalysisType
 from vm_orchestrator import run_dynamic_analysis
 
 
-# --- Helper interno: sample job ---
+# --- Cria job de teste com amostra temporária ---
 def _sample_job(tmp_path: Path) -> AnalysisJob:
     sample = tmp_path / "sample.exe"
     sample.write_bytes(b"MZ")
@@ -27,7 +27,6 @@ def _sample_job(tmp_path: Path) -> AnalysisJob:
 
 # --- Testes de StubDriver ---
 class TestStubDriver:
-# --- Teste: verifica run dynamic analysis stub default ---
     def test_run_dynamic_analysis_stub_default(self, monkeypatch, tmp_path):
         monkeypatch.delenv("SANDBOX_VM_DRIVER", raising=False)
         job = _sample_job(tmp_path)
@@ -47,7 +46,6 @@ class TestStubDriver:
 )
 # --- Testes de HyperVDriverIntegration ---
 class TestHyperVDriverIntegration:
-# --- Teste: verifica hyperv driver end to end ---
     def test_hyperv_driver_end_to_end(self, tmp_path):
         # *Integração hyperv — requer VM, snapshot e VM_AGENT_**
         if os.getenv("SANDBOX_VM_DRIVER", "").lower() != "hyperv":
@@ -65,7 +63,6 @@ class TestHyperVDriverIntegration:
 )
 # --- Testes de ProxmoxDriverIntegration ---
 class TestProxmoxDriverIntegration:
-# --- Teste: verifica proxmox driver end to end ---
     def test_proxmox_driver_end_to_end(self, tmp_path):
         # *Skeleton experimental — laboratório com Proxmox configurado*
         if os.getenv("SANDBOX_VM_DRIVER", "").lower() != "proxmox":

@@ -12,13 +12,13 @@ from typing import Callable, Dict, Optional
 from artifact_naming import short_stem
 import config
 
-# --- Helper interno: jdk root has java bin ---
+# --- Verifica se JDK tem executável java ---
 def _jdk_root_has_java_bin(home: Path) -> bool:
     name = "java.exe" if sys.platform == "win32" else "java"
     return home.is_dir() and (home / "bin" / name).is_file()
 
 
-# --- Helper interno: prepend path ---
+# --- Adiciona directório ao início do PATH ---
 def _prepend_path(directory: str) -> None:
     if not directory:
         return
@@ -128,7 +128,7 @@ def _ensure_java_home_for_ghidra() -> None:
             pass
 
 
-# --- Helper interno: is valid ghidra directory ---
+# --- Valida instalação Ghidra (support/analyzeHeadless) ---
 def _is_valid_ghidra_directory(path: Path) -> bool:
     if not path.is_dir():
         return False
@@ -141,7 +141,7 @@ def _is_valid_ghidra_directory(path: Path) -> bool:
     return False
 
 
-# --- Helper interno: discover ghidra install dirs ---
+# --- Descobre instalações Ghidra no sistema ---
 def _discover_ghidra_install_dirs() -> list[Path]:
     candidates: list[Path] = []
     local_app = (os.environ.get("LOCALAPPDATA") or "").strip()
@@ -251,7 +251,7 @@ DECOMPILER_HIDE_JUMPTABLE_WARNINGS = True
 
 # --- Aplica limites DECOMPILER_* ao DecompileOptions ---
 def _apply_our_options(opts):
-# --- Helper interno: set ---
+# --- Invoca setter PyGhidra se existir ---
     def _set(method, *args):
         if hasattr(opts, method):
             getattr(opts, method)(*args)
@@ -309,7 +309,7 @@ def _cleanup_ghidra_project_artifacts(workspace: Path, project_name: str) -> Non
         pass
 
 
-# --- Helper interno: summarize ghidra error ---
+# --- Resume mensagem de erro Ghidra ---
 def _summarize_ghidra_error(exc: BaseException) -> str:
     msg = str(exc).strip()
     low = msg.lower()
@@ -323,7 +323,7 @@ def _summarize_ghidra_error(exc: BaseException) -> str:
     return msg
 
 
-# --- Helper interno: ghidra error type ---
+# --- Classifica tipo de erro Ghidra ---
 def _ghidra_error_type(exc: BaseException) -> str:
     low = str(exc).lower()
     if "unable to lock project" in low or "lockexception" in low:

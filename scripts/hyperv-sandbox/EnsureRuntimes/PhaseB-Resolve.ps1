@@ -1,10 +1,10 @@
-# --- Script: PhaseB-Resolve.ps1 ---
-
+# --- Módulo: PhaseB-Resolve.ps1 ---
+# --- Resolução de paths e download automático de runtimes ---
 # --- Resolução de instaladores no host ---
 $resolved = @()
 $missing = @()
 foreach ($it in $installers) {
-    # *Se faltar, tentar download automático (quando ativado) para a pasta offline.*
+    # Se faltar, tentar download automático (quando ativado) para a pasta offline.
     if ($it.Url) {
         $null = Download-InstallerIfMissing -Url $it.Url -OutFileName $it.File -Label $it.Name
     }

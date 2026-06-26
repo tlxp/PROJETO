@@ -1,4 +1,6 @@
 // --- Módulo: Index.tsx ---
+// Página principal: upload e resultados de análise.
+
 import { AnimatePresence } from "framer-motion";
 import { useCallback } from "react";
 import { useIndexAnalysisSession } from "@/hooks/useIndexAnalysisSession";
@@ -8,7 +10,7 @@ import IndexHeader from "./Index/IndexHeader";
 import AnalysisResultsView from "./Index/AnalysisResultsView";
 import SnippetModal from "./Index/SnippetModal";
 
-// --- Página principal: upload e resultados de análise ---
+// --- Componente ---
 const Index = () => {
   const session = useIndexAnalysisSession();
   const resultsVm = useIndexResultsViewModel({
@@ -18,9 +20,12 @@ const Index = () => {
   });
 
   const handleLoadMock = useCallback(() => {
-    session.loadMockDemo();
+    void session.loadMockDemo();
     resultsVm.resetViewState();
   }, [session, resultsVm]);
+
+  const mockDemoUiEnabled =
+    import.meta.env.DEV && import.meta.env.VITE_ENABLE_MOCK_DEMO === "true";
 
   return (
     <div className="min-h-screen bg-background grid-bg">
@@ -42,6 +47,7 @@ const Index = () => {
               isAnalyzing={session.isAnalyzing}
               onAnalyze={session.handleAnalyze}
               onLoadMock={handleLoadMock}
+              mockDemoEnabled={mockDemoUiEnabled}
               stillRunning={session.stillRunningJob}
             />
           ) : (

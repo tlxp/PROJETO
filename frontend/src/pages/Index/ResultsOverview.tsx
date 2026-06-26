@@ -1,4 +1,6 @@
 // --- Módulo: ResultsOverview.tsx ---
+// Overview da análise e categorias navegáveis do relatório.
+
 import React from "react";
 import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -27,7 +29,7 @@ function scoreToneClass(score: number, isBenignLabel = false): string {
   return "text-primary";
 }
 
-// --- Overview da análise e categorias navegáveis do relatório ---
+// --- Componente ---
 const ResultsOverview: React.FC<ResultsOverviewProps> = ({
   result,
   reportCategories,

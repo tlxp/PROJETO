@@ -1,4 +1,4 @@
-# --- Script: Phase5-CreateVm.ps1 ---
+# --- Módulo: Phase5-CreateVm.ps1 ---
 # --- Criação ou reinstalação da VM sandbox ---
 
 Write-Host "[5/8] VM $VMName (Gen$VMGeneration, RAM: $memMB MB, CPUs: $procCount, VHD: $vhdSizeGB GB)..."
@@ -24,7 +24,7 @@ if ($existingVm) {
     }
     try { Get-VMSnapshot -VMName $VMName -ErrorAction SilentlyContinue | Remove-VMSnapshot -Confirm:$false -ErrorAction SilentlyContinue | Out-Null } catch { }
     try { Remove-VM -Name $VMName -Force -ErrorAction SilentlyContinue | Out-Null } catch { }
-    # *limpa VHD, floppy unattended e metadados Hyper-V*
+    # limpa VHD, floppy unattended e metadados Hyper-V
     foreach ($p in @($VHDPath,
                      (Join-Path $VMPath "unattend"),
                      (Join-Path $VMPath "unattend.vfd"),

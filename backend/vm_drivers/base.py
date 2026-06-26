@@ -21,5 +21,5 @@ class DynamicAnalysisOutput:
 class VMDriver(Protocol):
     name: str
 
-# --- Run ---
+# --- Executa análise dinâmica na VM ---
     def run(self, job: "AnalysisJob") -> DynamicAnalysisOutput: ...

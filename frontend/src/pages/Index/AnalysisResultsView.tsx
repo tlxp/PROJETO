@@ -1,4 +1,6 @@
 // --- Módulo: AnalysisResultsView.tsx ---
+// Vista de resultados com overview, grelha e painel expandido.
+
 import { AnimatePresence, motion } from "framer-motion";
 import type { useIndexResultsViewModel } from "@/hooks/useIndexResultsViewModel";
 import type { AnalysisResult, ReportCategory } from "@/lib/analysis";
@@ -29,7 +31,7 @@ export type AnalysisResultsViewProps = {
   vm: IndexResultsViewModel;
 };
 
-// --- Vista de resultados: overview, grelha e painel expandido ---
+// --- Componente ---
 const AnalysisResultsView = ({
   resultsTitle,
   error,

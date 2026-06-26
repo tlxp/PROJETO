@@ -1,6 +1,6 @@
-# --- Script: VmInvoke.ps1 ---
+# --- Módulo: VmInvoke.ps1 ---
 # --- Execução da análise destacada dentro da VM ---
-# *carregado via dot-sourcing no mesmo scope do orquestrador*
+# carregado via dot-sourcing no mesmo scope do orquestrador
 #
 # A análise é lançada de forma DESTACADA (Launch-AnalysisDetached.ps1): um processo
 # powershell.exe separado dentro da VM corre Run-MalwareAnalysis.ps1 e o host devolve
@@ -43,7 +43,7 @@ function Start-DetachedAnalysisInVm {
     $launchJson = $launchConfig | ConvertTo-Json -Compress
 
     # --- Escrita de launch_params.json na VM ---
-    # *evita scriptblocks remotos grandes; o launcher lê o JSON localmente*
+    # evita scriptblocks remotos grandes; o launcher lê o JSON localmente
     Invoke-Command -VMName $VM -Credential $Cred -ScriptBlock {
         param($Path, $Json)
         $dir = Split-Path -Parent $Path
@@ -52,7 +52,7 @@ function Start-DetachedAnalysisInVm {
     } -ArgumentList $vmConfigPath, $launchJson -ErrorAction Stop | Out-Null
 
     # --- Lançamento destacado ---
-    # *o launcher estabiliza o processo filho ~1s e devolve JSON com o PID*
+    # o launcher estabiliza o processo filho ~1s e devolve JSON com o PID
     $launchOut = Invoke-Command -VMName $VM -Credential $Cred -ScriptBlock {
         param($LauncherPath, $ConfigPath)
         if (-not (Test-Path -LiteralPath $LauncherPath)) {

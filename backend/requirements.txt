@@ -14,5 +14,5 @@ redis>=5.0.0,<7.0
 rq>=1.16.0,<3.0
 # Extras opcionais (não incluídos no lock principal):
 #   requirements-ghidra.txt — pseudo-C (Ghidra 12+ + GHIDRA_INSTALL_DIR)
-#   requirements-gui.txt    — GUI Tkinter (windnd)
+#   requirements-gui.txt    — GUI Tkinter deprecated/legacy (windnd)
 #   requirements-dev.txt    — pytest, httpx

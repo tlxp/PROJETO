@@ -1,4 +1,5 @@
-﻿# --- Script: Prepare-RealisticEnvironment.ps1 ---
+﻿# --- Módulo: Prepare-RealisticEnvironment.ps1 ---
+# --- Prepara ambiente realista na VM (UAC, updates) ---
 <#
 .SYNOPSIS
     Corre DENTRO da VM. Prepara um ambiente "realista" para análise (sem instalar aplicações).
@@ -39,7 +40,7 @@ if (-not (Test-Path $WorkDir)) {
 $StateJsonPath = Join-Path $WorkDir "prepare_env_state.json"
 $ReadyFlagPath = Join-Path $WorkDir "prepare_env_ready.flag"
 
-# *Remove estado de execuções anteriores*
+# Remove estado de execuções anteriores
 Remove-Item -LiteralPath $StateJsonPath -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $ReadyFlagPath -Force -ErrorAction SilentlyContinue
 
@@ -47,7 +48,7 @@ Remove-Item -LiteralPath $ReadyFlagPath -Force -ErrorAction SilentlyContinue
 LogMsg "=== Prepare-RealisticEnvironment ==="
 LogMsg "[1] A configurar ambiente realista..."
 
-# *Desativa Windows Update para não interromper a análise*
+# Desativa Windows Update para não interromper a análise
 try {
     Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" `
         -Name "NoAutoUpdate" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
@@ -56,7 +57,7 @@ try {
     LogWarn "  Não foi possível desactivar Windows Update: $($_.Exception.Message)"
 }
 
-# *Mantém a VM activa durante a análise (sem hibernação/standby)*
+# Mantém a VM activa durante a análise (sem hibernação/standby)
 try {
     powercfg /hibernate off 2>&1 | Out-Null
     powercfg /change standby-timeout-ac 0 2>&1 | Out-Null
@@ -66,7 +67,7 @@ try {
     LogWarn "  Não foi possível configurar power: $($_.Exception.Message)"
 }
 
-# *Desactiva SmartScreen para não bloquear samples*
+# Desactiva SmartScreen para não bloquear samples
 try {
     Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" `
         -Name "SmartScreenEnabled" -Value "Off" -Type String -Force -ErrorAction SilentlyContinue
@@ -77,7 +78,7 @@ try {
     LogWarn "  Não foi possível desactivar SmartScreen: $($_.Exception.Message)"
 }
 
-# *Desactiva UAC para facilitar execução de samples*
+# Desactiva UAC para facilitar execução de samples
 try {
     Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" `
         -Name "EnableLUA" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
@@ -120,7 +121,7 @@ $state = @{
 $state | ConvertTo-Json -Depth 6 | Set-Content -Path $StateJsonPath -Encoding UTF8
 LogMsg "  Estado gravado: $StateJsonPath"
 
-# *Flag simples para o host saber que a preparação terminou*
+# Flag simples para o host saber que a preparação terminou
 Set-Content -Path $ReadyFlagPath -Value "ready" -Encoding UTF8
 LogMsg "  Flag de pronto criada: $ReadyFlagPath"
 

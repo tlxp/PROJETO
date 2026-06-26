@@ -1,5 +1,5 @@
 # --- Módulo: yara_scanner ---
-# --- Scanner YARA: deteta padrões de malware com regras de yara_rules/ ---
+# Scanner YARA: deteta padrões de malware com regras em yara_rules/.
 # *Se yara-python ou regras faltarem, a análise continua sem YARA*
 
 import logging
@@ -17,7 +17,7 @@ logger = logging.getLogger("rat_analyzer_yara")
 # --- Scanner YARA para deteção de padrões de RATs ---
 class YaraScanner:
 
-# --- Helper interno: init   ---
+# --- Define diretório de regras e compila YARA ---
     def __init__(self, rules_dir: str = "yara_rules"):
         self.rules_dir = Path(rules_dir)
         self.rules = None

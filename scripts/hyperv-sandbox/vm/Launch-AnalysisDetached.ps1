@@ -1,4 +1,5 @@
-﻿# --- Script: Launch-AnalysisDetached.ps1 ---
+﻿# --- Módulo: Launch-AnalysisDetached.ps1 ---
+# --- Launcher destacado para Run-MalwareAnalysis.ps1 ---
 <#
 .SYNOPSIS
     Lança Run-MalwareAnalysis.ps1 num processo PowerShell separado (guest).
@@ -108,7 +109,7 @@ function Wait-ForGuestAliveFile {
 # --- Fluxo principal de arranque desacoplado ---
 $workDir = "C:\analysis_work"
 try {
-    # *Carrega e valida launch_params.json*
+    # Carrega e valida launch_params.json
     if (-not (Test-Path -LiteralPath $ConfigPath)) {
         throw "Ficheiro de configuração não encontrado: $ConfigPath"
     }
@@ -138,14 +139,14 @@ try {
         $psExe = "powershell.exe"
     }
 
-    # *Compatibilidade com launch_params.json antigos (WaitForSampleExit)*
+    # Compatibilidade com launch_params.json antigos (WaitForSampleExit)
     $timeoutKill = Get-LaunchConfigBool -Config $cfg -Name "SampleTimeoutKill"
     if (-not $timeoutKill) {
         $waitExitVal = Get-LaunchConfigProperty -Config $cfg -Name "WaitForSampleExit"
         if ($null -ne $waitExitVal) { $timeoutKill = -not [bool]$waitExitVal }
     }
 
-    # *Monta a linha de comandos para Run-MalwareAnalysis.ps1*
+    # Monta a linha de comandos para Run-MalwareAnalysis.ps1
     $psArgs = @(
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
@@ -183,7 +184,7 @@ try {
     $launchLog = Join-Path $workDir "analysis_launch.log"
     $alivePath = Join-Path $workDir "guest_alive.txt"
 
-    # *Limpa artefactos de arranques anteriores*
+    # Limpa artefactos de arranques anteriores
     try { if (Test-Path -LiteralPath $alivePath) { Remove-Item -LiteralPath $alivePath -Force -ErrorAction SilentlyContinue } } catch { }
     try { if (Test-Path -LiteralPath $launchLog) { Remove-Item -LiteralPath $launchLog -Force -ErrorAction SilentlyContinue } } catch { }
 
@@ -192,11 +193,11 @@ try {
         "started_at=$(Get-Date -Format 'yyyy-MM-ddTHH:mm:ssK')"
     ) -Encoding UTF8
 
-    # *Start-Process evita quoting frágil de cmd.exe start /B*
+    # Start-Process evita quoting frágil de cmd.exe start /B
     $proc = Start-Process -FilePath $psExe -ArgumentList $psArgs -WorkingDirectory $workDir `
         -WindowStyle Hidden -PassThru
 
-    # *Só considera sucesso quando guest_alive.txt confirma o PID*
+    # Só considera sucesso quando guest_alive.txt confirma o PID
     $detachedPid = Wait-ForGuestAliveFile -AlivePath $alivePath -TimeoutSeconds 25
     if ($detachedPid -le 0) {
         $tail = ""

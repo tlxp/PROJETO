@@ -1,5 +1,5 @@
 // --- Módulo: api.ts ---
-// *Camada única de acesso à API do backend (RAT Analyzer)*
+// Camada única de acesso à API do backend (RAT Analyzer).
 
 export const API_BASE: string = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -22,12 +22,11 @@ export class ApiError extends Error {
   }
 }
 
-// --- Deteta erros de abort/timeout do fetch ---
+// --- Utilitários de erro HTTP ---
 export function isAbortError(e: unknown): boolean {
   return e instanceof DOMException && (e.name === "AbortError" || e.name === "TimeoutError");
 }
 
-// --- Converte detail do FastAPI em string legível ---
 export function stringifyDetail(detail: unknown): string {
   if (detail == null) return "";
   if (typeof detail === "string") return detail;
@@ -50,7 +49,6 @@ export function stringifyDetail(detail: unknown): string {
   }
 }
 
-// --- Extrai mensagem de erro do corpo JSON da resposta ---
 export function readErrorDetail(res: Response, fallbackText: string): Promise<string> {
   return res
     .json()
@@ -60,7 +58,7 @@ export function readErrorDetail(res: Response, fallbackText: string): Promise<st
 
 import { getAcceptLanguage, getT } from "@/i18n";
 
-// --- Monta URL absoluta para um path da API ---
+// --- Pedidos HTTP ---
 export function apiUrl(path: string): string {
   return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
 }
@@ -71,7 +69,6 @@ export type ApiFetchOptions = Omit<RequestInit, "signal"> & {
   signal?: AbortSignal | null;
 };
 
-// --- Fetch contra a API com timeout e AbortController combinado ---
 export async function apiFetch(path: string, options: ApiFetchOptions = {}): Promise<Response> {
   const { timeoutMs = DEFAULT_TIMEOUT_MS, signal, ...init } = options;
   const controller = new AbortController();
@@ -106,7 +103,6 @@ export async function apiFetch(path: string, options: ApiFetchOptions = {}): Pro
   }
 }
 
-// --- apiFetch + validação de status + parse JSON (lança ApiError) ---
 export async function apiFetchJson<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   const res = await apiFetch(path, options);
   if (!res.ok) {

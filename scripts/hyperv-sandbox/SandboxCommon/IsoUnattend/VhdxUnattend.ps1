@@ -1,4 +1,5 @@
-﻿# --- Script: VhdxUnattend.ps1 ---
+﻿# --- Módulo: VhdxUnattend.ps1 ---
+# --- VHDX FAT32 com autounattend para boot ---
 
 # --- Criação de VHDX com autounattend.xml ---
 function New-UnattendVhdx {
@@ -23,7 +24,7 @@ function New-UnattendVhdx {
     if ($parent) { Ensure-DirectoryExists -Path $parent }
 
     if (Test-Path $VhdxPath) {
-        # *Remover VHDX existente (pode ter ficado montado de execuções anteriores)*
+        # Remover VHDX existente (pode ter ficado montado de execuções anteriores)
         try { Dismount-VHD -Path $VhdxPath -ErrorAction SilentlyContinue } catch { }
         try {
             $v = Get-VHD -Path $VhdxPath -ErrorAction SilentlyContinue
@@ -56,16 +57,16 @@ function New-UnattendVhdx {
     try {
         $diskNumber = $disk.DiskNumber
 
-        # *MBR em vez de GPT — o scanner do Setup WinPE lê discos MBR de forma mais fiável*
+        # MBR em vez de GPT — o scanner do Setup WinPE lê discos MBR de forma mais fiável
         Initialize-Disk -Number $diskNumber -PartitionStyle MBR -ErrorAction Stop | Out-Null
 
-        # *Partição ativa para se parecer com media de boot/removível*
+        # Partição ativa para se parecer com media de boot/removível
         $part = New-Partition -DiskNumber $diskNumber -UseMaximumSize -AssignDriveLetter -IsActive -ErrorAction Stop
 
-        # *FAT32 em vez de NTFS — WinPE lê sempre FAT32 nesta fase inicial*
+        # FAT32 em vez de NTFS — WinPE lê sempre FAT32 nesta fase inicial
         $vol = Format-Volume -Partition $part -FileSystem FAT32 -NewFileSystemLabel "UNATTEND" -Confirm:$false -ErrorAction Stop
 
-        # *Esperar pela letra de drive (pode atrasar alguns ms)*
+        # Esperar pela letra de drive (pode atrasar alguns ms)
         $driveLetter = $null
         for ($i = 0; $i -lt 10; $i++) {
             $driveLetter = (Get-Partition -DiskNumber $diskNumber | Where-Object { $_.DriveLetter -ne "`0" -and $_.DriveLetter } | Select-Object -First 1).DriveLetter
@@ -76,10 +77,10 @@ function New-UnattendVhdx {
 
         $drive = "${driveLetter}:\"
 
-        # *Copiar conteúdo (incluindo autounattend.xml) para a raiz*
+        # Copiar conteúdo (incluindo autounattend.xml) para a raiz
         Copy-Item -Path (Join-Path $SourceFolder "*") -Destination $drive -Recurse -Force
 
-        # *Validar que o XML está na raiz, onde o Setup o procura*
+        # Validar que o XML está na raiz, onde o Setup o procura
         if (-not (Test-Path (Join-Path $drive "autounattend.xml"))) {
             throw "autounattend.xml n-o est- na raiz do VHDX ($drive). Verifique o conte-do de $SourceFolder."
         }

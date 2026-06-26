@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # --- Módulo: check_md_links ---
-# --- Valida documentação Markdown: links, ortografia PT, H1 único, trailing spaces ---
-# *Uso: python scripts/ci/check_md_links.py*
+# --- Valida Markdown: links, ortografia PT, H1 único e espaços finais ---
 
 from __future__ import annotations
 

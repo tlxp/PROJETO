@@ -1,5 +1,5 @@
-# --- Script: PhaseE-Runtimes.ps1 ---
-# Fase E: instalar runtimes essenciais (offline) na VM antes do snapshot.
+# --- Módulo: PhaseE-Runtimes.ps1 ---
+# --- Instalar runtimes essenciais (.NET, Java) ---
 
 # --- Instalar runtimes essenciais (offline) ---
 Write-LogHost ""
@@ -17,7 +17,7 @@ if ($StageWinutil) {
         if (Test-Path -LiteralPath $winutil) {
             Write-LogHost ""
             Write-LogHost "       A copiar WinUtil (staging seguro, sem executar) para a VM..."
-            # *Copia WinUtil para a VM sem executar (instalação manual posterior)*
+            # Copia WinUtil para a VM sem executar (instalação manual posterior)
             Copy-SandboxVMFile -VMName $VMName -Credential $cred -SourcePath $winutil -DestinationPath "C:\analysis_work\deps\winutil.ps1"
             Write-LogHost "       WinUtil staged em: C:\analysis_work\deps\winutil.ps1"
             Write-LogHost "       Nota: execute manualmente apenas ações de INSTALL no WinUtil."
@@ -76,7 +76,7 @@ else {
 
         try {
             Write-LogHost ('         [RUN]  {0}' -f $it.Name)
-            # *Executa instalador silenciosamente dentro da VM*
+            # Executa instalador silenciosamente dentro da VM
             $res = Invoke-Command -VMName $VMName -Credential $cred -ScriptBlock {
                 param($PathExe, $InstallerArgs)
                 if (-not (Test-Path -LiteralPath $PathExe)) { return @{ ok = $false; code = -1; msg = "Instalador não encontrado no guest." } }
@@ -86,7 +86,7 @@ else {
             } -ArgumentList $dst, $it.Args -ErrorAction Stop
 
             $code = if ($res -and $res.code -ne $null) { [int]$res.code } else { 0 }
-            # *ExitCode 0 = OK; 3010 = reboot necessário (aceitável)*
+            # ExitCode 0 = OK; 3010 = reboot necessário (aceitável)
             if ($code -eq 0 -or $code -eq 3010) {
                 Write-LogHost ('               OK (ExitCode={0})' -f $code)
             } else {

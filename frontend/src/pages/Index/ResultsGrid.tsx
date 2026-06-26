@@ -1,4 +1,6 @@
 // --- Módulo: ResultsGrid.tsx ---
+// Grelha de três colunas: pseudo-C, IL e relatórios.
+
 import React from "react";
 import { ChevronLeft, ChevronRight, Code2, FileCode2, FileText, Loader2 } from "lucide-react";
 import CodePanel from "@/components/CodePanel";
@@ -84,16 +86,16 @@ const ReportColumn: React.FC<{
 
   if (splitView) {
     return (
-      <div className="grid h-full min-h-0 grid-rows-2 gap-2 overflow-hidden">
+      <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-2 overflow-hidden">
         <StaticPanelShell
           loading={staticPending}
           progress={staticProgress}
-          className="min-h-0 overflow-hidden"
+          className="min-h-0 h-full overflow-hidden"
           compactOverlay
         >
           <div className="flex h-full min-h-0 flex-col overflow-hidden">{staticReportPanel}</div>
         </StaticPanelShell>
-        <div className="flex min-h-0 flex-col overflow-hidden border-t border-border/50 pt-2">
+        <div className="flex min-h-0 h-full flex-col overflow-hidden border-t border-border/50 pt-2">
           {hasVm ? (
             <div className="flex h-full min-h-0 flex-col overflow-hidden">
               <CodePanel
@@ -176,7 +178,7 @@ const ReportColumn: React.FC<{
   );
 };
 
-// --- Grelha de três colunas: C, IL e relatórios ---
+// --- Componente ---
 const ResultsGrid: React.FC<ResultsGridProps> = ({
   result,
   flaggedFunctionsSorted,
@@ -280,13 +282,15 @@ const ResultsGrid: React.FC<ResultsGridProps> = ({
       />
     </StaticPanelShell>
     <div className="flex min-h-0 h-full flex-col overflow-hidden">
-      <ReportColumn
-        result={result}
-        baseDownloadName={baseDownloadName}
-        staticInProgress={staticInProgress}
-        staticProgress={staticProgress}
-        onExpand={onExpand}
-      />
+      <div className="flex min-h-0 h-full flex-1 flex-col overflow-hidden">
+        <ReportColumn
+          result={result}
+          baseDownloadName={baseDownloadName}
+          staticInProgress={staticInProgress}
+          staticProgress={staticProgress}
+          onExpand={onExpand}
+        />
+      </div>
     </div>
   </div>
 );

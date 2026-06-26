@@ -36,6 +36,37 @@
 
     <Grid VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="520">
         <StackPanel>
+            <!-- Detalhe ligeiro: ícone + nome da app -->
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Center"
+                        Margin="0,0,0,20">
+                <Border Width="32" Height="32"
+                        CornerRadius="8"
+                        BorderBrush="#1F4D47"
+                        BorderThickness="1"
+                        Margin="0,0,10,0"
+                        VerticalAlignment="Center">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#142E2B" Offset="0" />
+                            <GradientStop Color="#0D1F1D" Offset="1" />
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <TextBlock Text="&#xE756;"
+                               FontFamily="Segoe MDL2 Assets"
+                               FontSize="14"
+                               Foreground="{StaticResource AccentBrush}"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+                </Border>
+                <TextBlock Text="{Binding Source={x:Static loc:UiStrings.Instance}, Path=AppTitle}"
+                           FontFamily="Cascadia Mono, Consolas, Courier New"
+                           FontSize="13"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center"
+                           Opacity="0.9" />
+            </StackPanel>
+
             <TextBlock Text="{Binding Source={x:Static loc:UiStrings.Instance}, Path=LanguageSection}"
                        Style="{StaticResource SectionLabelTextBlock}"
                        Margin="0,0,0,8" />
@@ -51,7 +82,6 @@
                        TextAlignment="Center"
                        TextWrapping="Wrap" />
 
-            <!-- Separador tipo tab -->
             <Border CornerRadius="{StaticResource Radius.Medium}"
                     Background="#0A0A0C"
                     BorderBrush="{StaticResource BorderSubtleBrush}"
@@ -87,6 +117,14 @@
                         Style="{StaticResource AccentButtonStyle}"
                         Click="ContinueButton_Click" />
             </StackPanel>
+
+            <TextBlock Text="{Binding Source={x:Static loc:UiStrings.Instance}, Path=LanguageFooter}"
+                       Style="{StaticResource MutedTextBlock}"
+                       FontSize="10"
+                       HorizontalAlignment="Center"
+                       TextAlignment="Center"
+                       Margin="0,18,0,0"
+                       Opacity="0.65" />
         </StackPanel>
     </Grid>
 </UserControl>

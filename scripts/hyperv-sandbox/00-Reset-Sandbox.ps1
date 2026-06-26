@@ -1,4 +1,5 @@
-# --- Script: 00-Reset-Sandbox.ps1 ---
+# --- Módulo: 00-Reset-Sandbox.ps1 ---
+# --- Remove VM, pastas e estado do sandbox Hyper-V ---
 <#
 .SYNOPSIS
     Limpa completamente o ambiente PROJETOVM (VM + pasta D:\PROJETOVM).
@@ -41,7 +42,7 @@ Write-Host "  - VM\ (ficheiro VHDX, configuração da VM)"
 Write-Host "  - Reports\, Samples\, Logs\"
 Write-Host ""
 
-# *Confirmação explícita antes de apagar tudo*
+# Confirmação explícita antes de apagar tudo
 $answer = Read-Host "Tem a CERTEZA que quer parar/remover a VM '$VMName' (se existir) e APAGAR TUDO em '$BasePath'? (escreva 'SIM' para confirmar)"
 if ($answer -ne "SIM") {
     Write-Host "Operação cancelada pelo utilizador. Nada foi alterado."
@@ -72,7 +73,7 @@ try {
 Write-Host ""
 Write-Host "A apagar conteúdo da pasta '$BasePath'..."
 try {
-    # *Remove tudo por baixo da pasta base, mantendo a drive*
+    # Remove tudo por baixo da pasta base, mantendo a drive
     Get-ChildItem -LiteralPath $BasePath -Force -ErrorAction SilentlyContinue | ForEach-Object {
         try {
             Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction Stop

@@ -1,5 +1,6 @@
 // --- Módulo: tooltip.tsx ---
-// *Tooltips acessíveis (Radix UI)*
+// Tooltips acessíveis (Radix UI).
+
 import * as React from "react";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 

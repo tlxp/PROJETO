@@ -1,4 +1,5 @@
-﻿# --- Script: MediaAndLanguages.ps1 ---
+﻿# --- Módulo: MediaAndLanguages.ps1 ---
+# --- Idiomas e media de instalação Windows ---
 
 # --- Candidatos de install.wim / install.esd num ISO ---
 function Get-WindowsIsoInstallMediaCandidates {
@@ -27,7 +28,7 @@ function Get-WindowsImageLanguagesFromInstallMedia {
         try {
             $img = Get-WindowsImage -ImagePath $media -Index 1 -ErrorAction Stop
             if (-not $img.Languages) { continue }
-            # *Get-WindowsImage pode devolver Languages como string; evitar enumeração por caractere*
+            # Get-WindowsImage pode devolver Languages como string; evitar enumeração por caractere
             $langList = @()
             if ($img.Languages -is [string]) {
                 $t = $img.Languages.Trim()
@@ -95,14 +96,14 @@ function Get-WindowsIsoUiLanguages {
                 }
                 if (-not $inSection) { continue }
                 if ([string]::IsNullOrWhiteSpace($t)) { continue }
-                # *Linha só com tag (en-US) ou chave=valor (en-US = 1)*
+                # Linha só com tag (en-US) ou chave=valor (en-US = 1)
                 if ($t -match '^\s*([a-zA-Z]{2}-[a-zA-Z]{2,})\s*(=.*)?$') {
                     $langs += $matches[1]
                 }
             }
         }
 
-        # *Fallback: idiomas via install.wim / install.esd*
+        # Fallback: idiomas via install.wim / install.esd
         if (@($langs).Count -eq 0) {
             foreach ($wl in (Get-WindowsImageLanguagesFromInstallMedia -IsoRoot $isoDrive)) {
                 $langs += $wl

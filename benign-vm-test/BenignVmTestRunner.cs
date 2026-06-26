@@ -1,10 +1,16 @@
 // --- Módulo: BenignVmTestRunner.cs ---
+// Executor de sinais observáveis inofensivos para validação VM.
+
 
 using System.Diagnostics;
 using System.Runtime.Versioning;
 using Microsoft.Win32;
 
+
+
 namespace BenignVmTest;
+
+
 
 // --- Executor dos sinais observáveis inofensivos ---
 public static class BenignVmTestRunner
@@ -15,17 +21,25 @@ public static class BenignVmTestRunner
         log ??= Console.Out;
         var err = log == Console.Out ? Console.Error : log;
 
+
+
         log.WriteLine($"{BenignVmTestPaths.LogPrefix} início");
+
+
 
         try
         {
             Directory.CreateDirectory(BenignVmTestPaths.WorkDir);
+
+
 
             // *sinal 1: escrita de ficheiro marcador*
             File.WriteAllText(
                 BenignVmTestPaths.MarkerPath,
                 $"benign marker @ {DateTimeOffset.Now:O}{Environment.NewLine}");
             log.WriteLine($"{BenignVmTestPaths.LogPrefix} ficheiro escrito: {BenignVmTestPaths.MarkerPath}");
+
+
 
             if (OperatingSystem.IsWindows())
             {
@@ -34,6 +48,8 @@ public static class BenignVmTestRunner
                 log.WriteLine(
                     $@"{BenignVmTestPaths.LogPrefix} registry escrito: HKCU\{BenignVmTestPaths.RegistryKeyPath}");
 
+
+
                 WriteRunOnceFlag(
                     BenignVmTestPaths.RunOnceKeyPath,
                     BenignVmTestPaths.RunOnceValueName,
@@ -41,9 +57,13 @@ public static class BenignVmTestRunner
                 log.WriteLine(
                     $@"{BenignVmTestPaths.LogPrefix} RunOnce escrito: HKCU\{BenignVmTestPaths.RunOnceKeyPath}\{BenignVmTestPaths.RunOnceValueName}");
 
+
+
                 File.WriteAllText(BenignVmTestPaths.RegistryFlagPath, "BENIGN_FLAG_SET=1" + Environment.NewLine);
                 log.WriteLine($"{BenignVmTestPaths.LogPrefix} ficheiro-flag escrito: {BenignVmTestPaths.RegistryFlagPath}");
             }
+
+
 
             // *sinal 3: processo filho cmd.exe com saída para ficheiro*
             var psi = new ProcessStartInfo
@@ -61,6 +81,8 @@ public static class BenignVmTestRunner
                 return 1;
             }
 
+
+
             child.WaitForExit(10_000);
             log.WriteLine($"{BenignVmTestPaths.LogPrefix} processo filho concluído: {BenignVmTestPaths.ChildOutputPath}");
         }
@@ -70,12 +92,17 @@ public static class BenignVmTestRunner
             return 1;
         }
 
+
+
         log.WriteLine($"{BenignVmTestPaths.LogPrefix} fim");
         return 0;
     }
 
+
+
     // --- Escreve valores de marcador na chave HKCU ---
     [SupportedOSPlatform("windows")]
+    // --- Escreve registry marcador ---
     private static void WriteRegistryMarker(string keyPath)
     {
         using var key = Registry.CurrentUser.CreateSubKey(keyPath);
@@ -84,8 +111,11 @@ public static class BenignVmTestRunner
         key.SetValue("Marker", "benign-vm-test", RegistryValueKind.String);
     }
 
+
+
     // --- Regista entrada RunOnce que cria ficheiro-flag ---
     [SupportedOSPlatform("windows")]
+    // --- Escreve execução única vez flag ---
     private static void WriteRunOnceFlag(string keyPath, string valueName, string flagFilePath)
     {
         var cmd = $@"C:\Windows\System32\cmd.exe /c echo BENIGN_FLAG_SET=1> ""{flagFilePath}""";
@@ -93,3 +123,4 @@ public static class BenignVmTestRunner
         key.SetValue(valueName, cmd, RegistryValueKind.String);
     }
 }
+

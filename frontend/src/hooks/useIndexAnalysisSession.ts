@@ -1,4 +1,6 @@
 // --- Módulo: useIndexAnalysisSession.ts ---
+// Orquestração de análise na página Index (upload, stream e jobs).
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ApiError, isAbortError } from "@/lib/api";
@@ -14,10 +16,9 @@ import { useAnalysisJob } from "@/hooks/useAnalysisJob";
 import { useAnalysisStream } from "@/hooks/useAnalysisStream";
 import { ROUTES } from "@/routes";
 import type { StillRunningJob } from "@/pages/Index/UploadView";
-import { MOCK_DEMO_RESULT } from "@/pages/Index/mockDemo";
+import { isMockDemoEnabled } from "@/lib/mockDemoEnabled";
 
-// --- Estado e orquestração de análise na página Index ---
-// *Upload, streaming estático, jobs assíncronos e carregamento por jobId externo*
+// --- Hook ---
 export function useIndexAnalysisSession() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -186,14 +187,34 @@ export function useIndexAnalysisSession() {
     };
   }, [currentJobId, showResults, fetchJob]);
 
-  // --- Carrega layout de demonstração sem backend ---
-  const loadMockDemo = useCallback(() => {
+  // --- Auto-carrega demo mock com ?demo=1 (apenas dev; ver mockDemoEnabled.ts) ---
+  const mockDemoAutoLoadedRef = useRef(false);
+  useEffect(() => {
+    if (mockDemoAutoLoadedRef.current) return;
+    const params = new URLSearchParams(location.search ?? "");
+    if (!import.meta.env.DEV || params.get("demo") !== "1") return;
+    mockDemoAutoLoadedRef.current = true;
+
+    void (async () => {
+      const { MOCK_DEMO_RESULT } = await import("@/pages/Index/mockDemo");
+      setFile(null);
+      setAnalysisResult(MOCK_DEMO_RESULT);
+      setShowResults(true);
+      setError(null);
+      setIsMockDemo(true);
+    })();
+  }, [location.search]);
+
+  // --- Carrega layout de demonstração sem backend (só dev + flag; import dinâmico) ---
+  const loadMockDemo = useCallback(async () => {
+    if (!isMockDemoEnabled(location.search)) return;
+    const { MOCK_DEMO_RESULT } = await import("@/pages/Index/mockDemo");
     setFile(null);
     setAnalysisResult(MOCK_DEMO_RESULT);
     setShowResults(true);
     setError(null);
     setIsMockDemo(true);
-  }, []);
+  }, [location.search]);
 
   // --- Finaliza job com sucesso e navega para /analysis/:jobId ---
   const finishJobOutcome = useCallback(

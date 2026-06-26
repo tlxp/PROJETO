@@ -1,14 +1,20 @@
 ﻿// --- Módulo: BoolToVisibilityConverter.cs ---
+// Conversor WPF de bool para Visibility.
 using System;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 
+
+
 namespace RatAnalyzer.Desktop.Views;
+
+
 
 // --- Converte bool true em Visibility.Visible ---
 public class BoolToVisibilityConverter : IValueConverter
 {
+    // --- Convert ---
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
         if (value is bool b && b)
@@ -16,9 +22,14 @@ public class BoolToVisibilityConverter : IValueConverter
             return Visibility.Visible;
         }
 
+
+
         return Visibility.Collapsed;
     }
 
+
+
+    // --- Convert Back ---
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
     {
         if (value is Visibility v)
@@ -26,27 +37,38 @@ public class BoolToVisibilityConverter : IValueConverter
             return v == Visibility.Visible;
         }
 
+
+
         return false;
     }
 }
 
+
+
 // --- Inverte valor booleano ---
 public class InverseBoolConverter : IValueConverter
 {
+    // --- Convert ---
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
         return value is bool b && !b;
     }
 
+
+
+    // --- Convert Back ---
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
     {
         return value is bool b && !b;
     }
 }
 
+
+
 // --- Converte bool true em Collapsed (inverso de visibilidade) ---
 public class InverseBoolToVisibilityConverter : IValueConverter
 {
+    // --- Convert ---
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
         if (value is bool b && b)
@@ -54,9 +76,14 @@ public class InverseBoolToVisibilityConverter : IValueConverter
             return Visibility.Collapsed;
         }
 
+
+
         return Visibility.Visible;
     }
 
+
+
+    // --- Convert Back ---
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
     {
         if (value is Visibility v)
@@ -64,6 +91,9 @@ public class InverseBoolToVisibilityConverter : IValueConverter
             return v != Visibility.Visible;
         }
 
+
+
         return true;
     }
 }
+

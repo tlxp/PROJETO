@@ -65,7 +65,7 @@ def reset_rate_limit_buckets() -> None:
 
 # --- Middleware que propaga job_id para logs ---
 class JobIdLoggingMiddleware(BaseHTTPMiddleware):
-# --- Dispatch ---
+    # --- Propaga job_id do path para os logs ---
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         match = _JOB_ID_PATH.match(request.url.path)
         token = job_id_ctx.set(match.group(1) if match else None)
@@ -77,7 +77,7 @@ class JobIdLoggingMiddleware(BaseHTTPMiddleware):
 
 # --- Middleware de rate limit por IP em endpoints de upload ---
 class UploadRateLimitMiddleware(BaseHTTPMiddleware):
-# --- Dispatch ---
+    # --- Limita uploads por IP e janela temporal ---
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         if request.method != "POST" or request.url.path not in _UPLOAD_PATHS:
             return await call_next(request)

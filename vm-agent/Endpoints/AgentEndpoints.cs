@@ -1,11 +1,17 @@
 // --- Módulo: AgentEndpoints.cs ---
+// Endpoints HTTP /api/* do agente de análise na VM.
+
 
 using VmAgent.Configuration;
 using VmAgent.Models;
 using VmAgent.Services;
 using VmAgent.State;
 
+
+
 namespace VmAgent.Endpoints;
+
+
 
 // --- Endpoints HTTP da API do agente ---
 internal static class AgentEndpoints
@@ -15,12 +21,16 @@ internal static class AgentEndpoints
     {
         app.MapGet("/api/health", () => Results.Ok(new { status = "ok", component = "vm-agent" }));
 
+
+
         app.MapPost("/api/upload", async (HttpRequest request, AnalysisState state) =>
         {
             if (!request.HasFormContentType)
             {
                 return Results.BadRequest(new { detail = "Content-Type deve ser multipart/form-data." });
             }
+
+
 
             var form = await request.ReadFormAsync();
             var file = form.Files["file"];
@@ -29,10 +39,14 @@ internal static class AgentEndpoints
                 return Results.BadRequest(new { detail = "Ficheiro 'file' em falta ou vazio." });
             }
 
+
+
             if (file.Length > AgentLimits.MaxUploadBytes)
             {
                 return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
             }
+
+
 
             var safeName = Path.GetFileName(file.FileName);
             if (!SampleStorage.TryResolveTargetPath(safeName, out var targetPath, out var pathError))
@@ -40,8 +54,12 @@ internal static class AgentEndpoints
                 return Results.BadRequest(new { detail = pathError });
             }
 
+
+
             // *nova amostra invalida estado de execuções anteriores*
             state.Reset();
+
+
 
             await using (var fs = File.Create(targetPath))
             await using (var stream = file.OpenReadStream())
@@ -49,11 +67,17 @@ internal static class AgentEndpoints
                 await stream.CopyToAsync(fs);
             }
 
+
+
             state.SamplePath = targetPath;
             state.SampleFileName = safeName;
 
+
+
             return Results.Ok(new { status = "uploaded", fileName = safeName });
         });
+
+
 
         app.MapPost("/api/run", async (RunRequest req, AnalysisState state, RunGate gate) =>
         {
@@ -61,6 +85,8 @@ internal static class AgentEndpoints
             {
                 return Results.Conflict(new { detail = "Já existe uma execução em curso." });
             }
+
+
 
             try
             {
@@ -72,12 +98,16 @@ internal static class AgentEndpoints
             }
         });
 
+
+
         app.MapGet("/api/report", (AnalysisState state) =>
         {
             if (state.LastBehavior is null)
             {
                 return Results.BadRequest(new { detail = "Nenhuma execução registada ainda." });
             }
+
+
 
             // *relatório mínimo — telemetria avançada ainda não implementada*
             var behavior = new
@@ -100,7 +130,10 @@ internal static class AgentEndpoints
                 sensitiveApiCalls = Array.Empty<object>()
             };
 
+
+
             return Results.Ok(behavior);
         });
     }
 }
+

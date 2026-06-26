@@ -157,16 +157,44 @@ combines a Python backend (FastAPI) with a seven-phase pipeline (PE metadata, IL
 deobfuscation, YARA, risk scoring, native/Ghidra when needed, and reporting), a React web
 interface with an optional Gemini assistant, a WPF desktop application, and an isolated
 Hyper-V sandbox with two independent orchestration paths (HTTP vm-agent and PowerShell Direct
-with SHA-256 integrity checks). Validation relies on 194 automated tests, proxy detection
-metrics on labeled synthetic profiles (precision/recall/F1), public MalwareBazaar IOC metadata,
-a formal static benchmark (median 36.1~s, $n=5$), synthetic scoring profiles aligned with
+with SHA-256 integrity checks). Validation relies on 203 automated tests, proxy detection
+metrics on labeled synthetic profiles (precision/recall/F1), a benign corpus of eight compiled
+PEs analysed statically (specificity 1.00, zero false positives), public MalwareBazaar IOC metadata
+(without host-side malware storage), a formal static benchmark (median 36.1~s, $n=5$), synthetic scoring profiles aligned with
 \texttt{test\_risk\_scoring.py}, and benign execution via \texttt{benign-vm-test.exe} on
-Path~B. The system emphasises explainability and local isolation over commercial cloud
+Path~B. The system was designed for explainability and local isolation rather than commercial cloud
 sandboxes, targeting academic and laboratory use.
 
 \vspace{0.8em}
 \noindent\textbf{Keywords:} malware analysis; RAT; sandbox; Hyper-V; YARA; FastAPI;
 software engineering; cybersecurity.
+
+\clearpage
+
+% --- Resumo (português) ---
+\chapter*{Resumo}
+\addcontentsline{toc}{chapter}{Resumo}
+\markboth{Resumo}{Resumo}
+
+Este relatório apresenta o \rat{}, uma plataforma integrada de análise estática e dinâmica para
+deteção de \emph{Remote Access Trojans} (RATs) em executáveis Windows (e código C\# com âmbito
+reduzido), desenvolvida no âmbito do projeto final de Licenciatura em Engenharia Informática na
+\ubi{}. A solução combina um backend Python (FastAPI) com um pipeline de sete fases (metadados PE,
+ILSpy, heurísticas, desofuscação, YARA, scoring de risco, nativo/Ghidra quando necessário e
+relatório), uma interface web React com assistente Gemini opcional, uma aplicação desktop WPF e
+uma sandbox Hyper-V isolada com dois caminhos de orquestração independentes (vm-agent HTTP e
+PowerShell Direct com verificação de integridade SHA-256). A validação assenta em 203 testes
+automatizados, métricas de deteção proxy em perfis sintéticos etiquetados (precisão/recall/F1), um
+corpus benigno de oito PEs compilados analisados estaticamente (especificidade 1{,}00, zero falsos
+positivos), metadados IOC públicos do MalwareBazaar (sem armazenamento de malware no host), um
+benchmark estático formal (mediana 36{,}1~s, $n=5$), perfis de scoring sintéticos alinhados com
+\texttt{test\_risk\_scoring.py} e execução benigna via \texttt{benign-vm-test.exe} no Caminho~B. O
+sistema foi desenhado para explicabilidade e isolamento local em detrimento de sandboxes
+comerciais na cloud, destinando-se a uso académico e laboratorial.
+
+\vspace{0.8em}
+\noindent\textbf{Palavras-chave:} análise de malware; RAT; sandbox; Hyper-V; YARA; FastAPI;
+engenharia de software; cibersegurança.
 
 \clearpage
 
@@ -198,7 +226,7 @@ encouragement throughout this journey. The emotional stability they provided was
 maintaining determination and perseverance during the most demanding moments. Without them,
 this project would not have been possible.
 
-In summary, this project was an enriching and rewarding experience, made possible by the
+In summary, this project was a significant learning experience, made possible by the
 commitment and dedication of everyone who participated in it, directly or indirectly. Thank you
 all very much.
 
@@ -288,13 +316,13 @@ The motivation for this project rests on four pillars:
 
 \begin{itemize}
     \item \textbf{Integration} - Unify static analysis, YARA rules, decompilation, and sandbox
-          execution in a coherent ecosystem (API, web interface, desktop application).
+          execution in a single workflow (API, web interface, desktop application).
     \item \textbf{Isolation} - Run potentially malicious samples in a Hyper-V VM without Internet
           connectivity, with automatic restore to a clean snapshot.
     \item \textbf{Transparency} - Produce detailed reports (imports, C2 strings, evasion,
           risk score, pseudo-C/IL) instead of a simple binary classification; optionally,
           support pseudo-C interpretation with an LLM assistant in the frontend.
-    \item \textbf{Academic reproducibility} - Open source, extensive documentation, automated
+    \item \textbf{Academic reproducibility} - Open source, versioned documentation, automated
           tests (pytest, Vitest, GitHub Actions CI), and security documentation
           (\texttt{docs/SEGURANCA.md}).
 \end{itemize}
@@ -433,12 +461,12 @@ execution in the academic repository. Large-scale malware labeling tools such as
 ransomware and trojan surveys \cite{vinod2019} contextualise the broader remote-access threat
 landscape that RAT families inhabit.
 
-\section{Advantages of the Proposed Solution}
+\section{Positioning relative to existing solutions}
 
-For this project, a deliberately distinct approach was chosen from commercial solutions and
-existing generic frameworks. Instead of replicating a conventional sandbox, \rat\ combines
-multi-phase static analysis with native Hyper-V sandbox and integrated decompilation, all
-exposed in an accessible web interface and a WPF desktop application.
+For this project, a distinct approach was chosen from commercial solutions and existing
+generic frameworks. Instead of replicating a conventional sandbox, \rat\ combines multi-phase
+static analysis with a native Hyper-V sandbox and integrated decompilation, exposed through
+a web interface and a WPF desktop application.
 
 \begin{table}[H]
     \centering
@@ -459,18 +487,16 @@ exposed in an accessible web interface and a WPF desktop application.
     \end{tabular}
 \end{table}
 
-In summary, adopting Hyper-V as the sandbox hypervisor eliminates the need for external
-infrastructure; integrating Ghidra and ILSpy directly into the pipeline makes decompilation
-accessible without manual tool installation; and the Gemini assistant transforms pseudo-C into
-an interactive educational resource, differentiating \rat\ from any existing solution.
+In summary, Hyper-V avoids external sandbox infrastructure on Windows laboratory hosts;
+Ghidra and ILSpy are invoked from the pipeline instead of separate manual steps; and the
+optional Gemini assistant can explain pseudo-C excerpts chosen by the user in the browser.
 
 \section{Conclusions}
 
 The state of the art confirms that effective RAT detection benefits from multi-layer analysis.
 Commercial solutions are powerful but inaccessible in academic contexts; open-source frameworks
-are flexible but require significant manual integration. \rat\ positions itself as a local,
-integrated, and explainable platform, suitable for university laboratories, cybersecurity
-training, and initial triage of suspicious executables.
+are flexible but require significant manual integration. \rat\ targets local use in university laboratories and cybersecurity training, with
+explainable indicators rather than opaque classification alone.
 
 % ============================================================
 % CHAPTER 3 - TECHNOLOGIES
@@ -502,7 +528,7 @@ The web interface was built with \textbf{React~18} and \textbf{TypeScript}, ensu
 typing that reduces errors during development. The \textbf{Vite} bundler enables instant hot-reload
 during development and optimised production builds. For visual styling,
 \textbf{Tailwind CSS} and \textbf{shadcn/ui} were adopted; transition animations are handled
-with \textbf{Framer Motion}. The unit test suite uses \textbf{Vitest} with more than 56 tests.
+with \textbf{Framer Motion}. The unit test suite uses \textbf{Vitest} (62 unit tests).
 Integration with \textbf{Google Gemini} (\texttt{gemini-2.0-flash}) is done directly in the
 browser: the user's API key is stored in \texttt{localStorage} and never passes through the
 FastAPI backend, ensuring the server has no access to third-party credentials.
@@ -605,8 +631,8 @@ design keeps decompiled code local except for the excerpt the user chooses to se
 The multi-language stack reflects the heterogeneous nature of malware analysis: Python for
 pipeline and API, TypeScript for user experience, C\# for integration with the Windows and
 Hyper-V ecosystem, and PowerShell for infrastructure automation. The combination of these
-technologies enabled building a coherent platform with clear separation of responsibilities
-and extensive documentation.
+technologies support a separation of responsibilities between pipeline, UI, and sandbox
+automation; documentation is versioned in the repository.
 
 % ============================================================
 % CHAPTER 4 - SOFTWARE ENGINEERING
@@ -884,7 +910,7 @@ account the quality attributes most relevant to the malware analysis context:
           use a separate 120~s timeout (\texttt{SANDBOX\_VM\_OP\_TIMEOUT\_SECONDS}).
     \item[\nfr{05} - Maintainability] The project must include automated CI tests
           (pytest, Vitest, dotnet build); dependency locks with hashes for reproducible
-          integrity; and extensive technical documentation versioned in the repository.
+          integrity; and technical documentation versioned in the repository.
     \item[\nfr{06} - Availability] Redis queue mode must be optional and the
           system must work without it, falling back to local threads.
 \end{description}
@@ -1699,12 +1725,17 @@ python rat_analyzer.py caminho/amostra.exe -o reports/ -v
 
 \subsection{Methodology and ethical considerations}
 
-Validation of \rat\ combines automated tests, reproducible synthetic profiles, and dynamic
-execution of a \textbf{benign} sample (\texttt{benign-vm-test.exe}). For legal and laboratory
-security reasons, real malware samples were not included in the repository nor submitted to
-external services; RAT detection is demonstrated through structured indicators (imports, C2
-strings, YARA) and test profiles that simulate typical malicious behaviour, as per
-\texttt{backend/tests/test\_risk\_scoring.py}.
+Validation of \rat\ combines automated tests, reproducible synthetic profiles, static analysis
+of a \textbf{benign corpus} (\texttt{benign-samples/dist/}, eight PEs built from source in
+per-sample subfolders), and dynamic execution of \texttt{benign-vm-test.exe} inside Hyper-V.
+For legal, laboratory, and \textbf{host-safety} reasons, real malware samples were not stored
+or analysed on the development workstation: keeping RAT binaries on a personal PC --- even for
+static-only analysis --- was avoided to reduce the risk of accidental execution, antivirus
+quarantine, and compromise of the host. RAT detection is therefore demonstrated through
+structured indicators (imports, C2 strings, YARA), synthetic scoring profiles, public IOC
+metadata (hashes only), and false-positive checks on compiled benign binaries, as per
+\texttt{backend/tests/test\_risk\_scoring.py}, \texttt{run\_benign\_static\_eval.py}, and
+\texttt{backend/evaluation/public\_ioc\_metadata.json}.
 
 \subsection{Static scoring validation}
 
@@ -1775,27 +1806,73 @@ confusion matrix and writes \texttt{detection\_metrics.json}.
 
 These figures measure consistency of the scoring model on \emph{controlled} inputs; they do
 \textbf{not} estimate real-world detection rate on unseen RAT binaries. They complement the
-public IOC metadata cross-check (Table~\ref{tab:public-ioc}) and the 192 automated CI tests.
+benign corpus evaluation (Table~\ref{tab:benign-corpus}), the public IOC metadata reference
+(Table~\ref{tab:public-ioc}), and the 203 automated CI tests.
 
-\subsection{Public IOC metadata cross-check}
+\subsection{Benign corpus static evaluation}
 
-To complement synthetic pytest profiles, a \textbf{metadata-only} evaluation was
-conducted against publicly listed RAT samples from MalwareBazaar \cite{abusech2021}.
-The file \texttt{backend/evaluation/public\_ioc\_metadata.json} stores eight SHA-256
-entries (QuasarRAT, AsyncRAT, and one benign validation hash) with family labels and
-listing URLs. \textbf{No malware binaries} are downloaded, stored, or executed in the
-repository; only public hashes and tags are referenced.
+To measure false-positive behaviour on \textbf{real} compiled binaries without storing malware,
+a dedicated corpus was added under \texttt{benign-samples/}: each subfolder holds the C\# source
+of one harmless program; \texttt{build.ps1} publishes all executables into \texttt{dist/} (only
+\texttt{.exe} files are evaluated). Seven new samples exercise common but legitimate behaviours
+(console I/O, file access in \texttt{\%TEMP\%}, HTTP to \texttt{microsoft.com}, registry read,
+SHA-256 digest, environment dump, WinForms \texttt{MessageBox}); an eighth reuses
+\texttt{BenignVmTest.exe} from \texttt{benign-vm-test} for sandbox parity.
 
-Table~\ref{tab:public-ioc} summarises the cross-check. For each malicious entry, the
-expected qualitative outcome is ALTO/CRÍTICO when analysed with the full static pipeline;
-this expectation is validated indirectly via \texttt{test\_public\_ioc\_metadata.py}, which
-confirms metadata integrity and applies a synthetic RAT profile mirroring typical Quasar/AsyncRAT
-indicators (C2 strings, persistence, YARA \texttt{RAT\_Generic}). The benign
-\texttt{BenignVmTest.exe} hash is annotated by \texttt{RiskScorer} as a known validation sample.
+The script \texttt{backend/scripts/run\_benign\_static\_eval.py} runs the full static pipeline
+on every file in \texttt{dist/} (no execution) and writes \texttt{benign\_static\_metrics.json}.
+Success is defined as no sample classified ALTO or CRÍTICO (true negatives only); specificity
+is $\mathrm{TN}/(\mathrm{TN}+\mathrm{FP})$. Pytest coverage is provided by
+\texttt{test\_benign\_static\_eval.py}.
 
 \begin{table}[H]
     \centering
-    \caption{Public IOC metadata cross-check (MalwareBazaar listings, no sample execution)}
+    \caption{Benign corpus static evaluation ($n=8$ PEs; measured on development host)}
+    \label{tab:benign-corpus}
+    \small
+    \begin{tabular}{@{}llccp{4.2cm}@{}}
+        \toprule
+        \textbf{Executable} & \textbf{Subfolder} & \textbf{Score} & \textbf{Level} & \textbf{Behaviour} \\
+        \midrule
+        \texttt{BenignHello.exe} & \texttt{hello/} & 9 & MUITO BAIXO & Minimal console \\
+        \texttt{BenignFileIo.exe} & \texttt{file-io/} & 9 & MUITO BAIXO & Read/write in TEMP \\
+        \texttt{BenignHttpMs.exe} & \texttt{http-ms/} & 9 & MUITO BAIXO & HTTP GET microsoft.com \\
+        \texttt{BenignRegistryRead.exe} & \texttt{registry-read/} & 9 & MUITO BAIXO & HKCU read (no Run key) \\
+        \texttt{BenignCryptoDigest.exe} & \texttt{crypto-digest/} & 9 & MUITO BAIXO & Local SHA-256 \\
+        \texttt{BenignEnvDump.exe} & \texttt{env-dump/} & 9 & MUITO BAIXO & Environment variables \\
+        \texttt{BenignGuiMsg.exe} & \texttt{gui-msg/} & 9 & MUITO BAIXO & WinForms MessageBox \\
+        \texttt{BenignVmTest.exe} & \texttt{benign-vm-test} & 16 & BAIXO & Sandbox smoke test (\texttt{validation\_sample}) \\
+        \midrule
+        \multicolumn{5}{l}{True negatives = 8 \quad False positives = 0 \quad Specificity = 1.00 \quad All passed} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+All eight binaries scored below the ALTO threshold; none triggered YARA matches or suspicious-import
+flags. \texttt{BenignVmTest.exe} scored higher (16, BAIXO) due to the known validation hash
+annotation, consistent with Table~\ref{tab:avaliacao-scoring}. This is the only empirical
+false-positive check on compiled PEs in the dissertation; it does not substitute recall measurement
+on real RAT families.
+
+\subsection{Public IOC metadata reference}
+
+A \textbf{metadata-only} reference list was prepared from publicly listed RAT samples on
+MalwareBazaar \cite{abusech2021}. The file \texttt{backend/evaluation/public\_ioc\_metadata.json}
+stores SHA-256 entries (QuasarRAT, AsyncRAT, and the benign validation hash) with family labels
+and listing URLs. \textbf{No malware binaries} were downloaded, stored, or statically analysed
+on the host; only public hashes and tags are referenced for documentation and pytest integrity
+checks (\texttt{test\_public\_ioc\_metadata.py}).
+
+Table~\ref{tab:public-ioc} summarises the reference set. For each malicious entry, the
+\emph{expected} qualitative outcome under the full static pipeline would be ALTO/CRÍTICO; this
+is \textbf{not} measured on real PEs in this dissertation. Indirect validation uses a synthetic
+RAT profile mirroring typical Quasar/AsyncRAT indicators (C2 strings, persistence, YARA
+\texttt{RAT\_Generic}). The benign \texttt{BenignVmTest.exe} hash is annotated by
+\texttt{RiskScorer} and was executed only on Path~B inside the Hyper-V sandbox.
+
+\begin{table}[H]
+    \centering
+    \caption{Public IOC metadata reference (MalwareBazaar listings; no host-side PE analysis)}
     \label{tab:public-ioc}
     \scriptsize
     \begin{tabular}{@{}p{4.6cm}p{2.2cm}p{2.4cm}p{4.2cm}@{}}
@@ -1813,6 +1890,30 @@ indicators (C2 strings, persistence, YARA \texttt{RAT\_Generic}). The benign
         \bottomrule
     \end{tabular}
 \end{table}
+
+\subsection{Optional MalwareBazaar static batch (implemented, not executed)}
+
+To support future laboratory evaluation without executing samples on the host, an optional
+batch harness was implemented but \textbf{not run} during this project:
+
+\begin{itemize}
+    \item \texttt{backend/scripts/run\_malwarebazaar\_static\_eval.py} - extracts MalwareBazaar
+          ZIPs (AES, password \texttt{infected}), runs the static pipeline (no execution), and
+          writes precision/recall to \texttt{malwarebazaar\_real\_metrics.json}.
+    \item \texttt{backend/evaluation/malwarebazaar\_eval\_manifest.json} - reference hashes and
+          benign control paths.
+    \item \texttt{backend/evaluation/malwarebazaar\_samples/} - local folder (gitignored) for
+          manually downloaded samples; never populated for final evaluation.
+\end{itemize}
+
+This path was deliberately skipped on the development workstation: storing real RAT binaries on
+a personal PC --- even for read-only static analysis --- conflicts with host-safety goals
+(antivirus quarantine, accidental launch, residual risk). Consequently, \textbf{no real-world
+precision/recall on MalwareBazaar PEs is reported here}, and correct behaviour of the harness on
+live samples is \textbf{not guaranteed} without future validation on an isolated analysis host
+(e.g.\ university laboratory VM with controlled AV exclusions). The code remains as extensible
+infrastructure aligned with FR~02 (static pipeline) and the traceability matrix
+(Table~\ref{tab:fr-traceability}).
 
 \subsection{Dynamic sandbox validation}
 
@@ -1863,8 +1964,8 @@ for small .NET samples with ILSpy, median times below 40~s were observed consist
         \toprule
         \textbf{Component} & \textbf{Framework} & \textbf{Tests} \\
         \midrule
-        Backend & pytest + httpx & 90 \\
-        Frontend & Vitest & 56 \\
+        Backend & pytest + httpx & 93 \\
+        Frontend & Vitest & 62 \\
         Frontend E2E & Playwright & Upload/analysis flow \\
         .NET & xUnit (vm-agent, WPF, benign-vm-test) & 48 \\
         YARA & pytest (rule compilation + public IOC) & Integrated \\
@@ -1903,8 +2004,8 @@ Technical documentation is versioned in the Git repository:
 The implementation reflects the planned architecture: modular static pipeline, asynchronous jobs with
 \texttt{queued}$\rightarrow$\texttt{running}$\rightarrow$\texttt{completed|failed} states, two
 independent dynamic pipelines (HTTP and PsDirect+SHA-256), upload and authentication controls
-documented in Tables~\ref{tab:auth} and~\ref{tab:upload-security}, and coherent web/desktop
-interfaces. Listings~\ref{lst:hyperv-run}--\ref{lst:sha256-verify} and Appendix~\ref{lst:run-gate}
+documented in Tables~\ref{tab:auth} and~\ref{tab:upload-security}, and web/desktop
+interfaces sharing the same backend API. Listings~\ref{lst:hyperv-run}--\ref{lst:sha256-verify} and Appendix~\ref{lst:run-gate}
 illustrate the sandbox implementation at source level.
 
 % ============================================================
@@ -1915,31 +2016,29 @@ illustrate the sandbox implementation at source level.
 
 \section{Main Conclusions}
 
-Upon completing this project, I can affirm that it was an extraordinarily enriching learning
-experience, which allowed me to consolidate and expand knowledge in domains that, at the start of
-development, I only partially mastered --- from malware engineering and PE file analysis, to
-virtual machine orchestration with Hyper-V, to designing asynchronous APIs with streaming, and
-building modern web interfaces in TypeScript/React. The project required me to grow both as a
-Computer Science Engineering student and, certainly, as a future professional in the field.
+This project covered malware analysis concepts, PE file structure, Hyper-V VM orchestration,
+asynchronous APIs with streaming, and a TypeScript/React web interface---areas that were only
+partially familiar at the start of development.
 
-\rat\ achieved the \textbf{implementation} objectives defined initially: it is an integrated
+\rat\ meets the \textbf{implementation} objectives defined initially: it is an integrated
 static and dynamic analysis platform for RAT detection, with the following concrete results:
 
 \begin{itemize}
     \item \textbf{Complete static pipeline} - 7 implemented phases (PE metadata, ILSpy,
           import and C2 string analysis, deobfuscation, YARA scan, scoring, native/Ghidra when
           needed, and report),
-          with 90 automated backend tests.
+          with 93 automated backend tests.
     \item \textbf{Isolated Hyper-V sandbox} - Two independent and complementary orchestration paths
           (HTTP via vm-agent and PowerShell Direct), with automatic restore to clean snapshot
           and SHA-256 cryptographic verification of transferred report integrity.
     \item \textbf{Functional web and desktop interfaces} - React interface with progress streaming,
           three results panels, and Gemini assistant; WPF application as alternative entry point
           with automatic dependency bootstrap.
-    \item \textbf{Comprehensive test coverage} - 90 pytest tests in backend, 56 Vitest tests in
+    \item \textbf{Automated tests} - 93 pytest tests in backend, 62 Vitest tests in
           frontend, E2E tests with Playwright, and 48 xUnit tests in .NET components
+          (203 total)
           (30 vm-agent, 12 WPF, 6 benign-vm-test).
-    \item \textbf{Extensive technical documentation} - PlantUML diagrams synchronised with the report
+    \item \textbf{Technical documentation} - PlantUML diagrams synchronised with the report
           (10 figures in chapter~4), security architecture documented in
           \texttt{docs/SEGURANCA.md}, and operational guides for local deployment.
     \item \textbf{Explainable indicators} - Risk score 0--100 with breakdown by factor,
@@ -1952,9 +2051,17 @@ static and dynamic analysis platform for RAT detection, with the following concr
 Despite the results obtained, relevant limitations are acknowledged:
 
 \begin{itemize}
-    \item Empirical validation relies on benign samples, synthetic profiles, and public IOC
-          metadata (MalwareBazaar hashes without sample execution); detection rates against
-          real malware binaries were not measured for legal and isolation reasons.
+    \item Empirical validation relies on the benign corpus (eight PEs, static only),
+          synthetic profiles, and public IOC metadata (MalwareBazaar hashes only). Real RAT PEs
+          were \textbf{not} stored or statically analysed on the development host, to avoid
+          infecting or compromising the personal workstation (antivirus interference, accidental
+          execution, residual files). The benign corpus measures specificity (false positives)
+          but not recall on unseen malware.
+    \item The optional MalwareBazaar batch script
+          (\texttt{run\_malwarebazaar\_static\_eval.py}) was implemented but not executed;
+          its correctness on live samples is therefore unverified in this dissertation.
+    \item Detection rates against real malware binaries were not measured; dynamic analysis
+          used only \texttt{benign-vm-test.exe} inside Hyper-V.
     \item Path A (vm-agent) records more limited behavioural telemetry than Path B and does not
           run the network-isolation preflight implemented on Path~B.
     \item \texttt{.cs} uploads via the web/API receive string heuristics only; full ILSpy/Ghidra
@@ -1969,8 +2076,7 @@ Despite the results obtained, relevant limitations are acknowledged:
 This project will be refined and potentially used in an academic context at \ubi,
 serving as a support tool for information security curriculum units.
 
-Regarding future work, several improvements could be implemented to make the platform even more
-robust and complete:
+Regarding future work, several improvements could be implemented:
 
 \begin{enumerate}
     \item \textbf{IDA Pro integration} - Ghidra is already integrated, but IDA Pro offers deeper
@@ -1985,7 +2091,9 @@ robust and complete:
     \item \textbf{Support for more formats} - Expand the pipeline to PDF documents, Office macros,
           PowerShell/VBScript scripts, and Android APKs.
     \item \textbf{Known signature database} - Integrate a database of SHA-256 hashes of known malware
-          (MALPEDIA, MalwareBazaar) for direct matching in the metadata phase.
+          (MALPEDIA, MalwareBazaar) for direct matching in the metadata phase; the optional script
+          \texttt{run\_malwarebazaar\_static\_eval.py} provides a starting point once run on an
+          isolated laboratory host.
     \item \textbf{C2 network traffic analysis} - Capture and analyse traffic generated by the sample
           during dynamic execution, identifying C2 protocols and communication patterns.
     \item \textbf{Gemini assistant evolution} - Migrate the proxy to the backend for environments

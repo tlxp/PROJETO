@@ -1,4 +1,6 @@
 // --- Módulo: useAnalysisStream.ts ---
+// Análise estática por streaming NDJSON.
+
 import { useCallback, useEffect, useRef } from "react";
 import { apiFetch, readErrorDetail } from "@/lib/api";
 import { asRecord, normalizeAnalysisResult, type AnalysisResult } from "@/lib/analysis";
@@ -16,8 +18,8 @@ export type AnalysisStreamCallbacks = {
   onResult: (result: AnalysisResult) => void;
 };
 
-// --- Análise estática por streaming NDJSON (`/api/analyze_stream`) ---
-// *AbortController: nova execução cancela a anterior; unmount cancela stream pendente*
+// --- Hook ---
+// *AbortController: nova execução cancela a anterior*
 export function useAnalysisStream() {
   const abortRef = useRef<AbortController | null>(null);
 

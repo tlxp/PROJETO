@@ -1,4 +1,6 @@
 // --- Módulo: HighlightedLine.tsx ---
+// Renderização de linha com syntax highlight e destaques.
+
 import React from "react";
 
 const MALICIOUS_CLASS = "bg-destructive/25 text-destructive font-medium";
@@ -54,7 +56,7 @@ function renderStyledLine(line: string, spans: StyledSpan[]): React.ReactNode {
   return <>{elements}</>;
 }
 
-// --- Linha com syntax highlight e destaque de indicadores/palavra ---
+// --- Componente ---
 export const HighlightedLine: React.FC<{
   line: string;
   language: string;

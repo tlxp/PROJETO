@@ -1,5 +1,5 @@
-# --- Script: Install-SysmonInGuestCore.ps1 ---
-# Instalação do Sysmon dentro da VM (via PowerShell Direct; sem Guest Services).
+# --- Módulo: Install-SysmonInGuestCore.ps1 ---
+# --- Núcleo de instalação Sysmon via PowerShell Direct ---
 # Carregado via dot-sourcing (mesmo scope).
 
 # --- Instalação do Sysmon na VM sandbox ---
@@ -20,7 +20,7 @@ function Install-SysmonInSandboxGuest {
             if (-not $svc) { return $false }
             $logPresent = $false
             try { $logPresent = [bool](Get-WinEvent -ListLog "Microsoft-Windows-Sysmon/Operational" -ErrorAction SilentlyContinue) } catch { }
-            # *Considera instalado apenas se serviço activo e canal de eventos existir*
+            # Considera instalado apenas se serviço activo e canal de eventos existir
             return ($svc.Status -eq "Running" -and $logPresent)
         } -ErrorAction SilentlyContinue
         if ($already) {
@@ -33,7 +33,7 @@ function Install-SysmonInSandboxGuest {
     $resolvedExe = Resolve-SysmonExePath -PreferredPath $SysmonExePath
     $resolvedCfg = Resolve-SysmonConfigPath -PreferredPath $SysmonConfigPath -SysmonExeResolved $resolvedExe
 
-    # *Destinos fixos dentro da VM*
+    # Destinos fixos dentro da VM
     $guestSysmonDir    = "C:\tools\sysmon"
     $guestSysmonExe    = Join-Path $guestSysmonDir "Sysmon64.exe"
     $guestSysmonConfig = Join-Path $guestSysmonDir "sysmon-config.xml"
@@ -54,7 +54,7 @@ function Install-SysmonInSandboxGuest {
             throw "Configuração Sysmon não encontrada dentro da VM em: $configPath"
         }
 
-        # *Executa Sysmon com EULA aceite e config XML*
+        # Executa Sysmon com EULA aceite e config XML
         $psi = New-Object System.Diagnostics.ProcessStartInfo
         $psi.FileName = $exePath
         $psi.Arguments = "-accepteula -i `"$configPath`""
@@ -62,14 +62,14 @@ function Install-SysmonInSandboxGuest {
         $proc = [System.Diagnostics.Process]::Start($psi)
         $null = $proc.WaitForExit(600000)
 
-        # *Valida serviço Sysmon64 ou Sysmon*
+        # Valida serviço Sysmon64 ou Sysmon
         $svc = Get-Service -Name "Sysmon64" -ErrorAction SilentlyContinue
         if (-not $svc) { $svc = Get-Service -Name "Sysmon" -ErrorAction SilentlyContinue }
         if (-not $svc) {
             throw "Sysmon terminou (ExitCode $($proc.ExitCode)) mas o serviço Sysmon64/Sysmon não existe."
         }
 
-        # *Tenta arrancar o serviço se ainda não estiver Running*
+        # Tenta arrancar o serviço se ainda não estiver Running
         if ($svc.Status -ne "Running") {
             try {
                 Start-Service -Name $svc.Name -ErrorAction Stop
@@ -78,7 +78,7 @@ function Install-SysmonInSandboxGuest {
             } catch { }
         }
 
-        # *Confirma que o canal de eventos Sysmon está disponível*
+        # Confirma que o canal de eventos Sysmon está disponível
         $logPresent = $false
         try { $logPresent = [bool](Get-WinEvent -ListLog "Microsoft-Windows-Sysmon/Operational" -ErrorAction SilentlyContinue) } catch { }
 

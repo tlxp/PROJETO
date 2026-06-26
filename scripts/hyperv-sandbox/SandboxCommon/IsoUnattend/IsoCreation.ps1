@@ -1,4 +1,5 @@
-﻿# --- Script: IsoCreation.ps1 ---
+﻿# --- Módulo: IsoCreation.ps1 ---
+# --- Criação de ISO com autounattend ---
 
 # --- Criação de ISO a partir de pasta (legado) ---
 function New-IsoFromFolder {
@@ -83,15 +84,15 @@ function New-WindowsIsoWithUnattend {
         Write-LogHost "autounattend.xml copiado para raiz do ISO."
 
         # --- Injeção de autounattend.xml no boot.wim (WinPE) ---
-        # *O WinPE procura autounattend.xml em drives e em \Windows\System32\*
+        # O WinPE procura autounattend.xml em drives e em \Windows\System32\
         $bootWimSrc = Join-Path $tmpDir "sources\boot.wim"
         if (Test-Path $bootWimSrc) {
             Write-LogHost "A injetar autounattend.xml no boot.wim (WinPE)..."
             try {
-                # *boot.wim pode ser read-only (vem do ISO)*
+                # boot.wim pode ser read-only (vem do ISO)
                 Set-ItemProperty -Path $bootWimSrc -Name IsReadOnly -Value $false -ErrorAction SilentlyContinue
 
-                # *Montar index 2 (WinPE Setup); fallback para index 1*
+                # Montar index 2 (WinPE Setup); fallback para index 1
                 $wimIndex = 2
                 $dismResult = & dism /Mount-Wim /WimFile:"$bootWimSrc" /index:$wimIndex /MountDir:"$wimDir" 2>&1
                 if ($LASTEXITCODE -ne 0) {

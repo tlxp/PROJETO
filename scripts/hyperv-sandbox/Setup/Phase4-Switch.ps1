@@ -1,4 +1,4 @@
-﻿# --- Script: Phase4-Switch.ps1 ---
+﻿# --- Módulo: Phase4-Switch.ps1 ---
 # --- Switch virtual isolado e firewall do host ---
 
 Write-Host "[4/8] Switch virtual ($SwitchName)..."
@@ -11,7 +11,7 @@ if ($hostAdapter) {
              Where-Object { $_.IPAddress -eq "192.168.100.1" }
     if (-not $hasIp) {
         try {
-            # *gateway do host na rede interna 192.168.100.0/24*
+            # gateway do host na rede interna 192.168.100.0/24
             New-NetIPAddress -InterfaceIndex $hostAdapter.ifIndex -IPAddress "192.168.100.1" -PrefixLength 24 -ErrorAction Stop | Out-Null
             Write-Host "      IP 192.168.100.1/24 atribuido."
         } catch { Write-Warning "      Não foi possível atribuir IP: $_" }

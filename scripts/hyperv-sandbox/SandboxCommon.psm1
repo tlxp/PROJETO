@@ -1,4 +1,5 @@
-﻿# --- Script: SandboxCommon.psm1 ---
+﻿# --- Módulo: SandboxCommon.psm1 ---
+# --- Módulo partilhado do sandbox Hyper-V ---
 param(
     [switch] $DryRun
 )
@@ -6,8 +7,8 @@ param(
 $script:SandboxGuestFileCopyMode = $null
 
 # --- Carregamento modular das funções partilhadas ---
-# *As funções estão organizadas em ficheiros temáticos dentro de .\SandboxCommon\.*
-# *São carregadas via dot-sourcing (mesma scope do módulo), partilhando $script:DryRun.*
+# As funções estão organizadas em ficheiros temáticos dentro de .\SandboxCommon\.
+# São carregadas via dot-sourcing (mesma scope do módulo), partilhando $script:DryRun.
 $script:SandboxCommonPartsDir = Join-Path $PSScriptRoot 'SandboxCommon'
 $sandboxCommonParts = @(
     'Logging.ps1',         # Get-LogTimestamp, Write-LogHost, Write-LogWarning, Write-SandboxLog, Write-SandboxJsonLog

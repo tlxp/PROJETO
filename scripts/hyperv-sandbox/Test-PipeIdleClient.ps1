@@ -1,5 +1,5 @@
-# --- Script: Test-PipeIdleClient.ps1 ---
-# *Reproduz run real: cliente ligado cedo, guest envia após N segundos*
+# --- Módulo: Test-PipeIdleClient.ps1 ---
+# --- Teste de cliente idle no pipe serial ---
 
 param([int] $GuestDelaySec = 15)
 

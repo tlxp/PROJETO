@@ -177,7 +177,7 @@ class DotNetDecompiler:
             result["error"] = meta["error_short"]
             return result
 
-# --- Helper interno: write erro pasta ---
+# --- Grava ficheiro de erro na pasta de saída ---
         def _write_erro_pasta(msg: str) -> None:
             # *Ficheiro na pasta de saída explica o erro quando descompilação falha*
             try:

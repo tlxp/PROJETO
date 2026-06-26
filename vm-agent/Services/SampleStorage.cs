@@ -1,8 +1,14 @@
 // --- Módulo: SampleStorage.cs ---
+// Armazenamento seguro de amostras na pasta samples.
+
 
 using VmAgent.Configuration;
 
+
+
 namespace VmAgent.Services;
+
+
 
 // --- Armazenamento seguro de amostras ---
 internal static class SampleStorage
@@ -10,11 +16,15 @@ internal static class SampleStorage
     public static string SamplesDirectory =>
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "samples"));
 
+
+
     // --- Resolve caminho de destino validando o nome do ficheiro ---
     public static bool TryResolveTargetPath(string safeName, out string targetPath, out string? error)
     {
         targetPath = string.Empty;
         error = null;
+
+
 
         // *rejeita nomes vazios, relativos ou com path traversal*
         if (string.IsNullOrWhiteSpace(safeName) ||
@@ -25,9 +35,13 @@ internal static class SampleStorage
             return false;
         }
 
+
+
         var baseDir = SamplesDirectory;
         Directory.CreateDirectory(baseDir);
         targetPath = Path.GetFullPath(Path.Combine(baseDir, safeName));
+
+
 
         // *garante que o destino permanece dentro da pasta samples*
         if (!targetPath.StartsWith(baseDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
@@ -38,6 +52,9 @@ internal static class SampleStorage
             return false;
         }
 
+
+
         return true;
     }
 }
+

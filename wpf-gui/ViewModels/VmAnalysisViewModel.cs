@@ -1,4 +1,5 @@
 ﻿// --- Módulo: VmAnalysisViewModel.cs ---
+// ViewModel da análise VM com log em tempo real e publicação.
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -13,12 +14,18 @@ using RatAnalyzer.Desktop.Bootstrap;
 using RatAnalyzer.Desktop.Infrastructure;
 using RatAnalyzer.Desktop.Services;
 
+
+
 namespace RatAnalyzer.Desktop.ViewModels;
+
+
 
 // --- ViewModel da análise VM: scripts Hyper-V, log em tempo real e publicação no backend ---
 public sealed class VmAnalysisViewModel : ViewModelBase
 {
     private const int MaxLogChars = 400_000;
+
+
 
     private readonly string _samplePath;
     private readonly bool _runFirstTimeSetup;
@@ -36,6 +43,8 @@ public sealed class VmAnalysisViewModel : ViewModelBase
     private readonly Stopwatch _sw = Stopwatch.StartNew();
     private readonly Dispatcher _dispatcher;
 
+
+
     private string _logText = "";
     private string _statusText = "A iniciar...";
     private string _techStatusText = "—";
@@ -46,14 +55,20 @@ public sealed class VmAnalysisViewModel : ViewModelBase
     private bool _canOpenReport;
     private bool _canCopyRunId;
 
+
+
     private string? _runId;
     private string? _runDir;
     private string? _expectedReportPath;
     private string? _expectedReportJsonPath;
     private string? _reportsDir;
 
+
+
     private DispatcherTimer? _statusTimer;
     private bool _completed;
+
+
 
     public VmAnalysisViewModel(
         string samplePath,
@@ -79,13 +94,19 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         _dynamicAnalysis = dynamicAnalysis ?? new DynamicAnalysisService();
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
 
+
+
         OpenRunFolderCommand = new RelayCommand(OpenRunFolder, () => CanOpenRunFolder);
         OpenReportCommand = new RelayCommand(() => _ = OpenReportAsync(), () => CanOpenReport);
         CopyRunIdCommand = new RelayCommand(CopyRunId, () => CanCopyRunId);
         CloseCommand = new RelayCommand(() => RequestClose?.Invoke(), () => CanClose);
     }
 
+
+
     public event Action? RequestClose;
+
+
 
     public string LogText
     {
@@ -93,11 +114,15 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         private set => SetProperty(ref _logText, value);
     }
 
+
+
     public string StatusText
     {
         get => _statusText;
         private set => SetProperty(ref _statusText, value);
     }
+
+
 
     public string TechStatusText
     {
@@ -105,11 +130,15 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         private set => SetProperty(ref _techStatusText, value);
     }
 
+
+
     public bool IsBusy
     {
         get => _isBusy;
         private set => SetProperty(ref _isBusy, value);
     }
+
+
 
     public bool IsStatusError
     {
@@ -117,11 +146,15 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         private set => SetProperty(ref _isStatusError, value);
     }
 
+
+
     public bool CanClose
     {
         get => _canClose;
         private set => SetProperty(ref _canClose, value);
     }
+
+
 
     public bool CanOpenRunFolder
     {
@@ -129,11 +162,15 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         private set => SetProperty(ref _canOpenRunFolder, value);
     }
 
+
+
     public bool CanOpenReport
     {
         get => _canOpenReport;
         private set => SetProperty(ref _canOpenReport, value);
     }
+
+
 
     public bool CanCopyRunId
     {
@@ -141,15 +178,22 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         private set => SetProperty(ref _canCopyRunId, value);
     }
 
+
+
     public ICommand OpenRunFolderCommand { get; }
     public ICommand OpenReportCommand { get; }
     public ICommand CopyRunIdCommand { get; }
     public ICommand CloseCommand { get; }
 
+
+
+    // --- Tenta cancelamento fecho ---
     public bool TryCancelClose()
     {
         if (_completed)
             return true;
+
+
 
         var result = MessageBox.Show(
             "A análise ainda está a decorrer. Deseja cancelar e fechar?",
@@ -157,12 +201,18 @@ public sealed class VmAnalysisViewModel : ViewModelBase
             MessageBoxButton.YesNo,
             MessageBoxImage.Question);
 
+
+
         if (result != MessageBoxResult.Yes)
             return false;
+
+
 
         _cts.Cancel();
         return true;
     }
+
+
 
     // --- Ponto de entrada: orquestra setup, primeira entrada e execução da amostra ---
     public async Task RunAsync()
@@ -188,10 +238,14 @@ public sealed class VmAnalysisViewModel : ViewModelBase
             CanCopyRunId = !string.IsNullOrWhiteSpace(_runId);
             CanOpenReport = File.Exists(_expectedReportPath ?? "") || File.Exists(_expectedReportJsonPath ?? "");
 
+
+
             if (StatusText == "A iniciar..." || StatusText.Contains("A executar", StringComparison.Ordinal))
                 StatusText = "Concluído.";
         }
     }
+
+
 
     // --- Núcleo da análise: preflight, ADK, setup, first-time e run sample ---
     private async Task RunAnalysisCoreAsync()
@@ -203,8 +257,12 @@ public sealed class VmAnalysisViewModel : ViewModelBase
             return;
         }
 
+
+
         _runId = DateTime.Now.ToString("yyyyMMdd_HHmmss");
         _reportsDir = ProjetoVmPaths.ReportsDir(scriptsPath);
+
+
 
         try
         {
@@ -220,6 +278,8 @@ public sealed class VmAnalysisViewModel : ViewModelBase
             _runDir = null;
         }
 
+
+
         AppendLine($"[*] Pasta dos scripts: {scriptsPath}", withTimestamp: true);
         AppendLine($"[*] Amostra: {_samplePath}", withTimestamp: true);
         AppendLine($"[*] Primeira entrada (instalar software + snapshot): {_runFirstTimeSetup}", withTimestamp: true);
@@ -231,6 +291,8 @@ public sealed class VmAnalysisViewModel : ViewModelBase
             AppendLine($"[*] Pasta de logs: {_runDir}", withTimestamp: true);
         AppendLine("", withTimestamp: true);
 
+
+
         var runPreflight = await VmSandboxService.GetRunPreflightAsync(scriptsPath, _cts.Token, _guestCredentials).ConfigureAwait(true);
         if (runPreflight == null)
         {
@@ -239,10 +301,14 @@ public sealed class VmAnalysisViewModel : ViewModelBase
             return;
         }
 
+
+
         AppendLine($"[*] Preflight: ISO existe: {runPreflight.IsoExists} ({runPreflight.IsoPath})", withTimestamp: true);
         AppendLine($"[*] Preflight: VM existe: {runPreflight.VmExists} ({runPreflight.VmName})", withTimestamp: true);
         AppendLine($"[*] Preflight: Snapshot existe: {runPreflight.SnapshotExists} ({runPreflight.SnapshotName})", withTimestamp: true);
         AppendLine("", withTimestamp: true);
+
+
 
         if (!runPreflight.IsoExists)
         {
@@ -252,12 +318,16 @@ public sealed class VmAnalysisViewModel : ViewModelBase
             return;
         }
 
+
+
         if (!_runFirstTimeSetup && (!runPreflight.VmExists || !runPreflight.SnapshotExists))
         {
             AppendLine("[ERRO] VM ou snapshot limpo não existem. Marque 'Primeira entrada na VM' para criar/configurar a VM e gerar o snapshot.", withTimestamp: true);
             await PersistGuiLogAsync().ConfigureAwait(false);
             return;
         }
+
+
 
         if (_runFirstTimeSetup)
         {
@@ -279,8 +349,12 @@ public sealed class VmAnalysisViewModel : ViewModelBase
                 AppendLine($"[AVISO] Verificação ADK: {ex.Message}", withTimestamp: true);
             }
 
+
+
             AppendLine("", withTimestamp: true);
         }
+
+
 
         var setupScript = Path.Combine(scriptsPath, "01-Setup-MalwareSandbox.ps1");
         if (_runFirstTimeSetup && File.Exists(setupScript))
@@ -295,11 +369,15 @@ public sealed class VmAnalysisViewModel : ViewModelBase
                     $"- Disco: {preflight.VhdPath} (existe: {preflight.VhdExists})\n\n" +
                     "Pretende ELIMINAR e reinstalar tudo de raiz?";
 
+
+
                 if (await _dialogs.ConfirmYesNoAsync("Reinstalar sandbox?", msg, warningIcon: true).ConfigureAwait(true))
                     setupArgs = new[] { "-ForceReinstall" };
                 else
                     AppendLine("[*] Reinstalação não selecionada. Vou prosseguir sem apagar a VM.", withTimestamp: true);
             }
+
+
 
             AppendLine("[*] A executar setup da sandbox (01-Setup-MalwareSandbox.ps1)...", withTimestamp: true);
             StatusText = "Setup da sandbox Hyper-V...";
@@ -315,6 +393,8 @@ public sealed class VmAnalysisViewModel : ViewModelBase
             }
         }
 
+
+
         if (_runFirstTimeSetup)
         {
             StatusText = "Primeira entrada: a instalar software comum na VM (winget) e a criar snapshot...";
@@ -324,6 +404,8 @@ public sealed class VmAnalysisViewModel : ViewModelBase
                 AppendLine($"[ERRO] Script não encontrado: {firstTimeScript}", withTimestamp: true);
                 return;
             }
+
+
 
             var exitCode1 = await VmSandboxService.RunScriptAsync(
                 firstTimeScript, null, line => AppendLine(line), _cts.Token, _guestCredentials).ConfigureAwait(true);
@@ -337,6 +419,8 @@ public sealed class VmAnalysisViewModel : ViewModelBase
             }
         }
 
+
+
         StatusText = "A executar amostra na VM (restore snapshot → run → report → restore snapshot)...";
         var runSampleScript = Path.Combine(scriptsPath, "04-Run-Sample.ps1");
         if (!File.Exists(runSampleScript))
@@ -345,11 +429,15 @@ public sealed class VmAnalysisViewModel : ViewModelBase
             return;
         }
 
+
+
         if (!string.IsNullOrWhiteSpace(_runId))
         {
             _expectedReportPath = Path.Combine(_reportsDir!, $"analysis_{_runId}.txt");
             _expectedReportJsonPath = Path.Combine(_reportsDir!, $"analysis_{_runId}.json");
         }
+
+
 
         try
         {
@@ -369,6 +457,8 @@ public sealed class VmAnalysisViewModel : ViewModelBase
             _activeJobId = _linkedJobId;
         }
 
+
+
         var runArgs = new List<string> { "-SamplePath", _samplePath };
         if (!string.IsNullOrWhiteSpace(_runId))
             runArgs.AddRange(new[] { "-RunId", _runId });
@@ -376,15 +466,21 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         if (!_waitForSampleExit)
             runArgs.Add("-SampleTimeoutKill");
 
+
+
         var exitCode2 = await VmSandboxService.RunScriptAsync(
             runSampleScript, runArgs, line => AppendLine(line), _cts.Token, _guestCredentials).ConfigureAwait(true);
         AppendLine("", withTimestamp: true);
+
+
 
         var runJsonPath = !string.IsNullOrWhiteSpace(_runId) && !string.IsNullOrWhiteSpace(_runDir)
             ? Path.Combine(_runDir, $"run_{_runId}.json")
             : null;
         var reportReady = !string.IsNullOrWhiteSpace(_expectedReportPath) && File.Exists(_expectedReportPath);
         var runStatus = VmSandboxService.TryReadRunStatus(runJsonPath);
+
+
 
         if (exitCode2 == 0 && reportReady)
             AppendLine($"[*] Análise comportamental concluída. Consulte {_reportsDir} para o relatório.", withTimestamp: true);
@@ -395,24 +491,37 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         else
             AppendLine($"[ERRO] A análise na VM falhou (código de saída: {exitCode2}).", withTimestamp: true);
 
+
+
         if (!string.IsNullOrWhiteSpace(runStatus) && !string.Equals(runStatus, "ok", StringComparison.OrdinalIgnoreCase))
             AppendLine($"[*] Estado registado no run: {runStatus}", withTimestamp: true);
+
+
 
         if (!string.IsNullOrWhiteSpace(_expectedReportPath))
             AppendLine($"[*] Relatório esperado: {_expectedReportPath}", withTimestamp: true);
         if (!string.IsNullOrWhiteSpace(_expectedReportJsonPath))
             AppendLine($"[*] JSON esperado: {_expectedReportJsonPath}", withTimestamp: true);
 
+
+
         if (reportReady && !string.IsNullOrWhiteSpace(_expectedReportPath))
             await TryPublishDynamicReportAsync().ConfigureAwait(true);
+
+
 
         await PersistGuiLogAsync().ConfigureAwait(false);
     }
 
+
+
+    // --- Tenta publicação dinâmica relatório ---
     private async Task TryPublishDynamicReportAsync()
     {
         if (string.IsNullOrWhiteSpace(_expectedReportPath) || !File.Exists(_expectedReportPath))
             return;
+
+
 
         try
         {
@@ -426,10 +535,14 @@ public sealed class VmAnalysisViewModel : ViewModelBase
                 progress,
                 _cts.Token).ConfigureAwait(true);
 
+
+
             _activeJobId = jobId;
             var resultsUrl = AppConstants.BuildFrontendUrl($"/analysis/{Uri.EscapeDataString(jobId)}");
             AppendLine($"[*] Relatório publicado no backend. URL: {resultsUrl}", withTimestamp: true);
             StatusText = "Concluído — relatório disponível no frontend.";
+
+
 
             // Só abrir automaticamente se a VM foi a primeira análise deste job
             // (evita 2.ª abertura quando a estática já abriu o mesmo URL).
@@ -451,6 +564,9 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         }
     }
 
+
+
+    // --- Append Line ---
     private void AppendLine(string line, bool withTimestamp = false)
     {
         void DoAppend()
@@ -464,8 +580,12 @@ public sealed class VmAnalysisViewModel : ViewModelBase
                 _logBuilder.Insert(0, "[log truncado: mantendo o final do output]\r\n");
             }
 
+
+
             LogText = _logBuilder.ToString();
         }
+
+
 
         if (_dispatcher.CheckAccess())
             DoAppend();
@@ -473,6 +593,9 @@ public sealed class VmAnalysisViewModel : ViewModelBase
             _dispatcher.BeginInvoke(DispatcherPriority.Normal, DoAppend);
     }
 
+
+
+    // --- persistência Gui log  ---
     private Task PersistGuiLogAsync()
     {
         return Task.Run(() =>
@@ -486,6 +609,9 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         });
     }
 
+
+
+    // --- Inicia estado temporizador ---
     private void StartStatusTimer()
     {
         _statusTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -498,6 +624,9 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         _statusTimer.Start();
     }
 
+
+
+    // --- Termina estado temporizador ---
     private void StopStatusTimer()
     {
         try
@@ -508,10 +637,15 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         catch { /* ignorar */ }
     }
 
+
+
+    // --- extract Last Phase ---
     private static string ExtractLastPhase(string logText)
     {
         if (string.IsNullOrEmpty(logText))
             return "-";
+
+
 
         var lines = logText.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
         for (var i = lines.Length - 1; i >= 0; i--)
@@ -524,9 +658,14 @@ public sealed class VmAnalysisViewModel : ViewModelBase
                 return l.Trim();
         }
 
+
+
         return "-";
     }
 
+
+
+    // --- Abre execução pasta ---
     private void OpenRunFolder()
     {
         try
@@ -537,6 +676,9 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         catch { /* ignorar */ }
     }
 
+
+
+    // --- Abre relatório ---
     private async Task OpenReportAsync()
     {
         try
@@ -545,12 +687,16 @@ public sealed class VmAnalysisViewModel : ViewModelBase
             if (string.IsNullOrWhiteSpace(jobId) && File.Exists(_expectedReportPath ?? ""))
                 await TryPublishDynamicReportAsync().ConfigureAwait(true);
 
+
+
             jobId = _activeJobId ?? _linkedJobId;
             if (string.IsNullOrWhiteSpace(jobId))
             {
                 AppendLine("[AVISO] Relatório local disponível, mas não há jobId para abrir no frontend.", withTimestamp: true);
                 return;
             }
+
+
 
             var url = AppConstants.BuildFrontendUrl($"/analysis/{Uri.EscapeDataString(jobId)}");
             if (_openBrowserUrl != null)
@@ -564,6 +710,9 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         }
     }
 
+
+
+    // --- Copia execução Id ---
     private void CopyRunId()
     {
         try
@@ -574,3 +723,4 @@ public sealed class VmAnalysisViewModel : ViewModelBase
         catch { /* ignorar */ }
     }
 }
+

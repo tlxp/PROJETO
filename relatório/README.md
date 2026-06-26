@@ -138,15 +138,16 @@ Funcionalidades que devem reflectir-se no texto do PDF (`main.tex`) e nas captur
 
 | Componente | Framework | Testes |
 |----------|-----------|--------|
-| Backend | pytest + httpx | **84** |
-| Frontend | Vitest | **56** |
+| Backend | pytest + httpx | **93** |
+| Frontend | Vitest | **62** |
 | Frontend E2E | Playwright | Fluxo upload/análise |
 | .NET | xUnit (vm-agent, WPF, benign-vm-test) | **48** |
 | Diagramas | `sync_diagrams_to_report.py --check` | 10 figuras cap. 4 |
+| **Total** | pytest + Vitest + xUnit | **203** |
 
 **Jobs CI** (`.github/workflows/ci.yml`): `backend`, `frontend`, `frontend-e2e`, `dotnet`, `ps1-encoding`, `md-docs`, `diagrams`, `powershell`, `security` (gitleaks).
 
-**Qualidade adicional:** Dependabot (pip, npm, github-actions, nuget), pre-commit (`.pre-commit-config.yaml`), `pip-audit`, `npm audit`, cobertura pytest/vitest.
+**CI adicional:** Dependabot (pip, npm, github-actions, nuget), pre-commit (`.pre-commit-config.yaml`), `pip-audit`, `npm audit`, cobertura pytest/vitest.
 
 Testes de integração VM (`hyperv`/`proxmox`): opt-in via `RUN_VM_DRIVER_INTEGRATION=1` — **não** fazem parte do CI padrão.
 

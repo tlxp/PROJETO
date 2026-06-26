@@ -1,20 +1,17 @@
 ﻿// --- Módulo: UiStrings.cs ---
+// Strings de interface ligadas ao idioma activo.
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-
 namespace RatAnalyzer.Desktop.Localization;
-
 // --- Strings ligadas ao XAML via {Binding Source={x:Static loc:UiStrings.Instance}, Path=...} ---
 public sealed class UiStrings : INotifyPropertyChanged
 {
     public static UiStrings Instance { get; } = new();
-
     private UiStrings() => LocalizationManager.LanguageChanged += (_, _) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(string.Empty));
-
     public event PropertyChangedEventHandler? PropertyChanged;
-
     public string AppTitle => LocalizationManager.Get(nameof(AppTitle));
+    public string AppSubtitle => LocalizationManager.Get(nameof(AppSubtitle));
     public string LanguageSection => LocalizationManager.Get(nameof(LanguageSection));
     public string LanguageTitle => LocalizationManager.Get(nameof(LanguageTitle));
     public string LanguageSubtitle => LocalizationManager.Get(nameof(LanguageSubtitle));
@@ -22,6 +19,7 @@ public sealed class UiStrings : INotifyPropertyChanged
     public string LanguageEnglish => LocalizationManager.Get(nameof(LanguageEnglish));
     public string LanguageContinue => LocalizationManager.Get(nameof(LanguageContinue));
     public string LanguageCancel => LocalizationManager.Get(nameof(LanguageCancel));
+    public string LanguageFooter => LocalizationManager.Get(nameof(LanguageFooter));
     public string ChangeLanguage => LocalizationManager.Get(nameof(ChangeLanguage));
     public string LoadingSection => LocalizationManager.Get(nameof(LoadingSection));
     public string LoadingTitle => LocalizationManager.Get(nameof(LoadingTitle));
@@ -87,7 +85,7 @@ public sealed class UiStrings : INotifyPropertyChanged
     public string CredentialsUser => LocalizationManager.Get(nameof(CredentialsUser));
     public string CredentialsPassword => LocalizationManager.Get(nameof(CredentialsPassword));
     public string CredentialsRemember => LocalizationManager.Get(nameof(CredentialsRemember));
-
+    // --- Responde a propriedade alteração ---
     private void OnPropertyChanged([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }

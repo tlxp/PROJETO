@@ -1,4 +1,6 @@
 // --- Módulo: UploadView.tsx ---
+// Vista de upload com drop zone, modo de análise e logs.
+
 import React from "react";
 import { motion } from "framer-motion";
 import { Cpu } from "lucide-react";
@@ -21,10 +23,11 @@ type UploadViewProps = {
   isAnalyzing: boolean;
   onAnalyze: () => void;
   onLoadMock: () => void;
+  mockDemoEnabled?: boolean;
   stillRunning: StillRunningJob | null;
 };
 
-// --- Vista de upload: drop zone, modo de análise e logs ---
+// --- Componente ---
 const UploadView: React.FC<UploadViewProps> = ({
   file,
   onFileLoaded,
@@ -37,6 +40,7 @@ const UploadView: React.FC<UploadViewProps> = ({
   isAnalyzing,
   onAnalyze,
   onLoadMock,
+  mockDemoEnabled = false,
   stillRunning,
 }) => {
   const { t } = useI18n();
@@ -145,15 +149,17 @@ const UploadView: React.FC<UploadViewProps> = ({
         </motion.div>
       )}
 
-      <div className="pt-4 text-center">
-        <button
-          type="button"
-          onClick={onLoadMock}
-          className="text-[11px] font-mono text-muted-foreground underline underline-offset-4 hover:text-foreground"
-        >
-          {t("mockLayout")}
-        </button>
-      </div>
+      {mockDemoEnabled && (
+        <div className="pt-4 text-center">
+          <button
+            type="button"
+            onClick={onLoadMock}
+            className="text-[11px] font-mono text-muted-foreground underline underline-offset-4 hover:text-foreground"
+          >
+            {t("mockLayout")}
+          </button>
+        </div>
+      )}
     </motion.div>
   );
 };

@@ -16,7 +16,7 @@ import anyio.to_thread
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
-from analysis_jobs import (
+from c_code_payload import (
     compose_fallback_descompilation_ccode,
     should_compose_decompilation_fallback,
     summarize_c_code_payload,
@@ -76,7 +76,7 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
             output_dir = tmp_dir / "out"
             output_dir.mkdir(exist_ok=True)
 
-# --- Log cb ---
+# --- Callback de log do pipeline ---
             def log_cb(msg: str) -> None:
                 logger.info("[ANALYZE %s] %s", name, msg)
 
@@ -188,7 +188,7 @@ async def analyze_file_stream(request: Request, file: UploadFile = File(...)):
     output_dir.mkdir(exist_ok=True)
     q: queue.Queue[object] = queue.Queue()
 
-# --- Log cb ---
+# --- Callback de log para streaming SSE ---
     def log_cb(msg: str) -> None:
         q.put({"type": "log", "message": msg})
 
@@ -215,7 +215,7 @@ async def analyze_file_stream(request: Request, file: UploadFile = File(...)):
                     last = json.load(f)
                 report_path = last.get("report_path")
 
-# --- Helper interno: read local ---
+# --- Leitura segura de ficheiro local para resposta ---
                 def _read_local(path: str | None, encoding: str = "utf-8", errors: str = "replace") -> str:
                     if not path or not Path(path).exists():
                         return ""

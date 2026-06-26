@@ -17,7 +17,6 @@ def client():
 
 # --- Testes de UploadDynamic ---
 class TestUploadDynamic:
-# --- Teste: verifica cria job dinamico com relatorio ---
     def test_cria_job_dinamico_com_relatorio(self, client):
         r = client.post(
             "/api/analysis/upload_dynamic",
@@ -40,7 +39,6 @@ class TestUploadDynamic:
         payload = detail.json()
         assert payload["dynamicResult"]["dynamicReportText"].startswith("RELATÓRIO VM")
 
-# --- Teste: verifica associa a job estatico existente ---
     def test_associa_a_job_estatico_existente(self, client):
         static = client.post(
             "/api/analysis/upload_static",
@@ -82,7 +80,38 @@ class TestUploadDynamic:
         assert detail["staticResult"]["report"] == "estático"
         assert "comportamento na VM" in detail["dynamicResult"]["dynamicReportText"]
 
-# --- Teste: verifica job inexistente 404 ---
+    def test_estatica_concluida_nao_fecha_job_com_vm_em_curso(self, client):
+        running = client.post(
+            "/api/analysis/upload_dynamic",
+            json={"fileName": "sample.exe", "status": "running", "runId": "run1"},
+        )
+        assert running.status_code == 200
+        job_id = running.json()["jobId"]
+        assert running.json()["status"] == "running"
+
+        static = client.post(
+            "/api/analysis/upload_static",
+            json={
+                "jobId": job_id,
+                "fileName": "sample.exe",
+                "report": "estático",
+                "cCode": "void main(){}",
+                "ilCode": "IL",
+                "riskScore": 10,
+                "riskLevel": "LOW",
+                "status": "completed",
+            },
+        )
+        assert static.status_code == 200
+        assert static.json()["analysisType"] == "both"
+        assert static.json()["status"] == "running"
+
+        detail = client.get(f"/api/analysis/{job_id}").json()
+        assert detail["status"] == "running"
+        assert detail["analysisType"] == "both"
+        assert detail["staticResult"]["report"] == "estático"
+        assert not (detail["dynamicResult"].get("dynamicReportText") or "").strip()
+
     def test_job_inexistente_404(self, client):
         missing = str(uuid.uuid4())
         r = client.post(

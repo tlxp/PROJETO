@@ -1,15 +1,22 @@
 ﻿// --- Módulo: StorageMaintenanceWindow.xaml.cs ---
+// Janela de manutenção de armazenamento local.
 using System.Threading.Tasks;
 using System.Windows;
 using RatAnalyzer.Desktop.Localization;
 using RatAnalyzer.Desktop.ViewModels;
 
+
+
 namespace RatAnalyzer.Desktop.Views;
+
+
 
 // --- Janela modal de manutenção e limpeza de armazenamento ---
 public partial class StorageMaintenanceWindow : Window
 {
     private readonly StorageMaintenanceViewModel _viewModel;
+
+
 
     public StorageMaintenanceWindow()
     {
@@ -21,7 +28,10 @@ public partial class StorageMaintenanceWindow : Window
         Loaded += OnLoaded;
     }
 
+
+
     // --- Carrega estimativa de espaço ao abrir ---
     private async void OnLoaded(object sender, RoutedEventArgs e) =>
         await _viewModel.RefreshOnLoadAsync();
 }
+

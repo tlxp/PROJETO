@@ -1,5 +1,5 @@
-# --- Script: Test-SerialPipeSimulation.ps1 ---
-#Requires -Version 5.1
+# --- Módulo: Test-SerialPipeSimulation.ps1 ---
+# --- Requires -Version 5.1 ---
 <#
 .SYNOPSIS
     Simula COM1->Named Pipe (vmwp servidor + host cliente + guest escritor) sem VM.
@@ -182,6 +182,6 @@ try {
     if ($failed -gt 0) { exit 1 }
 }
 finally {
-    # *Limpeza da pasta temporária de testes*
+    # Limpeza da pasta temporária de testes
     try { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue } catch { }
 }

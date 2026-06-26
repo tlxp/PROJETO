@@ -1,0 +1,16 @@
+{
+  "description": "Benign PE corpus for static false-positive evaluation (no execution during analysis).",
+  "samples_dir": "benign-samples/dist",
+  "expected_label": "benign",
+  "positive_prediction_levels": ["ALTO", "CRÍTICO"],
+  "samples": [
+    {"id": "BenignHello", "subdir": "hello", "note": "Console mínimo"},
+    {"id": "BenignFileIo", "subdir": "file-io", "note": "Ficheiro em TEMP"},
+    {"id": "BenignHttpMs", "subdir": "http-ms", "note": "HTTP GET microsoft.com"},
+    {"id": "BenignRegistryRead", "subdir": "registry-read", "note": "Leitura HKCU"},
+    {"id": "BenignCryptoDigest", "subdir": "crypto-digest", "note": "SHA-256 local"},
+    {"id": "BenignEnvDump", "subdir": "env-dump", "note": "Env vars"},
+    {"id": "BenignGuiMsg", "subdir": "gui-msg", "note": "MessageBox"},
+    {"id": "BenignVmTest", "subdir": "../benign-vm-test", "note": "Sandbox smoke test"}
+  ]
+}

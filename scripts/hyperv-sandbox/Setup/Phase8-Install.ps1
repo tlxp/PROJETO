@@ -1,4 +1,4 @@
-﻿# --- Script: Phase8-Install.ps1 ---
+﻿# --- Módulo: Phase8-Install.ps1 ---
 # --- Instalação automática do Windows na VM ---
 
 Write-Host "[8/8] Instalação do Windows..."
@@ -29,7 +29,7 @@ if ($snap) {
     Ensure-DirectoryExists -Path $unattendDir
     $unattendXml = Join-Path $unattendDir "autounattend.xml"
 
-    # *Phase8 é dot-sourced: $PSScriptRoot = ...\Setup; o autounattend custom vive na pasta pai*
+    # Phase8 é dot-sourced: $PSScriptRoot = ...\Setup; o autounattend custom vive na pasta pai
     $customUnattendName = "autounattend-malware-behavior-detection-user-gen1.xml"
     $customUnattendCandidates = @(
         (Join-Path (Split-Path -Parent $PSScriptRoot) $customUnattendName),
@@ -62,7 +62,7 @@ if ($snap) {
     }
 
     # --- Aplicação de credenciais guest ao autounattend ---
-    # *valores de _Config/WPF têm de coincidir com a conta criada na VM*
+    # valores de _Config/WPF têm de coincidir com a conta criada na VM
     try {
         Set-UnattendGuestCredentialsInPlace `
             -UnattendXmlPath $unattendXml `
@@ -86,7 +86,7 @@ if ($snap) {
     }
 
     # --- Remoção de international settings (apenas autounattend gerado) ---
-    # *no custom Gen1 manter International-Core-WinPE para Setup silencioso*
+    # no custom Gen1 manter International-Core-WinPE para Setup silencioso
     if ($usedSource -eq "official-generated") {
         try {
             Remove-UnattendInternationalSettings -UnattendXmlPath $unattendXml
@@ -172,7 +172,7 @@ if ($snap) {
                         $dl = (Get-Partition -DiskNumber $diskNum -PartitionNumber $existingFat.PartitionNumber).DriveLetter
                     }
                 } else {
-                    # *cria partição FAT32 de 256 MB para o Windows Setup encontrar autounattend.xml*
+                    # cria partição FAT32 de 256 MB para o Windows Setup encontrar autounattend.xml
                     $part = New-Partition -DiskNumber $diskNum -Size 256MB -AssignDriveLetter -ErrorAction Stop
                     Format-Volume -Partition $part -FileSystem FAT32 -NewFileSystemLabel "UNATTEND" -Confirm:$false -ErrorAction Stop | Out-Null
                     $dl = $null
@@ -246,7 +246,7 @@ if ($snap) {
     Log "VM '$VMName' a arrancar (DVD ISO: $dvdBootPath)."
     Start-VM -Name $VMName | Out-Null
 
-    # *PS Direct é mais fiável que Heartbeat; falha até o logon guest estar disponível*
+    # PS Direct é mais fiável que Heartbeat; falha até o logon guest estar disponível
     $secure = ConvertTo-SecureString $GuestPassword -AsPlainText -Force
     $cred = [pscredential]::new($GuestUser, $secure)
     $ok = Wait-VMPowerShellDirectReady -VMName $VMName -Credential $cred -TimeoutSeconds 0 -LogPath $LogFile -LogIntervalSeconds 10
@@ -276,7 +276,7 @@ if ($snap) {
             try { Stop-VM -Name $VMName -TurnOff -Force -ErrorAction SilentlyContinue | Out-Null } catch { }
         }
 
-        # *Hyper-V exige VM totalmente Off antes de Checkpoint-VM*
+        # Hyper-V exige VM totalmente Off antes de Checkpoint-VM
         $waitOffDeadline = (Get-Date).AddMinutes(8)
         while ((Get-Date) -lt $waitOffDeadline) {
             $st = (Get-VM -Name $VMName -ErrorAction SilentlyContinue).State

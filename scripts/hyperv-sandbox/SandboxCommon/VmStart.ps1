@@ -1,4 +1,5 @@
-﻿# --- Script: VmStart.ps1 ---
+﻿# --- Módulo: VmStart.ps1 ---
+# --- Arranque da VM com fallback de RAM ---
 
 # --- Deteção de erro de memória insuficiente no host ---
 function Test-SandboxVmHostLowMemoryError {
@@ -19,7 +20,7 @@ function Test-SandboxVmHostLowMemoryError {
         return $false
     }
     $wordPattern = "0x800705AA|0x8007000E|recursos de sistema|insufficient system resources|not enough memory|cannot allocate|mem[óo]ria insuficiente|n[aã]o existe mem[óo]ria|out of memory"
-    # *Percorrer cadeia de exceções internas procurando códigos/mensagens de RAM*
+    # Percorrer cadeia de exceções internas procurando códigos/mensagens de RAM
     while ($ex) {
         $m = [string]$ex.Message
         $text += " $m"
@@ -143,7 +144,7 @@ function Start-SandboxVM {
                     }
                 }
 
-                # *Restaurar RAM original se todas as tentativas falharam*
+                # Restaurar RAM original se todas as tentativas falharam
                 if (-not $started) {
                     if ($changedStartup -and $null -ne $originalStartupBytes -and $originalStartupBytes -gt 0) {
                         try {
@@ -168,7 +169,7 @@ function Start-SandboxVM {
         if (-not $Credential -and (-not $CredentialCandidates -or $CredentialCandidates.Count -eq 0)) {
             throw "Start-SandboxVM: espera por PowerShell Direct requer -Credential ou -CredentialCandidates (ou use apenas -BootWaitSeconds sem credenciais)."
         }
-        # *Espera sem timeout: aguardar indefinidamente até o PowerShell Direct ficar OK*
+        # Espera sem timeout: aguardar indefinidamente até o PowerShell Direct ficar OK
         Write-LogHost "A aguardar arranque da VM (PowerShell Direct, verificação a cada 2s, sem timeout)..."
         return (Wait-VMPowerShellDirectReady -VMName $VMName -Credential $Credential -CredentialCandidates $CredentialCandidates -TimeoutSeconds 0 -LogPath $LogPath -LogIntervalSeconds 2)
     }
@@ -191,7 +192,7 @@ function Wait-SandboxGuestServiceReady {
             $svcName = Get-SandboxGuestServiceName -VMName $VMName
             if (-not $svcName) { return $false }
             $svc = Get-VMIntegrationService -VMName $VMName -Name $svcName -ErrorAction SilentlyContinue
-            # *Em alguns hosts, os campos são PrimaryStatusDescription/SecondaryStatusDescription*
+            # Em alguns hosts, os campos são PrimaryStatusDescription/SecondaryStatusDescription
             $enabled = $svc -and $svc.Enabled
             $ok = $false
             if ($svc) {

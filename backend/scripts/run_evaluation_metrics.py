@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
-"""Compute proxy detection metrics from labeled synthetic profiles."""
+# --- Módulo: run_evaluation_metrics.py ---
+# Métricas proxy de deteção a partir de perfis sintéticos etiquetados (sem malware real).
 
 from __future__ import annotations
 
@@ -15,19 +15,21 @@ from modules.risk_scorer import RiskScorer  # noqa: E402
 
 PROFILES_PATH = BACKEND_ROOT / "evaluation" / "proxy_labeled_profiles.json"
 OUTPUT_PATH = BACKEND_ROOT / "evaluation" / "detection_metrics.json"
-
 POSITIVE_LEVELS = frozenset({"ALTO", "CRÍTICO"})
 
 
+# --- Predição maliciosa a partir do nível de risco ---
 def _predict_malicious(level: str) -> bool:
     return level in POSITIVE_LEVELS
 
 
+# --- Carrega perfis etiquetados do JSON ---
 def _load_profiles() -> dict:
     with PROFILES_PATH.open(encoding="utf-8") as f:
         return json.load(f)
 
 
+# --- Calcula matriz de confusão e métricas F1/recall/precisão ---
 def compute_metrics() -> dict:
     data = _load_profiles()
     scorer = RiskScorer()
@@ -70,8 +72,8 @@ def compute_metrics() -> dict:
 
     return {
         "methodology": (
-            "Proxy metrics on labeled synthetic static profiles (no real malware binaries). "
-            "Positive prediction: risk level ALTO or CRITICO."
+            "Métricas proxy em perfis estáticos sintéticos etiquetados (sem binários maliciosos). "
+            "Predição positiva: nível ALTO ou CRÍTICO."
         ),
         "profiles_path": str(PROFILES_PATH.relative_to(BACKEND_ROOT.parent)),
         "n_profiles": len(rows),
@@ -84,6 +86,7 @@ def compute_metrics() -> dict:
     }
 
 
+# --- Ponto de entrada: grava detection_metrics.json ---
 def main() -> int:
     metrics = compute_metrics()
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)

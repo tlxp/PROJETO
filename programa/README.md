@@ -1,6 +1,8 @@
 # Pasta `programa/` - projetos .NET de exemplo (opcional)
 
-Área **opcional** do repositório para pequenos projetos C# usados em testes manuais ou na [GUI Tkinter](../backend/gui/README.md) (*arrastar `.cs` → compilar → analisar*).
+Área **opcional** do repositório para pequenos projetos C# usados em testes manuais.
+Também serve o fluxo legacy da [GUI Tkinter](../backend/gui/README.md) (*arrastar `.cs` → compilar → analisar*);
+para uso corrente, prefira o **frontend web** ou o **WPF** com binários já compilados.
 
 ## Projeto incluído
 
@@ -14,7 +16,8 @@ dotnet build -c Release
 python ../../backend/rat_analyzer.py bin/Release/net8.0/MeuExemplo.dll -o reports/ -v
 ```
 
-Ou arraste `MeuExemplo/Program.cs` para a GUI Tkinter e use **Compilar (dotnet publish)**.
+Ou arraste `MeuExemplo/Program.cs` para a GUI Tkinter legacy e use **Compilar (dotnet publish)**.
+Para novos fluxos, compile com `dotnet` e analise via web ou WPF.
 
 ## O que colocar aqui
 

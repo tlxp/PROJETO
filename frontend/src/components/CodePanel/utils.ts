@@ -1,21 +1,14 @@
 // --- Módulo: utils.ts ---
+// Utilitários do CodePanel (blocos foldáveis).
+
+import { getBraceBlocksFromLines } from "@/lib/cBlockUtils";
 import type { FoldBlock } from "./types";
 
-// --- Encontra blocos { } no código (por linha) ---
+// --- Blocos foldáveis ---
+// *Delega a deteção de chavetas ao util partilhado cBlockUtils*
 export function getFoldBlocks(lines: string[]): FoldBlock[] {
-  const blocks: FoldBlock[] = [];
-  const stack: number[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const opens = (line.match(/\{/g) || []).length;
-    const closes = (line.match(/\}/g) || []).length;
-    for (let o = 0; o < opens; o++) stack.push(i + 1);
-    for (let c = 0; c < closes; c++) {
-      if (stack.length > 0) {
-        const start = stack.pop()!;
-        blocks.push({ startLine: start, endLine: i + 1 });
-      }
-    }
-  }
-  return blocks;
+  return getBraceBlocksFromLines(lines).map((b) => ({
+    startLine: b.start,
+    endLine: b.end,
+  }));
 }

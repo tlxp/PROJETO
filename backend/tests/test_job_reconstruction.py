@@ -14,21 +14,21 @@ from analysis_jobs import AnalysisResult, AnalysisType, JobStatus, _run_job, cre
 # --- Executor noop: não corre job localmente ---
 class _NoopExecutor:
 
-# --- Teste: submit ---
+    # --- Método submit sem execução local ---
     def submit(self, fn, *args, **kwargs):
         return None
 
 
 @pytest.fixture()
-# --- Teste: no local run ---
+# --- Fixture: executor noop (sem run local) ---
 def no_local_run(monkeypatch):
     monkeypatch.setattr(analysis_jobs, "_get_executor", lambda: _NoopExecutor())
 
 
 @pytest.fixture()
-# --- Teste: fake static ---
+# --- Fixture: pipeline estático fake ---
 def fake_static(monkeypatch):
-# --- Helper interno: fake run static ---
+    # --- Substitui _run_static por resultado fake ---
     def _fake_run_static(job):
         return AnalysisResult(
             report="relatório fake",
@@ -42,7 +42,6 @@ def fake_static(monkeypatch):
     monkeypatch.setattr(analysis_jobs, "_run_static", _fake_run_static)
 
 
-# --- Teste: verifica job reconstruido da db e executado ---
 def test_job_reconstruido_da_db_e_executado(no_local_run, fake_static):
     # Conteúdo único para evitar reuso por cache (dedup sha256)
     contents = f"binario-{uuid.uuid4()}".encode()
@@ -68,7 +67,6 @@ def test_job_reconstruido_da_db_e_executado(no_local_run, fake_static):
     assert static["riskScore"] == 42
 
 
-# --- Teste: verifica fluxo local em memoria continua a funcionar ---
 def test_fluxo_local_em_memoria_continua_a_funcionar(no_local_run, fake_static):
     contents = f"binario-{uuid.uuid4()}".encode()
     job = create_job("local.exe", contents, AnalysisType.STATIC)
@@ -87,7 +85,6 @@ def test_fluxo_local_em_memoria_continua_a_funcionar(no_local_run, fake_static):
     assert row["status"] == JobStatus.COMPLETED.value
 
 
-# --- Teste: verifica create job rejeita filename malicioso ---
 def test_create_job_rejeita_filename_malicioso(no_local_run):
     with pytest.raises(ValueError):
         create_job("..\\..\\evil.exe", b"xyz", AnalysisType.STATIC)

@@ -109,39 +109,57 @@ class RATAnalyzer:
     # --- Executa pipeline completo de análise (7 fases) ---
     def analyze(self):
         self._log(f"[*] Iniciando análise de: {self.target_file.name}")
+        self._phase_file_info()
+        if self.use_dotnet_decompiler:
+            self._phase_dotnet_decompile()
+        self._phase_static_analysis()
+        self._phase_deobfuscation()
+        self._phase_yara()
+        self._phase_risk_scoring()
+        artifacts = self._phase_decompilation_outputs()
+        report_path = self._phase_generate_report(artifacts)
+        self._phase_finalize(artifacts, report_path)
+        return self.analysis_results
+
+    # --- Fase 1: metadados do ficheiro ---
+    def _phase_file_info(self) -> None:
         self._log("[1/7] Extraindo informações do ficheiro...")
         self.analysis_results["file_info"] = self._get_file_info()
         self._log("      OK.")
 
-        # 2) Se pedido, descompilar .NET com ILSpy
-        if self.use_dotnet_decompiler:
-            self._log("[2/7] Descompilação .NET (ILSpy) — pode demorar 1-2 min...")
-            decomp_result = self.dotnet_decompiler.decompile(str(self.target_file))
-            self.analysis_results["dotnet_decompilation"] = decomp_result
-            self._log_dotnet_decompilation(decomp_result)
+    # --- Fase 2: descompilação .NET (ILSpy), opcional ---
+    def _phase_dotnet_decompile(self) -> None:
+        self._log("[2/7] Descompilação .NET (ILSpy) — pode demorar 1-2 min...")
+        decomp_result = self.dotnet_decompiler.decompile(str(self.target_file))
+        self.analysis_results["dotnet_decompilation"] = decomp_result
+        self._log_dotnet_decompilation(decomp_result)
 
-        # 3) Análise estática
+    # --- Fase 3: análise estática PE/strings/imports ---
+    def _phase_static_analysis(self) -> None:
         self._log("[3/7] Análise estática (strings, imports, indicadores)...")
         self.analysis_results["static_analysis"] = self.static_analyzer.analyze(
             str(self.target_file)
         )
         self._log("      OK.")
 
-        # 4) Deobfuscação (se necessário)
+    # --- Fase 4: desofuscação binária ---
+    def _phase_deobfuscation(self) -> None:
         self._log("[4/7] Deobfuscação (Base64, XOR, ofuscação)...")
         self.analysis_results["deobfuscation"] = self.deobfuscator.deobfuscate(
             str(self.target_file)
         )
         self._log("      OK.")
 
-        # 5) Scan YARA
+    # --- Fase 5: scan YARA ---
+    def _phase_yara(self) -> None:
         self._log("[5/7] Scan YARA (regras RAT/C2/evasão)...")
         self.analysis_results["yara_matches"] = self.yara_scanner.scan(
             str(self.target_file)
         )
         self._log("      OK.")
 
-        # 6) Cálculo do score de risco
+    # --- Fase 6: scoring de risco ---
+    def _phase_risk_scoring(self) -> None:
         self._log("[6/7] Cálculo do score de risco...")
         file_sha256 = (self.analysis_results.get("file_info") or {}).get("sha256")
         risk_assessment = self.risk_scorer.calculate_risk(
@@ -156,8 +174,9 @@ class RATAnalyzer:
         if risk_assessment.get("validation_sample"):
             self.analysis_results["validation_sample"] = True
             self.analysis_results["validation_note"] = risk_assessment.get("validation_note", "")
-        
-        # 6) Se houve descompilação .NET, aplicar deobfuscação ao código fonte; senão, tentar desmontagem (assembly) para binários nativos
+
+    # --- Fase 7a/7b: snippets, assembly, Ghidra ou deobfuscação de C# ---
+    def _phase_decompilation_outputs(self) -> dict:
         decomp = self.analysis_results.get("dotnet_decompilation", {})
         consolidated_file = decomp.get("consolidated_file") or ""
         decompiled_dir = decomp.get("output_dir") or ""
@@ -279,17 +298,37 @@ class RATAnalyzer:
             else:
                 self._log("[!] PyGhidra não disponível; instale pyghidra e Ghidra 12+ para pseudo-C.")
 
-        # 7) Gerar relatório (após descompilação/desmontagem para incluir assembly no relatório)
+        return {
+            "sstem": sstem,
+            "decompiled_dir": decompiled_dir,
+            "consolidated_file": consolidated_file,
+            "deobfuscated_file": deobfuscated_file,
+            "obfuscated_snippets_file": obfuscated_snippets_file,
+            "obfuscated_snippets_deobfuscated_file": obfuscated_snippets_deobfuscated_file,
+            "obfuscated_snippets_pseudoc_file": obfuscated_snippets_pseudoc_file,
+            "obfuscated_snippets_deobfuscated_pseudoc_file": obfuscated_snippets_deobfuscated_pseudoc_file,
+            "obfuscation_snippets_summary": obfuscation_snippets_summary,
+            "decompilation_error_summary": decompilation_error_summary,
+            "disassembly_file": disassembly_file,
+            "decompiled_c_file": decompiled_c_file,
+        }
+
+    # --- Fase 7: relatório textual ---
+    def _phase_generate_report(self, artifacts: dict) -> Path:
         self._log("[7/7] A gerar relatório...")
-        report_path = self.report_generator.generate(
+        sstem = artifacts["sstem"]
+        return self.report_generator.generate(
             self.analysis_results,
-            self.output_dir
-            / f"report_{sstem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+            self.output_dir / f"report_{sstem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
         )
 
+    # --- Persistência last_analysis.json e log final ---
+    def _phase_finalize(self, artifacts: dict, report_path: Path) -> None:
+        decompiled_c_file = artifacts["decompiled_c_file"]
         if decompiled_c_file and not Path(decompiled_c_file).exists():
             decompiled_c_file = ""
-        # Guardar last_analysis.json para a GUI / API poder mostrar "Ver código" / "Ver assembly" / "Ver C"
+            artifacts["decompiled_c_file"] = ""
+
         flagged_indicators = extract_flagged_indicators(self.analysis_results) if decompiled_c_file else []
         flagged_functions = (
             build_flagged_functions(
@@ -312,21 +351,23 @@ class RATAnalyzer:
             "functions_decompiled": int(_ghidra.get("functions_decompiled") or 0),
         }
 
+        disassembly_file = artifacts["disassembly_file"]
+        decompiled_dir = artifacts["decompiled_dir"]
         last_analysis = {
             "target_file": str(self.target_file),
             "report_path": str(report_path),
             "decompiled_dir": decompiled_dir or (str(Path(disassembly_file).parent) if disassembly_file else ""),
-            "consolidated_file": consolidated_file,
-            "deobfuscated_file": deobfuscated_file,
-            "obfuscated_snippets_file": obfuscated_snippets_file,
-            "obfuscated_snippets_deobfuscated_file": obfuscated_snippets_deobfuscated_file,
-            "obfuscated_snippets_pseudoc_file": obfuscated_snippets_pseudoc_file,
-            "obfuscated_snippets_deobfuscated_pseudoc_file": obfuscated_snippets_deobfuscated_pseudoc_file,
-            "obfuscation_snippets_summary": obfuscation_snippets_summary,
+            "consolidated_file": artifacts["consolidated_file"],
+            "deobfuscated_file": artifacts["deobfuscated_file"],
+            "obfuscated_snippets_file": artifacts["obfuscated_snippets_file"],
+            "obfuscated_snippets_deobfuscated_file": artifacts["obfuscated_snippets_deobfuscated_file"],
+            "obfuscated_snippets_pseudoc_file": artifacts["obfuscated_snippets_pseudoc_file"],
+            "obfuscated_snippets_deobfuscated_pseudoc_file": artifacts["obfuscated_snippets_deobfuscated_pseudoc_file"],
+            "obfuscation_snippets_summary": artifacts["obfuscation_snippets_summary"],
             "obfuscation_indicators": obfuscation_indicators,
             "disassembly_file": disassembly_file,
             "decompiled_c_file": decompiled_c_file,
-            "decompilation_error_summary": decompilation_error_summary,
+            "decompilation_error_summary": artifacts["decompilation_error_summary"],
             "ghidra_decompilation": ghidra_snapshot,
             "flagged_indicators": flagged_indicators,
             "flagged_functions": flagged_functions,
@@ -338,14 +379,12 @@ class RATAnalyzer:
                 json.dump(last_analysis, f, indent=2, ensure_ascii=False)
         except Exception as e:
             self._log(f"[!] Aviso: não foi possível guardar last_analysis.json: {e}")
-        
+
         self._log("")
         self._log("[+] Análise concluída!")
         self._log(f"[+] Score de Risco: {self.analysis_results['risk_score']}/100 ({self.analysis_results['risk_level']})")
         self._log(f"[+] Relatório salvo em: {report_path}")
-        
-        return self.analysis_results
-    
+
     # --- Extrai informações básicas do ficheiro ---
     def _get_file_info(self):
         stat = self.target_file.stat()

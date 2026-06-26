@@ -1,5 +1,5 @@
-# --- Script: Helpers.ps1 ---
-# Funções auxiliares do host: download robusto, integridade e limpeza de adaptadores órfãos.
+# --- Módulo: Helpers.ps1 ---
+# --- Funções auxiliares partilhadas (contexto depende da pasta) ---
 # Carregado via dot-sourcing (mesmo scope que o script principal).
 
 # --- Download robusto com tentativas ---
@@ -12,19 +12,19 @@ function Download-FileRobust {
     $lastErr = $null
     for ($i = 1; $i -le $Retries; $i++) {
         try {
-            # *Remove ficheiro parcial anterior antes de cada tentativa*
+            # Remove ficheiro parcial anterior antes de cada tentativa
             if (Test-Path -LiteralPath $DestinationPath) {
                 Remove-Item -LiteralPath $DestinationPath -Force -ErrorAction SilentlyContinue
             }
             Invoke-WebRequest -Uri $Url -OutFile $DestinationPath -UseBasicParsing -ErrorAction Stop
-            # *Confirma que o ficheiro foi realmente gravado em disco*
+            # Confirma que o ficheiro foi realmente gravado em disco
             if (-not (Test-Path -LiteralPath $DestinationPath)) {
                 throw "Download terminou mas o ficheiro não existe: $DestinationPath"
             }
             return
         } catch {
             $lastErr = $_.Exception.Message
-            # *Espera progressiva entre tentativas (máx. 10 s)*
+            # Espera progressiva entre tentativas (máx. 10 s)
             if ($i -lt $Retries) { Start-Sleep -Seconds ([Math]::Min(10, 2 * $i)) }
         }
     }
@@ -40,9 +40,9 @@ function Get-FileIntegrityInfo {
     $lwt = ""
     $signer = ""
     $thumb = ""
-    # *Hash SHA256 para verificação offline*
+    # Hash SHA256 para verificação offline
     try { $h = (Get-FileHash -LiteralPath $Path -Algorithm SHA256 -ErrorAction Stop).Hash } catch { }
-    # *Assinatura Authenticode (quando aplicável)*
+    # Assinatura Authenticode (quando aplicável)
     try {
         $sig = Get-AuthenticodeSignature -FilePath $Path -ErrorAction SilentlyContinue
     } catch { $sig = $null }
@@ -83,7 +83,7 @@ function Remove-InternetAdapterIfAny {
     param([string] $VMName)
     try {
         $vm = Get-VM -Name $VMName -ErrorAction SilentlyContinue
-        # *Para a VM antes de remover adaptadores de rede*
+        # Para a VM antes de remover adaptadores de rede
         if ($vm -and $vm.State -eq 'Running') {
             Stop-SandboxVM -VMName $VMName -ErrorAction SilentlyContinue
         }

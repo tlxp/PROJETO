@@ -1,7 +1,13 @@
 // --- Módulo: mockDemo.ts ---
+// Resultado mock para testar layout sem backend (apenas desenvolvimento).
+//
+// Activar via `isMockDemoEnabled()` em `@/lib/mockDemoEnabled`:
+//   - `npm run dev` + `?demo=1` na URL, ou
+//   - `VITE_ENABLE_MOCK_DEMO=true` no `.env` (botão na página de upload).
+// Em `vite build` este módulo não entra no bundle principal (import dinâmico).
+
 import type { AnalysisResult } from "@/lib/analysis";
 
-// --- Resultado mock para testar layout sem backend ---
 export const MOCK_DEMO_RESULT: AnalysisResult = {
   fileName: "demo.cs",
   cCode: [

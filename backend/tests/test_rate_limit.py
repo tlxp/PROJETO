@@ -17,17 +17,15 @@ def client():
 
 # --- Testes de RateLimit ---
 class TestRateLimit:
-# --- Teste: verifica rate limit 429 ---
     def test_rate_limit_429(self, client, monkeypatch):
         monkeypatch.setenv("RATANALYZER_RATE_LIMIT_UPLOADS_PER_MIN", "2")
 
-# --- Classe Fake Analyzer ---
+        # --- Stub RATAnalyzer para não correr pipeline real ---
         class FakeAnalyzer:
-# --- Helper interno: init   ---
+
             def __init__(self, *args, **kwargs):
                 pass
 
-# --- Teste: analyze ---
             def analyze(self):
                 return {"risk_score": 0, "risk_level": "LOW"}
 

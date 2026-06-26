@@ -46,7 +46,7 @@ Os caminhos A e B são **independentes** na orquestração (HTTP vs PsDirect/Cop
 | Backend | [`../backend/README.md`](../backend/README.md) |
 | Frontend | [`../frontend/README.md`](../frontend/README.md) |
 | Desktop WPF | [`../wpf-gui/README.md`](../wpf-gui/README.md) |
-| GUI Tkinter *(opcional)* | [`../backend/gui/README.md`](../backend/gui/README.md) |
+| GUI Tkinter *(deprecated / legacy)* | [`../backend/gui/README.md`](../backend/gui/README.md) |
 | VM Agent | [`../vm-agent/README.md`](../vm-agent/README.md) |
 | Teste benigno | [`../benign-vm-test/README.md`](../benign-vm-test/README.md) |
 | Exemplos .NET *(opcional)* | [`../programa/README.md`](../programa/README.md) |

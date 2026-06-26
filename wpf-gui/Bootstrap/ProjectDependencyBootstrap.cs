@@ -1,4 +1,5 @@
 ﻿// --- Módulo: ProjectDependencyBootstrap.cs ---
+// Verifica e instala dependências do projeto no arranque do WPF.
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -10,7 +11,11 @@ using RatAnalyzer.Desktop.Infrastructure;
 using RatAnalyzer.Desktop.Localization;
 using RatAnalyzer.Desktop.Views;
 
+
+
 namespace RatAnalyzer.Desktop.Bootstrap;
+
+
 
 // --- Na abertura do WPF: verifica/instala dependências estáticas e VM; depois StartupSequence abre portas 8000/8080 ---
 public static class ProjectDependencyBootstrap
@@ -20,10 +25,14 @@ public static class ProjectDependencyBootstrap
     {
         log(LocalizationManager.Get(LocKeys.LogDepsStart));
 
+
+
         await CheckExecutableAsync("dotnet", "--version", "SDK .NET (vm-agent, builds)", log, cancellationToken).ConfigureAwait(false);
         await CheckExecutableAsync("python", "--version", "Python (backend)", log, cancellationToken).ConfigureAwait(false);
         await CheckExecutableAsync("node", "--version", "Node.js (frontend)", log, cancellationToken).ConfigureAwait(false);
         await CheckExecutableAsync("npm", "--version", "npm (frontend)", log, cancellationToken).ConfigureAwait(false);
+
+
 
         var backendDir = StartupSequence.FindBackendWorkingDirectory();
         if (string.IsNullOrWhiteSpace(backendDir))
@@ -42,9 +51,13 @@ public static class ProjectDependencyBootstrap
                 log(LocalizationManager.Format(LocKeys.LogBackendPipError, ex.Message));
             }
 
+
+
             await CheckPythonImportAsync(backendDir, "import fastapi, uvicorn", "FastAPI / uvicorn", log, cancellationToken).ConfigureAwait(false);
             await CheckPythonImportAsync(backendDir, "import yara", "yara-python (binário YARA no sistema)", log, cancellationToken).ConfigureAwait(false);
         }
+
+
 
         var frontendDir = StartupSequence.FindFrontendWorkingDirectory();
         if (string.IsNullOrWhiteSpace(frontendDir))
@@ -64,7 +77,11 @@ public static class ProjectDependencyBootstrap
             }
         }
 
+
+
         await CheckHyperVOptionalFeatureAsync(log, cancellationToken).ConfigureAwait(false);
+
+
 
         var osc = SandboxHostDependencies.FindOscdimgPath();
         if (!string.IsNullOrWhiteSpace(osc))
@@ -76,6 +93,8 @@ public static class ProjectDependencyBootstrap
             log(LocalizationManager.Get(LocKeys.LogOscdimgMissing));
         }
 
+
+
         var hypervScripts = FindHyperVSandboxScriptsDirectory();
         if (!string.IsNullOrWhiteSpace(hypervScripts))
         {
@@ -86,6 +105,8 @@ public static class ProjectDependencyBootstrap
             log(LocalizationManager.Get(LocKeys.LogHypervScriptsMissing));
         }
 
+
+
         try
         {
             await JavaDependencyHelper.TryOfferInstallIfMissingAsync(log, cancellationToken).ConfigureAwait(false);
@@ -94,6 +115,8 @@ public static class ProjectDependencyBootstrap
         {
             log(LocalizationManager.Format(LocKeys.LogJavaWarning, ex.Message));
         }
+
+
 
         try
         {
@@ -104,6 +127,8 @@ public static class ProjectDependencyBootstrap
             log(LocalizationManager.Format(LocKeys.LogIlspyWarning, ex.Message));
         }
 
+
+
         try
         {
             await GhidraDependencyHelper.TryOfferInstallIfMissingAsync(log, cancellationToken).ConfigureAwait(false);
@@ -113,9 +138,14 @@ public static class ProjectDependencyBootstrap
             log(LocalizationManager.Format(LocKeys.LogGhidraWarning, ex.Message));
         }
 
+
+
         log(LocalizationManager.Get(LocKeys.LogDepsEnd));
     }
 
+
+
+    // --- Localiza Hyper V sandbox scripts pasta ---
     private static string? FindHyperVSandboxScriptsDirectory()
     {
         var dir = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
@@ -127,9 +157,14 @@ public static class ProjectDependencyBootstrap
             dir = dir.Parent;
         }
 
+
+
         return null;
     }
 
+
+
+    // --- Verifica executável ---
     private static async Task CheckExecutableAsync(
         string fileName,
         string arguments,
@@ -152,6 +187,8 @@ public static class ProjectDependencyBootstrap
                 };
                 ProcessOutputEncoding.ApplyConsole(psi);
 
+
+
                 using var proc = Process.Start(psi);
                 if (proc is null)
                 {
@@ -159,10 +196,14 @@ public static class ProjectDependencyBootstrap
                     return;
                 }
 
+
+
                 var stdout = proc.StandardOutput.ReadToEnd();
                 var stderr = proc.StandardError.ReadToEnd();
                 proc.WaitForExit(30_000);
                 cancellationToken.ThrowIfCancellationRequested();
+
+
 
                 if (proc.ExitCode == 0)
                 {
@@ -190,6 +231,9 @@ public static class ProjectDependencyBootstrap
         }, cancellationToken).ConfigureAwait(false);
     }
 
+
+
+    // --- Verifica Python import ---
     private static async Task CheckPythonImportAsync(
         string workingDirectory,
         string importStatement,
@@ -214,6 +258,8 @@ public static class ProjectDependencyBootstrap
                 ProcessOutputEncoding.ApplyUtf8(psi);
                 ProcessOutputEncoding.ApplyPythonUtf8Environment(psi);
 
+
+
                 using var proc = Process.Start(psi);
                 if (proc is null)
                 {
@@ -221,9 +267,13 @@ public static class ProjectDependencyBootstrap
                     return;
                 }
 
+
+
                 var stderr = proc.StandardError.ReadToEnd();
                 proc.WaitForExit(45_000);
                 cancellationToken.ThrowIfCancellationRequested();
+
+
 
                 if (proc.ExitCode == 0)
                 {
@@ -248,6 +298,9 @@ public static class ProjectDependencyBootstrap
         }, cancellationToken).ConfigureAwait(false);
     }
 
+
+
+    // --- Verifica Hyper V Optional Feature ---
     private static async Task CheckHyperVOptionalFeatureAsync(Action<string> log, CancellationToken cancellationToken)
     {
         await Task.Run(() =>
@@ -266,6 +319,8 @@ public static class ProjectDependencyBootstrap
                 };
                 ProcessOutputEncoding.ApplyWindowsAnsi(psi);
 
+
+
                 using var proc = Process.Start(psi);
                 if (proc is null)
                 {
@@ -273,15 +328,21 @@ public static class ProjectDependencyBootstrap
                     return;
                 }
 
+
+
                 var stdout = ProcessOutputEncoding.NormalizeForDisplay(proc.StandardOutput.ReadToEnd()).Trim();
                 proc.WaitForExit(120_000);
                 cancellationToken.ThrowIfCancellationRequested();
+
+
 
                 if (proc.ExitCode != 0)
                 {
                     log(LocalizationManager.Get(LocKeys.LogHypervStateFailed));
                     return;
                 }
+
+
 
                 if (string.Equals(stdout, "Enabled", StringComparison.OrdinalIgnoreCase))
                 {
@@ -303,3 +364,4 @@ public static class ProjectDependencyBootstrap
         }, cancellationToken).ConfigureAwait(false);
     }
 }
+

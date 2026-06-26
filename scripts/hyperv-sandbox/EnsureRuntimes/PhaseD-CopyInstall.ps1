@@ -1,5 +1,5 @@
-# --- Script: PhaseD-CopyInstall.ps1 ---
-
+# --- Módulo: PhaseD-CopyInstall.ps1 ---
+# --- Cópia e instalação silenciosa de runtimes na VM ---
 # --- Preparação da pasta de instaladores na VM ---
 $vmInstallDir = "C:\analysis_work\installers"
 try {
@@ -38,7 +38,7 @@ foreach ($it in $resolved) {
             return @{ ok = $true; code = [int]$p.ExitCode; msg = "ok" }
         } -ArgumentList $dst, $it.Args -ErrorAction Stop
 
-        # *ExitCode 0 = sucesso; 3010 = sucesso com reinício pendente.*
+        # ExitCode 0 = sucesso; 3010 = sucesso com reinício pendente.
         $code = if ($res -and $res.code -ne $null) { [int]$res.code } else { 0 }
         if ($code -eq 0 -or $code -eq 3010) {
             Write-LogHost ("        OK (ExitCode={0})" -f $code)

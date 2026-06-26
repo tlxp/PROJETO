@@ -43,10 +43,12 @@ uvicorn api:app --reload --port 8000 --host 127.0.0.1
 python rat_analyzer.py caminho/para/ficheiro.exe -o reports/ -v
 ```
 
-### GUI Python (opcional, fluxos .NET)
+### GUI Python (deprecated / legacy)
+
+> Substitutos: **frontend web** (`frontend/`) ou **desktop WPF** (`wpf-gui/`). Ver [`gui/README.md`](gui/README.md).
 
 ```bash
-python rat_analyzer_gui.py     # GUI Tkinter opcional - ver gui/README.md
+python rat_analyzer_gui.py     # wrapper fino → gui/tkinter_app.py (legacy)
 ```
 
 ### Worker de fila (opcional)
@@ -87,8 +89,8 @@ backend/
 ├── middleware.py           # Rate limit uploads + logging por job_id
 ├── analysis_jobs.py        # Jobs static | dynamic | both
 ├── rat_analyzer.py         # Entrada da análise estática (CLI e biblioteca)
-├── rat_analyzer_gui.py     # Entrada da GUI Tkinter opcional (ver gui/)
-├── gui/                    # GUI Tkinter - alternativa leve ao WPF (ver gui/README.md)
+├── rat_analyzer_gui.py     # Entrada legacy da GUI Tkinter (wrapper → gui/tkinter_app.py)
+├── gui/                    # GUI Tkinter deprecated — ver gui/README.md
 ├── vm_orchestrator.py      # Orquestração da análise dinâmica (escolhe o driver)
 ├── config.py               # Configuração central (paths, DATA_DIR, limites)
 ├── job_store.py            # Persistência de jobs (SQLite)

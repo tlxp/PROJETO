@@ -1,4 +1,4 @@
-﻿# --- Script: PhaseD-Execute.ps1 ---
+﻿# --- Módulo: PhaseD-Execute.ps1 ---
 # --- Lançamento da análise destacada na VM ---
 
 Write-LogHost "[6/7] A lançar análise na VM..."
@@ -11,7 +11,7 @@ try {
         -TimeoutSec $TimeoutSeconds -WaitForSampleExit:$WaitForSampleExit -VmScriptDir $VMScriptsPath -SampleSha256 $sampleSha256 -HostRunId $RunId
     $analysisSuccess = $true
     Add-LogLine -Path $HostLogPath -Value "Detached analysis launched successfully"
-    # *extrai o PID do processo destacado a partir do JSON devolvido*
+    # extrai o PID do processo destacado a partir do JSON devolvido
     foreach ($item in @($launchOut)) {
         if ($null -eq $item) { continue }
         $raw = ($item | Out-String).Trim()
@@ -58,7 +58,7 @@ if ($analysisSuccess -and $cred -is [pscredential]) {
         if ($bootDiag.launchError) { $bootMsg += " err=$($bootDiag.launchError)" }
         Add-LogLine -Path $HostLogPath -Value $bootMsg
         Write-LogHost "      [GUEST] $bootMsg"
-        # *marca falha se o PID morreu sem criar ficheiros de vida nem relatório*
+        # marca falha se o PID morreu sem criar ficheiros de vida nem relatório
         if ($detachedAnalysisPid -gt 0 -and -not $bootDiag.pidRunning -and -not $bootDiag.aliveFile) {
             $analysisSuccess = $false
             Write-LogWarning "      Análise destacada não sobreviveu ao arranque no guest."

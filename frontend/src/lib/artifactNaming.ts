@@ -1,7 +1,7 @@
 // --- Módulo: artifactNaming.ts ---
-// *Nomes curtos, estáveis e seguros para Windows/URLs — unicidade via hash FNV-1a*
+// Nomes curtos e seguros para artefatos (hash FNV-1a).
 
-// --- Hash FNV-1a 32-bit ---
+// --- Hash e slug ---
 function fnv1a32(text: string): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {
@@ -11,12 +11,10 @@ function fnv1a32(text: string): number {
   return h >>> 0;
 }
 
-// --- Hash hexadecimal de 8 caracteres ---
 export function hash8(text: string): string {
   return fnv1a32(text).toString(16).padStart(8, "0").slice(0, 8);
 }
 
-// --- Converte texto em slug seguro para nomes de ficheiro ---
 export function slugify(text: string, maxLen = 32): string {
   const raw = (text ?? "").trim();
   if (!raw) return "x";
@@ -30,7 +28,6 @@ export function slugify(text: string, maxLen = 32): string {
   return out.length > maxLen ? out.slice(0, maxLen) : out;
 }
 
-// --- Monta nome de ficheiro curto: base.kind.partes.hash.ext ---
 export function buildShortFileName(args: {
   baseName: string;
   kind: string;

@@ -1,4 +1,5 @@
-﻿# --- Script: VmFileTransfer.ps1 ---
+﻿# --- Módulo: VmFileTransfer.ps1 ---
+# --- Transferência host↔guest e gestão de snapshots ---
 
 # --- Tamanho de chunk para transferência via PowerShell Direct ---
 function Get-SandboxPsDirectChunkSize {
@@ -20,7 +21,7 @@ function Copy-SandboxVMFileToGuestViaPsDirect {
         throw "Ficheiro host não encontrado: $HostSourcePath"
     }
 
-    # *Garantir diretório de destino no guest*
+    # Garantir diretório de destino no guest
     Invoke-Command -VMName $VMName -Credential $Credential -ScriptBlock {
         param($Path)
         $parent = Split-Path -Parent -Path $Path
@@ -44,7 +45,7 @@ function Copy-SandboxVMFileToGuestViaPsDirect {
                 [Convert]::ToBase64String($buffer)
             }
 
-            # *Escrever chunk no guest na posição correta*
+            # Escrever chunk no guest na posição correta
             Invoke-Command -VMName $VMName -Credential $Credential -ScriptBlock {
                 param($Path, $Offset, $Base64Data, $IsFirst)
                 $bytes = [Convert]::FromBase64String($Base64Data)
@@ -224,7 +225,7 @@ function Test-SandboxGuestAnalysisReportComplete {
                 return [pscustomobject]$result
             }
 
-            # *Procurar marcador de fim no final do ficheiro*
+            # Procurar marcador de fim no final do ficheiro
             $markerBytes = [System.Text.Encoding]::UTF8.GetBytes($ReportEndMarker)
             $scanBytes = [Math]::Max($markerBytes.Length, 8192)
             $fs = [System.IO.File]::Open($ReportPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
@@ -321,7 +322,7 @@ function Get-SandboxGuestReportDigest {
                 reportBytes = 0
             }
 
-            # *Preferir digest pré-calculado em guest_analysis_done.txt*
+            # Preferir digest pré-calculado em guest_analysis_done.txt
             if (Test-Path -LiteralPath $DonePath) {
                 try {
                     $done = Get-Content -LiteralPath $DonePath -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -402,7 +403,7 @@ function Try-ReceiveSandboxGuestReport {
     $shouldPull = $false
     $reason = ""
 
-    # *Decidir se deve copiar o relatório (completo, done.txt ou parcial)*
+    # Decidir se deve copiar o relatório (completo, done.txt ou parcial)
     if ($guestDone) {
         $shouldPull = $true
         $reason = "guest_analysis_done.txt"

@@ -1,6 +1,5 @@
 ﻿// --- Módulo: Program.cs ---
-
+// Ponto de entrada que delega ao runner de smoke test inofensivo.
 using BenignVmTest;
-
-// *ponto de entrada — delega execução ao runner inofensivo*
+// --- Delegação ao runner inofensivo ---
 return BenignVmTestRunner.Run();

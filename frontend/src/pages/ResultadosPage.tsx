@@ -1,9 +1,10 @@
 // --- Módulo: ResultadosPage.tsx ---
-// *Rota legada /resultados?jobId= — redireciona para /analysis/:jobId*
+// Redireciona rota legada /resultados?jobId= para /analysis/:jobId.
+
 import { Navigate, useLocation } from "react-router-dom";
 import { ROUTES } from "@/routes";
 
-// --- Redireciona /resultados?jobId= para rota canónica ---
+// --- Componente ---
 const ResultadosRedirect = () => {
   const location = useLocation();
   const jobId = new URLSearchParams(location.search ?? "").get("jobId");

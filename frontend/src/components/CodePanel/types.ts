@@ -1,4 +1,6 @@
 // --- Módulo: types.ts ---
+// Tipos e props do painel de código.
+
 import type React from "react";
 
 export type DisplayLineRange = { start: number; end: number };

@@ -7,6 +7,7 @@ import hashlib
 import json
 import logging
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
@@ -17,6 +18,7 @@ import job_store
 from i18n import current_lang, resolve_lang, t
 from analysis_jobs import (
     AnalysisType,
+    JobStatus,
     create_job,
     get_job_payload,
 )
@@ -40,6 +42,135 @@ from .schemas import DynamicAnalysisUpload, StaticAnalysisUpload
 logger = logging.getLogger("rat_analyzer_api")
 
 router = APIRouter(tags=["jobs"])
+
+
+@dataclass
+class _UploadJobContext:
+    job_id: str
+    existing_row: dict | None
+
+
+# --- Validação de status de upload estático/dinâmico ---
+def _parse_upload_job_status(status_raw: str | None) -> JobStatus:
+    normalized = (status_raw or "completed").strip().lower()
+    allowed = {JobStatus.RUNNING.value, JobStatus.COMPLETED.value, JobStatus.FAILED.value}
+    if normalized not in allowed:
+        raise HTTPException(400, "status inválido (use running, completed ou failed).")
+    return JobStatus(normalized)
+
+
+# --- Resolução ou criação de job para upload estático/dinâmico ---
+def _resolve_upload_job(
+    job_id_raw: str | None,
+    *,
+    default_file_name: str,
+    analysis_type: AnalysisType,
+    file_name: str,
+    sha_extra: str = "",
+) -> _UploadJobContext:
+    if job_id_raw:
+        job_id = require_valid_job_id(job_id_raw.strip())
+        existing_row = job_store.get_job_row(job_id)
+        if not existing_row:
+            raise HTTPException(404, t("job_not_found", current_lang()))
+        return _UploadJobContext(job_id=job_id, existing_row=existing_row)
+
+    job_id = str(uuid.uuid4())
+    resolved_name = file_name or default_file_name
+    h = hashlib.sha256()
+    h.update(resolved_name.encode("utf-8", "ignore"))
+    if sha_extra:
+        h.update(sha_extra.encode("utf-8", "ignore"))
+    job_store.insert_job(
+        job_id=job_id,
+        analysis_type=analysis_type.value,
+        file_name=resolved_name,
+        sha256=h.hexdigest(),
+        status=JobStatus.QUEUED.value,
+    )
+    return _UploadJobContext(job_id=job_id, existing_row=None)
+
+
+# --- Tipo de análise após upload (promove para both quando há resultado irmão) ---
+def _resolve_merged_analysis_type(
+    job_id: str,
+    existing_row: dict | None,
+    *,
+    default_type: str,
+    sibling_result_key: str,
+) -> str:
+    if existing_row and existing_row.get(sibling_result_key):
+        job_store.update_analysis_type(job_id, AnalysisType.BOTH.value)
+        return AnalysisType.BOTH.value
+    if existing_row:
+        return existing_row.get("analysisType") or default_type
+    return default_type
+
+
+# --- Diretório de saída do job (cria se necessário) ---
+def _ensure_job_output_dir(job_id: str) -> Path:
+    out_dir = get_job_output_dir(job_id)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    return out_dir
+
+
+# --- Escrita segura de artefacto de texto no disco ---
+def _write_text_artifact(path: Path, content: str, *, job_id: str, artifact_label: str) -> None:
+    try:
+        path.write_text(content, encoding="utf-8", errors="replace")
+    except OSError:
+        logger.warning("Falha ao guardar artefato %s para job_id=%s", artifact_label, job_id)
+
+
+# --- Gravação de artefactos estáticos (report, C, IL) ---
+def _write_static_artifact_files(
+    out_dir: Path,
+    *,
+    base_name: str,
+    report: str,
+    c_code: str,
+    il_code: str,
+    job_id: str,
+) -> tuple[Path, Path, Path]:
+    report_path = out_dir / short_filename(base_name, "report", ext="txt")
+    c_code_path = out_dir / short_filename(base_name, "c", ext="txt")
+    il_code_path = out_dir / short_filename(base_name, "il", ext="txt")
+    for path_obj, content in (
+        (report_path, report),
+        (c_code_path, c_code),
+        (il_code_path, il_code),
+    ):
+        _write_text_artifact(path_obj, content, job_id=job_id, artifact_label=path_obj.name)
+    return report_path, c_code_path, il_code_path
+
+
+# --- Extração de snippets de ofuscação a partir do pseudo-C ---
+def _extract_obfuscation_snippets(
+    c_code: str,
+    *,
+    c_code_path: Path,
+    out_dir: Path,
+    base_name: str,
+    job_id: str,
+    log_context: str,
+) -> tuple[str, str, dict[str, int]]:
+    from modules.deobfuscator import Deobfuscator
+    from modules.obfuscation_snippet_extractor import extract_and_write_snippets_from_content
+
+    if not c_code.strip():
+        return "", "", {}
+    try:
+        deob = Deobfuscator()
+        return extract_and_write_snippets_from_content(
+            content=c_code,
+            source_path=str(c_code_path),
+            output_dir=out_dir,
+            stem=base_name,
+            deobfuscate_fn=deob.deobfuscate_content,
+        )
+    except Exception:
+        logger.exception("Falha ao extrair snippets de ofuscação em %s (job_id=%s).", log_context, job_id)
+        return "", "", {}
 
 
 # --- Submissão de job de análise (static/dynamic/both) ---
@@ -88,35 +219,16 @@ async def submit_analysis(
 @router.post("/api/analysis/upload_static", dependencies=[Depends(require_api_token)])
 async def upload_static_analysis(payload: StaticAnalysisUpload) -> dict:
     increment("rat_analyzer_upload_static_total")
-    from analysis_jobs import AnalysisType, JobStatus
-    from modules.deobfuscator import Deobfuscator
-    from modules.obfuscation_snippet_extractor import extract_and_write_snippets_from_content
 
-    status_raw = (payload.status or "completed").strip().lower()
-    if status_raw not in {JobStatus.RUNNING.value, JobStatus.COMPLETED.value, JobStatus.FAILED.value}:
-        raise HTTPException(400, "status inválido (use running, completed ou failed).")
-
-    job_status = JobStatus(status_raw)
-    existing_row = None
-
-    if payload.jobId:
-        job_id = require_valid_job_id(payload.jobId.strip())
-        existing_row = job_store.get_job_row(job_id)
-        if not existing_row:
-            raise HTTPException(404, t("job_not_found", current_lang()))
-    else:
-        job_id = str(uuid.uuid4())
-        file_name = payload.fileName or "static_analysis"
-        h = hashlib.sha256()
-        h.update(file_name.encode("utf-8", "ignore"))
-        sha = h.hexdigest()
-        job_store.insert_job(
-            job_id=job_id,
-            analysis_type=AnalysisType.STATIC.value,
-            file_name=file_name,
-            sha256=sha,
-            status=JobStatus.QUEUED.value,
-        )
+    job_status = _parse_upload_job_status(payload.status)
+    ctx = _resolve_upload_job(
+        payload.jobId,
+        default_file_name="static_analysis",
+        analysis_type=AnalysisType.STATIC,
+        file_name=payload.fileName,
+    )
+    job_id = ctx.job_id
+    existing_row = ctx.existing_row
 
     file_name = payload.fileName or (existing_row.get("fileName") if existing_row else "") or "analysis"
 
@@ -133,13 +245,12 @@ async def upload_static_analysis(payload: StaticAnalysisUpload) -> dict:
             "staticProgress": float(payload.staticProgress or 0),
         }
         job_store.update_results(job_id, static_result, None)
-        if existing_row and existing_row.get("dynamicResult"):
-            job_store.update_analysis_type(job_id, AnalysisType.BOTH.value)
-            analysis_type = AnalysisType.BOTH.value
-        elif existing_row:
-            analysis_type = existing_row.get("analysisType") or AnalysisType.STATIC.value
-        else:
-            analysis_type = AnalysisType.STATIC.value
+        analysis_type = _resolve_merged_analysis_type(
+            job_id,
+            existing_row,
+            default_type=AnalysisType.STATIC.value,
+            sibling_result_key="dynamicResult",
+        )
         job_store.update_status(job_id, JobStatus.RUNNING.value, error=None)
         logger.info("Estática em curso via upload_static: job_id=%s progress=%s", job_id, payload.staticProgress)
         return {"jobId": job_id, "analysisType": analysis_type, "status": JobStatus.RUNNING.value}
@@ -152,41 +263,28 @@ async def upload_static_analysis(payload: StaticAnalysisUpload) -> dict:
         job_id,
     )
 
-    out_dir = get_job_output_dir(job_id)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = _ensure_job_output_dir(job_id)
     base_name = short_stem(Path(file_name).stem or "analysis")
-    report_path = out_dir / short_filename(base_name, "report", ext="txt")
-    c_code_path = out_dir / short_filename(base_name, "c", ext="txt")
-    il_code_path = out_dir / short_filename(base_name, "il", ext="txt")
+    report_path, c_code_path, il_code_path = _write_static_artifact_files(
+        out_dir,
+        base_name=base_name,
+        report=payload.report or "",
+        c_code=payload.cCode or "",
+        il_code=payload.ilCode or "",
+        job_id=job_id,
+    )
 
-    for path_obj, content in (
-        (report_path, payload.report or ""),
-        (c_code_path, payload.cCode or ""),
-        (il_code_path, payload.ilCode or ""),
-    ):
-        try:
-            path_obj.write_text(content, encoding="utf-8", errors="replace")
-        except OSError:
-            logger.warning("Falha ao guardar artefato %s para job_id=%s", path_obj.name, job_id)
-
-    obf_snippets = ""
-    obf_snippets_deob = ""
-    obf_summary: dict[str, int] = {}
-    if payload.cCode and payload.cCode.strip():
-        try:
-            deob = Deobfuscator()
-            obf_snippets, obf_snippets_deob, obf_summary = extract_and_write_snippets_from_content(
-                content=payload.cCode,
-                source_path=str(c_code_path),
-                output_dir=out_dir,
-                stem=base_name,
-                deobfuscate_fn=deob.deobfuscate_content,
-            )
-        except Exception:
-            logger.exception("Falha ao extrair snippets de ofuscação em upload_static (job_id=%s).", job_id)
+    c_code = payload.cCode or ""
+    obf_snippets, obf_snippets_deob, obf_summary = _extract_obfuscation_snippets(
+        c_code,
+        c_code_path=c_code_path,
+        out_dir=out_dir,
+        base_name=base_name,
+        job_id=job_id,
+        log_context="upload_static",
+    )
 
     obfuscation_indicator_count = int(sum(obf_summary.values())) if obf_summary else 0
-    c_code = payload.cCode or ""
     flagged_functions = realign_flagged_functions_for_payload(c_code, payload.flaggedFunctions or [])
 
     static_result = {
@@ -229,20 +327,31 @@ async def upload_static_analysis(payload: StaticAnalysisUpload) -> dict:
 
     job_store.update_results(job_id, static_result, None)
 
-    if existing_row and existing_row.get("dynamicResult"):
-        job_store.update_analysis_type(job_id, AnalysisType.BOTH.value)
-        analysis_type = AnalysisType.BOTH.value
-    elif existing_row:
-        analysis_type = existing_row.get("analysisType") or AnalysisType.STATIC.value
-    else:
-        analysis_type = AnalysisType.STATIC.value
+    analysis_type = _resolve_merged_analysis_type(
+        job_id,
+        existing_row,
+        default_type=AnalysisType.STATIC.value,
+        sibling_result_key="dynamicResult",
+    )
 
     if job_status == JobStatus.FAILED:
         job_store.update_status(job_id, JobStatus.FAILED.value, error=payload.error)
         final_status = JobStatus.FAILED.value
     else:
-        job_store.update_status(job_id, JobStatus.COMPLETED.value, error=None)
-        final_status = JobStatus.COMPLETED.value
+        # *Não fechar o job enquanto a VM ainda está em curso (ex.: estática termina primeiro)*
+        existing_status = (
+            (existing_row.get("status") if existing_row else "") or ""
+        ).lower()
+        vm_still_active = existing_status in (
+            JobStatus.RUNNING.value,
+            JobStatus.QUEUED.value,
+        )
+        if vm_still_active:
+            job_store.update_status(job_id, JobStatus.RUNNING.value, error=None)
+            final_status = JobStatus.RUNNING.value
+        else:
+            job_store.update_status(job_id, JobStatus.COMPLETED.value, error=None)
+            final_status = JobStatus.COMPLETED.value
 
     logger.info("Resultado estático publicado: job_id=%s file=%s", job_id, file_name)
     return {"jobId": job_id, "analysisType": analysis_type, "status": final_status}
@@ -252,37 +361,19 @@ async def upload_static_analysis(payload: StaticAnalysisUpload) -> dict:
 @router.post("/api/analysis/upload_dynamic", dependencies=[Depends(require_api_token)])
 async def upload_dynamic_analysis(payload: DynamicAnalysisUpload) -> dict:
     increment("rat_analyzer_upload_dynamic_total")
-    from analysis_jobs import AnalysisType, JobStatus
 
-    status_raw = (payload.status or "completed").strip().lower()
-    if status_raw not in {JobStatus.RUNNING.value, JobStatus.COMPLETED.value, JobStatus.FAILED.value}:
-        raise HTTPException(400, "status inválido (use running, completed ou failed).")
+    job_status = _parse_upload_job_status(payload.status)
+    ctx = _resolve_upload_job(
+        payload.jobId,
+        default_file_name="dynamic_analysis",
+        analysis_type=AnalysisType.DYNAMIC,
+        file_name=payload.fileName,
+        sha_extra=payload.runId or "",
+    )
+    job_id = ctx.job_id
+    existing_row = ctx.existing_row
 
-    job_status = JobStatus(status_raw)
-    existing_row = None
-
-    if payload.jobId:
-        job_id = require_valid_job_id(payload.jobId.strip())
-        existing_row = job_store.get_job_row(job_id)
-        if not existing_row:
-            raise HTTPException(404, t("job_not_found", current_lang()))
-    else:
-        job_id = str(uuid.uuid4())
-        file_name = payload.fileName or "dynamic_analysis"
-        h = hashlib.sha256()
-        h.update(file_name.encode("utf-8", "ignore"))
-        h.update((payload.runId or "").encode("utf-8", "ignore"))
-        sha = h.hexdigest()
-        job_store.insert_job(
-            job_id=job_id,
-            analysis_type=AnalysisType.DYNAMIC.value,
-            file_name=file_name,
-            sha256=sha,
-            status=JobStatus.QUEUED.value,
-        )
-
-    out_dir = get_job_output_dir(job_id)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = _ensure_job_output_dir(job_id)
     report_text = payload.report or ""
 
     if report_text.strip() and job_status == JobStatus.COMPLETED:
@@ -291,10 +382,7 @@ async def upload_dynamic_analysis(payload: DynamicAnalysisUpload) -> dict:
             or "analysis"
         )
         report_path = out_dir / short_filename(base_name, "dynamic_report", ext="txt")
-        try:
-            report_path.write_text(report_text, encoding="utf-8", errors="replace")
-        except OSError:
-            logger.warning("Falha ao guardar dynamic_report.txt para job_id=%s", job_id)
+        _write_text_artifact(report_path, report_text, job_id=job_id, artifact_label="dynamic_report.txt")
 
     summary = payload.dynamicSummary or summarize_dynamic_report(report_text)
     dynamic_result = {
@@ -310,13 +398,12 @@ async def upload_dynamic_analysis(payload: DynamicAnalysisUpload) -> dict:
 
     job_store.update_results(job_id, None, dynamic_result)
 
-    if existing_row and existing_row.get("staticResult"):
-        job_store.update_analysis_type(job_id, AnalysisType.BOTH.value)
-        analysis_type = AnalysisType.BOTH.value
-    elif existing_row:
-        analysis_type = existing_row.get("analysisType") or AnalysisType.DYNAMIC.value
-    else:
-        analysis_type = AnalysisType.DYNAMIC.value
+    analysis_type = _resolve_merged_analysis_type(
+        job_id,
+        existing_row,
+        default_type=AnalysisType.DYNAMIC.value,
+        sibling_result_key="staticResult",
+    )
 
     job_store.update_status(
         job_id,

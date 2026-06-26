@@ -1,14 +1,14 @@
-﻿# --- Script: PhaseA-Setup.ps1 ---
+﻿# --- Módulo: PhaseA-Setup.ps1 ---
 # --- Resolução e validação da amostra ---
 
-# *resolve caminho automático ou usa o fornecido pelo utilizador*
+# resolve caminho automático ou usa o fornecido pelo utilizador
 $SamplePath = Resolve-AutoSamplePath -ProvidedPath $SamplePath -SamplesDir $script:PROJETOVM_SamplesPath -AllowAutoSample:$AllowAutoSample
 
 if (-not [System.IO.File]::Exists($SamplePath)) {
     Write-Error "Amostra não encontrada: $SamplePath"
     exit 1
 }
-# *esta pipeline só executa ficheiros .exe*
+# esta pipeline só executa ficheiros .exe
 if ([System.IO.Path]::GetExtension($SamplePath).ToLowerInvariant() -ne ".exe") {
     Write-Error "Esta pipeline (Run-MalwareAnalysis) executa amostras como .exe. Ficheiro fornecido: $SamplePath"
     exit 1
@@ -51,7 +51,7 @@ $HostLogPath = Join-Path $RunDir "sandbox_run_$RunId.log"
 $HostJsonPath = Join-Path $RunDir "run_$RunId.json"
 
 # --- Preflight de isolamento de rede ---
-# *confirma que a VM só está ligada ao switch interno configurado*
+# confirma que a VM só está ligada ao switch interno configurado
 $expectedSwitch = $script:PROJETOVM_SwitchName
 if ([string]::IsNullOrWhiteSpace($expectedSwitch)) {
     Write-Error "PROJETOVM_SwitchName não definido em _Config.ps1."
@@ -60,7 +60,7 @@ if ([string]::IsNullOrWhiteSpace($expectedSwitch)) {
 Assert-SandboxVmNetworkIsolation -VMName $VMName -ExpectedSwitchName $expectedSwitch
 
 # --- Extensão do deadline global para amostras grandes ---
-# *cópia via PS Direct é lenta; acrescenta tempo proporcional ao tamanho*
+# cópia via PS Direct é lenta; acrescenta tempo proporcional ao tamanho
 if ($globalDeadline) {
     try {
         $sampleLen = (Get-Item -LiteralPath $SamplePath -ErrorAction Stop).Length
@@ -88,12 +88,12 @@ Write-LogHost "Relatório: $ReportOutputPath"
 Write-LogHost ""
 
 # --- Credenciais para PowerShell Direct ---
-# *evita popup de autenticação e facilita diagnóstico*
+# evita popup de autenticação e facilita diagnóstico
 $credCandidates = New-SandboxCredentialCandidates -UserName $GuestUser -Password $GuestPassword -ComputerName $VMName
 $cred = $credCandidates | Select-Object -First 1
 
 # --- Parâmetros de espera do relatório ---
-# *janela de tempo = execução da amostra + overhead da análise no guest*
+# janela de tempo = execução da amostra + overhead da análise no guest
 $analysisOverheadSeconds = 1500
 $sampleWindowSeconds = if ($WaitForSampleExit) { 7200 } else { $TimeoutSeconds }
 $reportTimeoutSeconds = $sampleWindowSeconds + $analysisOverheadSeconds

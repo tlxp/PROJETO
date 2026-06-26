@@ -26,7 +26,7 @@ _COUNTERS: dict[str, int] = {
 
 # --- Filtro de logging que injeta job_id no registo ---
 class JobIdFilter(logging.Filter):
-# --- Filter ---
+    # --- Injeta job_id no registo de log ---
     def filter(self, record: logging.LogRecord) -> bool:
         record.job_id = job_id_ctx.get() or "-"  # type: ignore[attr-defined]
         return True

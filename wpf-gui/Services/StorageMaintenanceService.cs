@@ -1,4 +1,5 @@
 ﻿// --- Módulo: StorageMaintenanceService.cs ---
+// Estimativa e limpeza de armazenamento local de artefatos.
 using System;
 using System.Globalization;
 using System.Net.Http;
@@ -7,9 +8,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using RatAnalyzer.Desktop.Infrastructure;
-
 namespace RatAnalyzer.Desktop.Services;
-
 // --- Operações de estimativa/limpeza no backend e artefatos locais ---
 public sealed class StorageMaintenanceService
 {
@@ -17,12 +16,11 @@ public sealed class StorageMaintenanceService
     {
         PropertyNameCaseInsensitive = true
     };
-
     private static readonly JsonSerializerOptions JsonCamelCase = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
-
+    // --- Obtém Estimate ---
     public async Task<StorageEstimateView> GetEstimateAsync(CancellationToken cancellationToken = default)
     {
         using var client = CreateClient(TimeSpan.FromSeconds(10));
@@ -31,7 +29,6 @@ public sealed class StorageMaintenanceService
         var resp = JsonSerializer.Deserialize<EstimateResponse>(json, JsonInsensitive);
         if (resp is null)
             throw new InvalidOperationException("Resposta inesperada do backend ao pedir estimativa.");
-
         var localEstimate = LocalArtifactCleanup.EstimateLocalArtifacts();
         return new StorageEstimateView
         {
@@ -52,7 +49,7 @@ public sealed class StorageMaintenanceService
                 $"temp local: {localEstimate.TempPath}"
         };
     }
-
+    // --- Executa Cleanup ---
     public async Task<string> RunCleanupAsync(int retentionDays, int keepMostRecent, CancellationToken cancellationToken = default)
     {
         using var client = CreateClient(TimeSpan.FromSeconds(60));
@@ -63,17 +60,15 @@ public sealed class StorageMaintenanceService
         var body = await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         if (!res.IsSuccessStatusCode)
             throw new InvalidOperationException($"HTTP {(int)res.StatusCode}: {body}");
-
         var localSummary = LocalArtifactCleanup.CleanupTempAnalysisDirectories();
         localSummary = MergeCleanup(localSummary, LocalArtifactCleanup.CleanupSandboxJobArtifacts());
-
         return
             $"Limpeza concluída. Temp removido: {localSummary.TempDirectoriesRemoved}; " +
             $"jobs locais processados: {localSummary.SandboxJobDirectoriesProcessed}; " +
             $"ficheiros removidos: {localSummary.SandboxFilesRemoved}; " +
             $"espaço libertado (local): {FormatBytes(localSummary.BytesFreed)}.";
     }
-
+    // --- Executa Archive ---
     public async Task<string> RunArchiveAsync(int olderThanDays, CancellationToken cancellationToken = default)
     {
         using var client = CreateClient(TimeSpan.FromSeconds(120));
@@ -84,10 +79,9 @@ public sealed class StorageMaintenanceService
         var body = await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         if (!res.IsSuccessStatusCode)
             throw new InvalidOperationException($"HTTP {(int)res.StatusCode}: {body}");
-
         return "Arquivo concluído.";
     }
-
+    // --- Executa Full Purge ---
     public async Task<string> RunFullPurgeAsync(CancellationToken cancellationToken = default)
     {
         long backendFreed = 0;
@@ -107,7 +101,6 @@ public sealed class StorageMaintenanceService
         {
             /* backend opcional */
         }
-
         var localSummary = LocalArtifactCleanup.CleanupEverything();
         return
             $"Limpeza completa concluída. Temp removido: {localSummary.TempDirectoriesRemoved}; " +
@@ -115,21 +108,21 @@ public sealed class StorageMaintenanceService
             $"espaço libertado (local): {FormatBytes(localSummary.BytesFreed)}; " +
             $"espaço libertado (backend): {FormatBytes(backendFreed)}.";
     }
-
+    // --- Tenta Parse Int ---
     public static bool TryParseInt(string? text, int min, int max, out int value)
     {
         if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out value))
             return value >= min && value <= max;
         return false;
     }
-
+    // --- Cria Client ---
     private static HttpClient CreateClient(TimeSpan timeout)
     {
         var client = new HttpClient { Timeout = timeout };
         AppConstants.ApplyAdminToken(client);
         return client;
     }
-
+    // --- Formata bytes ---
     private static string FormatBytes(long bytes)
     {
         string[] units = { "B", "KB", "MB", "GB", "TB" };
@@ -142,7 +135,7 @@ public sealed class StorageMaintenanceService
         }
         return $"{b:0.##} {units[idx]}";
     }
-
+    // --- Agrega Cleanup ---
     private static LocalArtifactCleanup.CleanupSummary MergeCleanup(
         LocalArtifactCleanup.CleanupSummary left,
         LocalArtifactCleanup.CleanupSummary right) =>
@@ -154,23 +147,23 @@ public sealed class StorageMaintenanceService
             DataPathsRemoved = left.DataPathsRemoved + right.DataPathsRemoved,
             BytesFreed = left.BytesFreed + right.BytesFreed
         };
-
+    // --- Classe Purge Response ---
     private sealed class PurgeResponse
     {
         public PurgeResultObj Result { get; set; } = new();
     }
-
+    // --- Classe Purge resultado Obj ---
     private sealed class PurgeResultObj
     {
         public long FreedBytes { get; set; }
     }
-
+    // --- Estima Response ---
     private sealed class EstimateResponse
     {
         public PathsObj Paths { get; set; } = new();
         public BytesObj Bytes { get; set; } = new();
     }
-
+    // --- Classe caminhos Obj ---
     private sealed class PathsObj
     {
         public string DataDir { get; set; } = "";
@@ -178,7 +171,7 @@ public sealed class StorageMaintenanceService
         public string ReportsDir { get; set; } = "";
         public string DecompiledDir { get; set; } = "";
     }
-
+    // --- Classe bytes Obj ---
     private sealed class BytesObj
     {
         public long SandboxJobs { get; set; }
@@ -190,7 +183,7 @@ public sealed class StorageMaintenanceService
         public long Total { get; set; }
     }
 }
-
+// --- Classe armazenamento Estimate vista ---
 public sealed class StorageEstimateView
 {
     public string EstimateText { get; init; } = "";

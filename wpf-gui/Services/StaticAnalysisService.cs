@@ -1,4 +1,5 @@
 ﻿// --- Módulo: StaticAnalysisService.cs ---
+// Cliente HTTP para análise estática e acompanhamento de jobs.
 using System;
 using System.Globalization;
 using System.IO;
@@ -12,23 +13,34 @@ using RatAnalyzer.Desktop.Bootstrap;
 using RatAnalyzer.Desktop.Infrastructure;
 using RatAnalyzer.Desktop.Localization;
 
+
+
 namespace RatAnalyzer.Desktop.Services;
+
+
 
 // --- Cliente HTTP para análise estática via backend FastAPI (streaming + job unificado) ---
 public sealed class StaticAnalysisService
 {
     private const string GhidraProgressPrefix = "[GHIDRA_PROGRESS]";
 
+
+
     private static readonly JsonSerializerOptions JsonInsensitive = new()
     {
         PropertyNameCaseInsensitive = true
     };
+
+
 
     private static readonly JsonSerializerOptions JsonCamelCase = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
+
+
+    // --- Executa e publicação ---
     public async Task<string> RunAndPublishAsync(
         string filePath,
         string? linkedJobId,
@@ -40,18 +52,28 @@ public sealed class StaticAnalysisService
         if (!File.Exists(filePath))
             throw new InvalidOperationException(LocalizationManager.Get(LocKeys.MsgFileMissing));
 
+
+
         using var client = CreateClient();
         await EnsureBackendRunningAsync(client, progress, cancellationToken).ConfigureAwait(false);
 
+
+
         var fileName = Path.GetFileName(filePath);
         var jobId = linkedJobId;
+
+
 
         progress?.Report(LocalizationManager.Get(LocKeys.LogStaticRegister));
         jobId = await MarkStaticRunningAsync(client, jobId, fileName, 0, progress, cancellationToken)
             .ConfigureAwait(false);
         onJobIdKnown?.Invoke(jobId);
 
+
+
         progress?.Report(LocalizationManager.Get(LocKeys.LogStaticAnalyzing));
+
+
 
         var lastReportedProgress = -1.0;
         var analyze = await RunAnalyzeStreamAsync(
@@ -69,15 +91,24 @@ public sealed class StaticAnalysisService
             },
             cancellationToken).ConfigureAwait(false);
 
+
+
         progress?.Report(LocalizationManager.Get(LocKeys.LogStaticPublishing));
+
+
 
         jobId = await PublishStaticCompletedAsync(client, jobId, fileName, analyze, cancellationToken)
             .ConfigureAwait(false);
+
+
 
         progress?.Report(LocalizationManager.Get(LocKeys.LogStaticDone));
         return jobId;
     }
 
+
+
+    // --- Mark estática em execução  ---
     private static async Task<string> MarkStaticRunningAsync(
         HttpClient client,
         string? jobId,
@@ -96,6 +127,9 @@ public sealed class StaticAnalysisService
         return await PostStaticUploadAsync(client, payload, progress, cancellationToken).ConfigureAwait(false);
     }
 
+
+
+    // --- Tenta Update estática progresso ---
     private static async Task TryUpdateStaticProgressAsync(
         HttpClient client,
         string jobId,
@@ -120,6 +154,9 @@ public sealed class StaticAnalysisService
         }
     }
 
+
+
+    // --- Executa Analyze Stream ---
     private static async Task<AnalyzeResponse> RunAnalyzeStreamAsync(
         HttpClient client,
         string filePath,
@@ -133,14 +170,20 @@ public sealed class StaticAnalysisService
         fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
         form.Add(fileContent, "file", Path.GetFileName(filePath));
 
+
+
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{AppConstants.ApiBaseUrl}/api/analyze_stream")
         {
             Content = form
         };
 
+
+
         using var response = await client
             .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false);
+
+
 
         if (!response.IsSuccessStatusCode)
         {
@@ -149,8 +192,12 @@ public sealed class StaticAnalysisService
                 $"Falha ao executar análise estática (HTTP {(int)response.StatusCode}).\n\n{body}");
         }
 
+
+
         await using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         using var reader = new StreamReader(responseStream, Encoding.UTF8);
+
+
 
         AnalyzeResponse? result = null;
         while (true)
@@ -161,10 +208,14 @@ public sealed class StaticAnalysisService
             if (string.IsNullOrWhiteSpace(line))
                 continue;
 
+
+
             using var doc = JsonDocument.Parse(line);
             var root = doc.RootElement;
             if (!root.TryGetProperty("type", out var typeProp))
                 continue;
+
+
 
             var type = typeProp.GetString();
             switch (type)
@@ -192,12 +243,19 @@ public sealed class StaticAnalysisService
             }
         }
 
+
+
         if (result is null)
             throw new InvalidOperationException("Resposta de streaming terminou sem resultado final.");
+
+
 
         return result;
     }
 
+
+
+    // --- publicação estática concluído  ---
     private static async Task<string> PublishStaticCompletedAsync(
         HttpClient client,
         string jobId,
@@ -222,6 +280,9 @@ public sealed class StaticAnalysisService
         return await PostStaticUploadAsync(client, payload, progress: null, cancellationToken).ConfigureAwait(false);
     }
 
+
+
+    // --- pós estática upload  ---
     private static async Task<string> PostStaticUploadAsync(
         HttpClient client,
         StaticUploadPayload payload,
@@ -230,6 +291,8 @@ public sealed class StaticAnalysisService
     {
         var jsonPayload = JsonSerializer.Serialize(payload, JsonCamelCase);
         using var uploadContent = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+
+
 
         HttpResponseMessage uploadResponse;
         try
@@ -244,6 +307,8 @@ public sealed class StaticAnalysisService
                 "Não foi possível publicar o estado da análise estática no backend.");
         }
 
+
+
         if (!uploadResponse.IsSuccessStatusCode)
         {
             var body = await uploadResponse.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
@@ -251,14 +316,21 @@ public sealed class StaticAnalysisService
                 $"Falha ao registar análise estática no backend (HTTP {(int)uploadResponse.StatusCode}).\n\n{body}");
         }
 
+
+
         var uploadJson = await uploadResponse.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         var submit = JsonSerializer.Deserialize<SubmitResponse>(uploadJson, JsonInsensitive);
         if (submit is null || string.IsNullOrWhiteSpace(submit.JobId))
             throw new InvalidOperationException("Resposta inesperada ao publicar análise estática (jobId em falta).");
 
+
+
         return submit.JobId;
     }
 
+
+
+    // --- Cria Client ---
     private static HttpClient CreateClient()
     {
         var client = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
@@ -267,6 +339,9 @@ public sealed class StaticAnalysisService
         return client;
     }
 
+
+
+    // --- Garante backend em execução ---
     private static async Task EnsureBackendRunningAsync(
         HttpClient client,
         IProgress<string>? progress,
@@ -275,10 +350,15 @@ public sealed class StaticAnalysisService
         if (await IsBackendUpAsync(client, cancellationToken).ConfigureAwait(false))
             return;
 
+
+
         progress?.Report(LocalizationManager.Get(LocKeys.LogBackendServiceStart));
         await StartupSequence.StartBackendAsync(client).ConfigureAwait(false);
     }
 
+
+
+    // --- Verifica se backend activo ---
     private static async Task<bool> IsBackendUpAsync(HttpClient client, CancellationToken cancellationToken)
     {
         try
@@ -295,11 +375,17 @@ public sealed class StaticAnalysisService
         }
     }
 
+
+
+    // --- Classe Submit Response ---
     private sealed class SubmitResponse
     {
         public string? JobId { get; set; }
     }
 
+
+
+    // --- Classe Analyze Response ---
     private sealed class AnalyzeResponse
     {
         public string? Report { get; set; }
@@ -312,6 +398,9 @@ public sealed class StaticAnalysisService
         public object[]? FlaggedFunctions { get; set; }
     }
 
+
+
+    // --- Classe estática upload Payload ---
     private sealed class StaticUploadPayload
     {
         public string? JobId { get; set; }
@@ -327,3 +416,4 @@ public sealed class StaticAnalysisService
         public double? StaticProgress { get; set; }
     }
 }
+

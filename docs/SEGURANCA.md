@@ -255,4 +255,4 @@ Use antes de cada deploy ou demonstração com amostras reais:
 
 ---
 
-**Estado:** arquitetura de segurança documentada e alinhada com o código. Alterações de auth, isolamento ou gestão de segredos devem atualizar este ficheiro.
+**Manutenção:** alterações de auth, isolamento ou gestão de segredos devem atualizar este ficheiro e os testes associados.

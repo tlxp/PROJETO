@@ -1,2 +1,2 @@
 # --- Módulo: __init__ ---
-# GUI Python opcional (Tkinter) — alternativa leve ao WPF.
+# DEPRECATED (legacy): pacote da GUI Tkinter — ver README.md para substitutos.

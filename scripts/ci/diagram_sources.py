@@ -27,6 +27,7 @@ _STARTUML_LINE_RE = re.compile(r"^@startuml\b.*\r?\n?", re.MULTILINE)
 
 
 def body_without_startuml(text: str) -> str:
+    # --- Remove @startuml da primeira linha do .puml canónico ---
     lines = text.splitlines(keepends=True)
     if lines and lines[0].lstrip().startswith("@startuml"):
         return "".join(lines[1:]).lstrip("\n")
@@ -34,6 +35,7 @@ def body_without_startuml(text: str) -> str:
 
 
 def render_fig_puml(source_name: str, fig_id: str) -> str:
+    # --- Injeta @startuml com fig_id para o PNG do relatório ---
     canonical = (CANONICAL_DIR / source_name).read_text(encoding="utf-8")
     body = body_without_startuml(canonical)
     return f"@startuml {fig_id}\n{body}"

@@ -1,17 +1,17 @@
 ﻿// --- Módulo: LogCatalog.cs ---
+// Strings de log localizadas para o ecrã de arranque.
 using System.Collections.Generic;
-
 namespace RatAnalyzer.Desktop.Localization;
-
 // --- Strings de logs de arranque e análise (PT/EN) ---
 internal static class LogCatalog
 {
+    // --- Agrega Into ---
     public static void MergeInto(Dictionary<string, string> pt, Dictionary<string, string> en)
     {
         foreach (var (k, v) in Pt()) pt[k] = v;
         foreach (var (k, v) in En()) en[k] = v;
     }
-
+    // --- português ---
     private static Dictionary<string, string> Pt() => new()
     {
         [LocKeys.LogDepsStart] = "[INFO] === Dependências: análise estática + VM (verificação / instalação) ===",
@@ -66,7 +66,7 @@ internal static class LogCatalog
         [LocKeys.LogDynamicPublish] = "A enviar relatório da VM para o frontend...",
         [LocKeys.LogBackendServiceStart] = "A iniciar servidor backend (uvicorn)...",
     };
-
+    // --- inglês ---
     private static Dictionary<string, string> En() => new()
     {
         [LocKeys.LogDepsStart] = "[INFO] === Dependencies: static analysis + VM (check / install) ===",

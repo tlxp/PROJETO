@@ -1,4 +1,5 @@
-# --- Script: 07-Ensure-Runtimes.ps1 ---
+# --- Módulo: 07-Ensure-Runtimes.ps1 ---
+# --- Garante .NET/Java runtimes instalados na VM ---
 <#
 .SYNOPSIS
     Garante runtimes essenciais na VM (offline/sem internet).
@@ -61,14 +62,14 @@ $OfflineDir = Join-Path $PSScriptRoot "offline\runtimes"
 Ensure-DirectoryExists -Path $OfflineDir
 
 # --- Biblioteca auxiliar (host) ---
-# *Funções de download e localização de instaladores, carregadas no mesmo scope.*
+# Funções de download e localização de instaladores, carregadas no mesmo scope.
 $EnsureRuntimesLibDir = Join-Path $PSScriptRoot 'EnsureRuntimes'
 foreach ($lib in @('Downloads.ps1', 'Installers.ps1')) {
     . (Join-Path $EnsureRuntimesLibDir $lib)
 }
 
 # --- Fluxo por fases ---
-# *Cada fase é dot-sourced no mesmo scope; a ordem replica a execução original.*
+# Cada fase é dot-sourced no mesmo scope; a ordem replica a execução original.
 foreach ($phase in @(
     'PhaseA-Plan.ps1',
     'PhaseB-Resolve.ps1',

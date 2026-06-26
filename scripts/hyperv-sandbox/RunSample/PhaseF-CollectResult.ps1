@@ -1,4 +1,4 @@
-﻿# --- Script: PhaseF-CollectResult.ps1 ---
+﻿# --- Módulo: PhaseF-CollectResult.ps1 ---
 # --- Recolha e validação do relatório no host ---
 
 if (Test-Path -LiteralPath $ReportOutputPath) {
@@ -22,7 +22,7 @@ if (Test-Path -LiteralPath $ReportOutputPath) {
         } catch {
             Write-LogWarning "      Verificação SHA256 falhou: $($_.Exception.Message)"
             Add-LogLine -Path $HostLogPath -Value "Report hash verification failed: $($_.Exception.Message)"
-            # *remove relatório inválido para não confundir o utilizador*
+            # remove relatório inválido para não confundir o utilizador
             try { Remove-Item -LiteralPath $ReportOutputPath -Force -ErrorAction SilentlyContinue } catch { }
         }
     }

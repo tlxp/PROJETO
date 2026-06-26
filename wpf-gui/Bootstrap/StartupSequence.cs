@@ -1,6 +1,5 @@
-﻿// --- Módulo: StartupSequence ---
-// --- Sequência de arranque: backend (uvicorn:8000) e frontend (npm:8080) ---
-// *Processos geridos ficam registados para o ShutdownManager terminar ao fechar*
+﻿// --- Módulo: StartupSequence.cs ---
+// Arranque do backend uvicorn e do dev server npm do frontend.
 
 using System;
 using System.Diagnostics;
@@ -13,17 +12,27 @@ using RatAnalyzer.Desktop.Helpers;
 using RatAnalyzer.Desktop.Infrastructure;
 using RatAnalyzer.Desktop.Localization;
 
+
+
 namespace RatAnalyzer.Desktop.Bootstrap;
 
+
+
+// --- Sequência de arranque de backend e frontend ---
+// *Processos geridos ficam registados para o ShutdownManager terminar ao fechar*
 public static class StartupSequence
 {
     private const string ApiBaseUrl = AppConstants.ApiBaseUrl;
     private const string FrontendUrl = AppConstants.FrontendUrl;
 
+
+
     // Backend uvicorn gerido pelo WPF (quando arrancado automaticamente).
     private static Process? _managedBackendProcess;
     // Dev server do frontend (npm run dev) gerido pelo WPF.
     private static Process? _managedFrontendProcess;
+
+
 
     // --- Executa arranque completo (backend + frontend em paralelo) ---
     public static async Task RunFullStartupSequenceAsync(Action<string>? addLog = null)
@@ -37,6 +46,8 @@ public static class StartupSequence
         {
             Log(LocalizationManager.Format(LocKeys.LogDepsPhaseWarning, ex.Message));
         }
+
+
 
         using var client = new HttpClient();
         // Paralelizar: backend e frontend são independentes (porta 8000 vs 8080).
@@ -56,6 +67,8 @@ public static class StartupSequence
             }
         });
 
+
+
         var frontendTask = Task.Run(async () =>
         {
             addLog?.Invoke(LocalizationManager.Get(LocKeys.LogFrontendChecking));
@@ -63,11 +76,16 @@ public static class StartupSequence
             addLog?.Invoke(LocalizationManager.Get(LocKeys.LogFrontendReady));
         });
 
+
+
         await Task.WhenAll(backendTask, frontendTask);
         // Não abrir automaticamente o browser no arranque.
         // A interface web deve ser aberta por ação explícita do utilizador (ex.: clicar em "Análise estática").
     }
 
+
+
+    // --- Verifica se backend activo ---
     private static async Task<bool> IsBackendUpAsync(HttpClient client)
     {
         try
@@ -82,6 +100,9 @@ public static class StartupSequence
         }
     }
 
+
+
+    // --- Localiza backend de trabalho pasta ---
     internal static string? FindBackendWorkingDirectory()
     {
         var current = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
@@ -93,11 +114,17 @@ public static class StartupSequence
                 return candidate;
             }
 
+
+
             current = current.Parent;
         }
 
+
+
         return null;
     }
+
+
 
     // --- Verifica se node_modules tem vite (evita npm install em cada arranque) ---
     private static bool FrontendNodeModulesLooksComplete(string frontendDir)
@@ -105,6 +132,8 @@ public static class StartupSequence
         var viteDir = Path.Combine(frontendDir, "node_modules", "vite");
         return Directory.Exists(viteDir);
     }
+
+
 
     // --- Garante dependências pip do backend (requirements.lock preferido) ---
     internal static async Task EnsureBackendPythonDependenciesAsync(string backendDir, Action<string>? addLog)
@@ -127,7 +156,11 @@ public static class StartupSequence
             return;
         }
 
+
+
         addLog?.Invoke(LocalizationManager.Get(LocKeys.LogPipEnsure));
+
+
 
         await Task.Run(async () =>
         {
@@ -144,11 +177,15 @@ public static class StartupSequence
             ProcessOutputEncoding.ApplyUtf8(psi);
             ProcessOutputEncoding.ApplyPythonUtf8Environment(psi);
 
+
+
             using var proc = Process.Start(psi);
             if (proc is null)
             {
                 throw new InvalidOperationException("Não foi possível iniciar pip (python não encontrado?).");
             }
+
+
 
             var stdoutTask = proc.StandardOutput.ReadToEndAsync();
             var stderrTask = proc.StandardError.ReadToEndAsync();
@@ -157,8 +194,12 @@ public static class StartupSequence
                 await proc.WaitForExitAsync(killCts.Token);
             }
 
+
+
             var stdout = await stdoutTask.ConfigureAwait(false);
             var stderr = await stderrTask.ConfigureAwait(false);
+
+
 
             if (proc.ExitCode != 0)
             {
@@ -170,8 +211,12 @@ public static class StartupSequence
             }
         });
 
+
+
         addLog?.Invoke(LocalizationManager.Get(LocKeys.LogPipOk));
     }
+
+
 
     // --- Corre npm install só se node_modules estiver incompleto ---
     internal static async Task EnsureFrontendNpmDependenciesAsync(string frontendDir, Action<string>? addLog)
@@ -181,7 +226,11 @@ public static class StartupSequence
             return;
         }
 
+
+
         addLog?.Invoke(LocalizationManager.Get(LocKeys.LogNpmInstall));
+
+
 
         await Task.Run(async () =>
         {
@@ -197,12 +246,16 @@ public static class StartupSequence
             };
             ProcessOutputEncoding.ApplyUtf8(psi);
 
+
+
             using var proc = Process.Start(psi);
             if (proc is null)
             {
                 throw new InvalidOperationException(
                     "Não foi possível iniciar npm. Verifique se o Node.js está instalado e no PATH.");
             }
+
+
 
             var stdoutTask = proc.StandardOutput.ReadToEndAsync();
             var stderrTask = proc.StandardError.ReadToEndAsync();
@@ -211,8 +264,12 @@ public static class StartupSequence
                 await proc.WaitForExitAsync(killCts.Token);
             }
 
+
+
             var stdout = await stdoutTask.ConfigureAwait(false);
             var stderr = await stderrTask.ConfigureAwait(false);
+
+
 
             if (proc.ExitCode != 0)
             {
@@ -224,18 +281,27 @@ public static class StartupSequence
             }
         });
 
+
+
         if (!FrontendNodeModulesLooksComplete(frontendDir))
         {
             throw new InvalidOperationException(
                 "npm install concluíu mas vite não aparece em node_modules. Verifique package.json.");
         }
 
+
+
         addLog?.Invoke(LocalizationManager.Get(LocKeys.LogNpmOk));
     }
 
+
+
+    // --- Inicia backend ---
     internal static async Task StartBackendAsync(HttpClient client, Action<string>? addLog = null)
     {
         var backendDir = FindBackendWorkingDirectory() ?? AppDomain.CurrentDomain.BaseDirectory;
+
+
 
         try
         {
@@ -250,6 +316,8 @@ public static class StartupSequence
                 ex.Message);
         }
 
+
+
         try
         {
             var psi = new ProcessStartInfo
@@ -263,10 +331,14 @@ public static class StartupSequence
                 CreateNoWindow = true
             };
 
+
+
             InheritParentEnvironment(psi);
             PropagateBackendSecrets(psi, addLog);
             AppConstants.PropagateLanguageEnvironment(psi);
             ProcessOutputEncoding.ApplyPythonUtf8Environment(psi);
+
+
 
             var javaHome = JavaDependencyHelper.ResolveJavaHomeForBackend();
             if (!string.IsNullOrWhiteSpace(javaHome))
@@ -279,9 +351,13 @@ public static class StartupSequence
                     psi.Environment["PATH"] = binDir + Path.PathSeparator + pathNow;
             }
 
+
+
             var ghidraHome = GhidraDependencyHelper.ResolveGhidraInstallDirForBackend();
             if (!string.IsNullOrWhiteSpace(ghidraHome))
                 psi.Environment["GHIDRA_INSTALL_DIR"] = ghidraHome;
+
+
 
             _managedBackendProcess = Process.Start(psi);
         }
@@ -294,13 +370,19 @@ public static class StartupSequence
                 ex.Message);
         }
 
+
+
         var attempts = 0;
         const int maxAttempts = 30;
+
+
 
         while (attempts < maxAttempts)
         {
             attempts++;
             await Task.Delay(1000);
+
+
 
             if (await IsBackendUpAsync(client))
             {
@@ -308,12 +390,17 @@ public static class StartupSequence
             }
         }
 
+
+
         throw new TimeoutException(
             "Não foi possível confirmar o arranque do servidor backend em http://localhost:8000.\n\n" +
             "Verifique se o Python e o uvicorn estão instalados e, se necessário, inicie manualmente:\n" +
             "uvicorn api:app --reload --host 127.0.0.1 --port 8000");
     }
 
+
+
+    // --- Localiza frontend de trabalho pasta ---
     internal static string? FindFrontendWorkingDirectory()
     {
         var backendDir = FindBackendWorkingDirectory();
@@ -327,6 +414,8 @@ public static class StartupSequence
             }
         }
 
+
+
         // Fallback: procurar "frontend" a partir da pasta do executável.
         var current = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
         for (var i = 0; i < 6 && current is not null; i++)
@@ -337,18 +426,27 @@ public static class StartupSequence
                 return candidate;
             }
 
+
+
             current = current.Parent;
         }
+
+
 
         return null;
     }
 
+
+
+    // --- Garante frontend em execução ---
     private static async Task EnsureFrontendRunningAsync(Action<string>? addLog = null)
     {
         if (await IsFrontendUpAsync())
         {
             return;
         }
+
+
 
         var frontendDir = FindFrontendWorkingDirectory();
         if (string.IsNullOrWhiteSpace(frontendDir))
@@ -357,6 +455,8 @@ public static class StartupSequence
                 "Não foi possível localizar a pasta 'frontend' para iniciar o frontend.\n\n" +
                 "Certifique-se de que a estrutura do projeto é a esperada e, se necessário, inicie manualmente o dev server.");
         }
+
+
 
         try
         {
@@ -371,6 +471,8 @@ public static class StartupSequence
                 ex.Message);
         }
 
+
+
         try
         {
             var psi = new ProcessStartInfo
@@ -382,9 +484,13 @@ public static class StartupSequence
                 CreateNoWindow = true
             };
 
+
+
             InheritParentEnvironment(psi);
             PropagateFrontendSecrets(psi);
             AppConstants.PropagateLanguageEnvironment(psi);
+
+
 
             _managedFrontendProcess = Process.Start(psi);
         }
@@ -397,14 +503,20 @@ public static class StartupSequence
                 ex.Message);
         }
 
+
+
         // Esperar alguns segundos até o servidor responder na porta configurada (8080).
         var attempts = 0;
         const int maxAttempts = 30;
+
+
 
         while (attempts < maxAttempts)
         {
             attempts++;
             await Task.Delay(1000);
+
+
 
             if (await IsFrontendUpAsync())
             {
@@ -412,12 +524,17 @@ public static class StartupSequence
             }
         }
 
+
+
         throw new TimeoutException(
             "Não foi possível confirmar o arranque do frontend em http://localhost:8080.\n\n" +
             "Verifique se o Node/npm estão instalados e, se necessário, inicie manualmente o dev server:\n" +
             "npm run dev (na pasta frontend)");
     }
 
+
+
+    // --- Verifica se frontend activo ---
     private static async Task<bool> IsFrontendUpAsync()
     {
         try
@@ -427,6 +544,8 @@ public static class StartupSequence
                 Timeout = TimeSpan.FromSeconds(2)
             };
 
+
+
             var response = await client.GetAsync(FrontendUrl);
             return response.IsSuccessStatusCode;
         }
@@ -435,6 +554,8 @@ public static class StartupSequence
             return false;
         }
     }
+
+
 
     // --- Copia variáveis de ambiente do processo WPF para filhos ---
     private static void InheritParentEnvironment(ProcessStartInfo psi)
@@ -447,6 +568,8 @@ public static class StartupSequence
             psi.Environment[key] = entry.Value?.ToString() ?? "";
         }
     }
+
+
 
     // --- Propaga segredos RATANALYZER_* ao uvicorn filho ---
     private static void PropagateBackendSecrets(ProcessStartInfo psi, Action<string>? addLog)
@@ -464,11 +587,15 @@ public static class StartupSequence
                 "1",
                 StringComparison.Ordinal);
 
+
+
         if ((requireToken || production) && string.IsNullOrWhiteSpace(AppConstants.BackendApiToken))
         {
             addLog?.Invoke(LocalizationManager.Get(LocKeys.LogProdTokenWarning));
         }
     }
+
+
 
     // --- Alinha VITE_API_TOKEN com RATANALYZER_API_TOKEN se o frontend não definir ---
     private static void PropagateFrontendSecrets(ProcessStartInfo psi)
@@ -476,11 +603,16 @@ public static class StartupSequence
         if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("VITE_API_TOKEN")))
             return;
 
+
+
         var apiToken = AppConstants.BackendApiToken;
         if (!string.IsNullOrWhiteSpace(apiToken))
             psi.Environment["VITE_API_TOKEN"] = apiToken;
     }
 
+
+
+    // --- Termina gerido backend ---
     internal static void StopManagedBackend()
     {
         try
@@ -499,6 +631,9 @@ public static class StartupSequence
         }
     }
 
+
+
+    // --- Termina gerido frontend ---
     internal static void StopManagedFrontend()
     {
         try
@@ -517,3 +652,4 @@ public static class StartupSequence
         }
     }
 }
+

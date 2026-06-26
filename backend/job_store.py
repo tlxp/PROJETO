@@ -231,7 +231,7 @@ def find_completed_by_sha256(sha256: str, analysis_type: str | None = None, pipe
         finally:
             conn.close()
 
-# --- Helper interno: loads ---
+# --- Desserializa JSON de coluna SQLite ---
     def _loads(s: Optional[str]) -> Any | None:
         if not s:
             return None
@@ -337,7 +337,7 @@ def get_job_row(job_id: str) -> Optional[dict]:
         finally:
             conn.close()
 
-# --- Helper interno: loads ---
+# --- Desserializa JSON de coluna SQLite ---
     def _loads(s: Optional[str]) -> Any | None:
         if not s:
             return None

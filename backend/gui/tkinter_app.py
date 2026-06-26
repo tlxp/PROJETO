@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 # --- Módulo: tkinter_app ---
-# Interface gráfica Tkinter: arrastar .cs (compilar) ou .exe/.dll para análise.
+# DEPRECATED (legacy): interface gráfica Tkinter para análise estática local.
+#
+# Substitutos recomendados:
+#   - Frontend web (frontend/) — análise completa, relatórios, pseudo-C, IL, xrefs
+#   - Desktop WPF (wpf-gui/) — análise estática/dinâmica integrada, sandbox Hyper-V
+#
+# Mantido apenas para compatibilidade com fluxos de laboratório que não exigem
+# backend FastAPI nem stack Node/WPF. Não recebe novas funcionalidades.
+# Ponto de entrada: rat_analyzer_gui.py (wrapper fino).
+#
+# Fluxo: arrastar .cs (compilar via dotnet publish) ou .exe/.dll para análise local.
 
 import json
 import os
@@ -75,7 +85,7 @@ def get_publish_output(project_dir: Path) -> Path | None:
 
 # --- Executa dotnet publish; devolve (sucesso, mensagem, pasta_publish) ---
 def build_project(project_path: Path, log_callback=None) -> tuple[bool, str, Path | None]:
-# --- Log ---
+# --- Callback de log local ---
     def log(msg: str):
         if log_callback:
             log_callback(msg)
@@ -134,7 +144,7 @@ def get_exe_and_dll(publish_dir: Path, project_name: str | None = None) -> tuple
 
 # --- Executa rat_analyzer.py com logs em tempo real ---
 def run_rat_analyzer(target_path: Path, use_dotnet: bool, log_callback=None) -> tuple[bool, str]:
-# --- Log ---
+# --- Callback de log local ---
     def log(msg: str):
         if log_callback:
             log_callback(msg)
@@ -188,7 +198,7 @@ def run_rat_analyzer(target_path: Path, use_dotnet: bool, log_callback=None) -> 
 
 # --- Classe RATAnalyzer App ---
 class RATAnalyzerApp:
-# --- Helper interno: init   ---
+# --- Cria janela Tkinter e estado da aplicação ---
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("RAT Analyzer - .cs / .exe / .dll")
@@ -206,7 +216,7 @@ class RATAnalyzerApp:
         self._build_ui()
         self._setup_drag_drop()
 
-# --- Helper interno: build ui ---
+# --- Constrói widgets e layout da janela ---
     def _build_ui(self):
         main = ttk.Frame(self.root, padding=12)
         main.pack(fill=tk.BOTH, expand=True)
@@ -268,7 +278,7 @@ class RATAnalyzerApp:
         self.log_text = scrolledtext.ScrolledText(log_frame, height=10, wrap=tk.WORD, state=tk.DISABLED)
         self.log_text.pack(fill=tk.BOTH, expand=True)
 
-# --- Helper interno: setup drag drop ---
+# --- Configura arrastar-e-largar na janela ---
     def _setup_drag_drop(self):
         try:
             import windnd
@@ -284,7 +294,7 @@ class RATAnalyzerApp:
                 )
             )
 
-# --- Helper interno: on drop ---
+# --- Trata ficheiros largados (.cs, .exe, .dll) ---
     def _on_drop(self, files: list[str]):
         if not files:
             return
@@ -317,7 +327,7 @@ class RATAnalyzerApp:
         self.proj_label.config(text="Ficheiro .exe/.dll carregado. Pode analisar já.", foreground="gray")
         self.log(f"Ficheiro para análise direta: {self.direct_file_path}")
 
-# --- Helper interno: set cs file ---
+# --- Define ficheiro .cs e procura .csproj ---
     def _set_cs_file(self, cs_path: Path):
         self.direct_file_path = None
         self.cs_path = cs_path
@@ -341,7 +351,7 @@ class RATAnalyzerApp:
             self.drop_label.config(text=f"{cs_path.name}\n(.csproj não encontrado)")
             self.log("Nenhum .csproj encontrado. Coloque o .cs numa pasta com um .csproj.")
 
-# --- Helper interno: set project ---
+# --- Define projeto .csproj e limpa ficheiro direto ---
     def _set_project(self, csproj_path: Path):
         self.direct_file_path = None
         self.csproj_path = csproj_path
@@ -359,7 +369,7 @@ class RATAnalyzerApp:
         self.drop_label.config(text=f"Projeto: {csproj_path.name}")
         self.log(f"Projeto: {csproj_path}")
 
-# --- Helper interno: update file to analyze display ---
+# --- Atualiza rótulo do alvo de análise ---
     def _update_file_to_analyze_display(self):
         if self.direct_file_path:
             self.file_to_analyze_var.set(str(self.direct_file_path))
@@ -368,7 +378,7 @@ class RATAnalyzerApp:
         else:
             self.file_to_analyze_var.set("Nenhum ficheiro selecionado. Arraste um .cs, .exe ou .dll.")
 
-# --- Helper interno: on browse ---
+# --- Diálogo para escolher ficheiro manualmente ---
     def _on_browse(self, *_):
         path = filedialog.askopenfilename(
             title="Selecionar ficheiro (.cs, .exe ou .dll)",
@@ -396,7 +406,7 @@ class RATAnalyzerApp:
             self.log("Pasta sem .csproj.")
             messagebox.showinfo("Projeto", "Nenhum .csproj encontrado nesta pasta.")
 
-# --- Helper interno: on build ---
+# --- Dispara compilação dotnet em thread ---
     def _on_build(self):
         if not self.csproj_path or not self.csproj_path.exists():
             messagebox.showwarning("Compilar", "Selecione primeiro um ficheiro .cs ou projeto.")
@@ -407,7 +417,7 @@ class RATAnalyzerApp:
 
 # --- Do build ---
         def do_build():
-# --- Log ---
+# --- Callback de log na UI ---
             def log(msg):
                 self.root.after(0, lambda: self.log(msg))
 
@@ -416,7 +426,7 @@ class RATAnalyzerApp:
 
         threading.Thread(target=do_build, daemon=True).start()
 
-# --- Helper interno: after build ---
+# --- Callback pós-compilação: atualiza UI ---
     def _after_build(self, success: bool, message: str, publish_dir: Path | None):
         self.build_btn.config(state=tk.NORMAL)
         if not success:
@@ -430,7 +440,7 @@ class RATAnalyzerApp:
         self._update_file_to_analyze_display()
         messagebox.showinfo("Compilação", "Compilação concluída. Pode escolher analisar o .exe ou .dll.")
 
-# --- Helper interno: on analyze ---
+# --- Dispara análise RAT em thread ---
     def _on_analyze(self):
         # Ficheiro direto (.exe/.dll) ou resultado da compilação
         if self.direct_file_path and self.direct_file_path.exists():
@@ -450,7 +460,7 @@ class RATAnalyzerApp:
 
 # --- Do analyze ---
         def do_analyze():
-# --- Log ---
+# --- Callback de log na UI ---
             def log(msg):
                 self.root.after(0, lambda: self.log(msg))
 
@@ -459,7 +469,7 @@ class RATAnalyzerApp:
 
         threading.Thread(target=do_analyze, daemon=True).start()
 
-# --- Helper interno: after analyze ---
+# --- Callback pós-análise: mostra resultado ---
     def _after_analyze(self, success: bool, message: str):
         self.analyze_btn.config(state=tk.NORMAL)
         if success:
@@ -550,13 +560,13 @@ class RATAnalyzerApp:
             nav = ttk.Frame(frm)
             nav.pack(anchor=tk.W, pady=(2, 0))
 
-# --- Helper interno: ensure ranges ---
+# --- Garante índices de navegação no relatório ---
             def _ensure_ranges():
                 if not nav_state["ranges"]:
                     nav_state["ranges"] = list(txt.tag_ranges("rat_flag"))
                     nav_state["idx"] = 0
 
-# --- Helper interno: goto next ---
+# --- Navega para ocorrência seguinte no relatório ---
             def _goto_next():
                 _ensure_ranges()
                 r = nav_state["ranges"]
@@ -566,7 +576,7 @@ class RATAnalyzerApp:
                 txt.see(start)
                 nav_state["idx"] = (nav_state["idx"] + 2) % len(r)
 
-# --- Helper interno: goto prev ---
+# --- Navega para ocorrência anterior no relatório ---
             def _goto_prev():
                 _ensure_ranges()
                 r = nav_state["ranges"]
@@ -602,14 +612,14 @@ class RATAnalyzerApp:
                     start_idx = end_idx
         txt.config(state=tk.DISABLED)
 
-# --- Log ---
+# --- Callback de log na UI ---
     def log(self, msg: str):
         self.log_text.config(state=tk.NORMAL)
         self.log_text.insert(tk.END, msg.strip() + "\n")
         self.log_text.see(tk.END)
         self.log_text.config(state=tk.DISABLED)
 
-# --- Run ---
+# --- Arranca o mainloop Tkinter ---
     def run(self):
         self.root.mainloop()
 

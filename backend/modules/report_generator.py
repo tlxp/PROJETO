@@ -9,7 +9,7 @@ from datetime import datetime
 # --- Gera relatórios de análise em formato texto ---
 class ReportGenerator:
 
-# --- Helper interno: init   ---
+# --- Inicialização sem estado persistente ---
     def __init__(self):
         pass
 

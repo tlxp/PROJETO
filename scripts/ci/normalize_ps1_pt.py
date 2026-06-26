@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # --- Módulo: normalize_ps1_pt ---
-# --- Normaliza mensagens PT-PT em .ps1: acentos e UTF-8 com BOM + CRLF ---
-# *Uso: python scripts/ci/normalize_ps1_pt.py [--check]*
+# --- Normaliza PT-PT em .ps1: acentos, UTF-8 BOM e CRLF (flag --check) ---
 
 from __future__ import annotations
 

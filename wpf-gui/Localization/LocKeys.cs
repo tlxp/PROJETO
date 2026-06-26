@@ -1,10 +1,11 @@
 ﻿// --- Módulo: LocKeys.cs ---
+// Chaves de localização usadas em toda a aplicação.
 namespace RatAnalyzer.Desktop.Localization;
-
 // --- Chaves de localização (UI e logs) ---
 public static class LocKeys
 {
     public const string AppTitle = "AppTitle";
+    public const string AppSubtitle = "AppSubtitle";
     public const string LanguageSection = "LanguageSection";
     public const string LanguageTitle = "LanguageTitle";
     public const string LanguageSubtitle = "LanguageSubtitle";
@@ -12,6 +13,7 @@ public static class LocKeys
     public const string LanguageEnglish = "LanguageEnglish";
     public const string LanguageContinue = "LanguageContinue";
     public const string LanguageCancel = "LanguageCancel";
+    public const string LanguageFooter = "LanguageFooter";
     public const string ChangeLanguage = "ChangeLanguage";
     public const string LoadingSection = "LoadingSection";
     public const string LoadingTitle = "LoadingTitle";
@@ -99,7 +101,6 @@ public static class LocKeys
     public const string CredentialsRemember = "CredentialsRemember";
     public const string MsgCredentialsUserRequired = "MsgCredentialsUserRequired";
     public const string MsgCredentialsPasswordRequired = "MsgCredentialsPasswordRequired";
-
     public const string LogDepsStart = "LogDepsStart";
     public const string LogBackendNotFound = "LogBackendNotFound";
     public const string LogBackendOk = "LogBackendOk";

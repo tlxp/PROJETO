@@ -1,5 +1,5 @@
-# --- Script: PhaseA-Plan.ps1 ---
-
+# --- Módulo: PhaseA-Plan.ps1 ---
+# --- Planeamento de runtimes em falta na VM ---
 # --- Definição da lista de instaladores ---
 $installers = @(
     @{
@@ -31,7 +31,7 @@ if (-not $SkipDotNet48) {
 
 # --- .NET Desktop Runtime 8 (opcional) ---
 if (-not $SkipDotNetDesktop) {
-    # *Resolver URLs finais e usar wildcard para aceitar versões reais (8.0.xx).*
+    # Resolver URLs finais e usar wildcard para aceitar versões reais (8.0.xx).
     $urlX86 = $null
     $urlX64 = $null
     try { $urlX86 = Resolve-DotnetDesktopRuntimeUrl -Arch "x86" } catch { Write-LogWarning $_.Exception.Message }

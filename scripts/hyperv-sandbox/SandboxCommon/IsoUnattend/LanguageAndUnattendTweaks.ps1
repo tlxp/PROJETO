@@ -1,4 +1,5 @@
-﻿# --- Script: LanguageAndUnattendTweaks.ps1 ---
+﻿# --- Módulo: LanguageAndUnattendTweaks.ps1 ---
+# --- Ajustes de idioma no autounattend ---
 
 # --- Deteção do idioma default de um ISO do Windows ---
 function Get-WindowsIsoDefaultLanguage {
@@ -12,7 +13,7 @@ function Get-WindowsIsoDefaultLanguage {
     #>
     param(
         [Parameter(Mandatory = $true)][string] $IsoPath,
-        # *Quando não é possível ler lang.ini, devolver $null (evita logs enganadores)*
+        # Quando não é possível ler lang.ini, devolver $null (evita logs enganadores)
         [string] $Fallback = $null
     )
 
@@ -45,7 +46,7 @@ function Get-WindowsIsoDefaultLanguage {
             }
         }
 
-        # *Fallback: idiomas via install.wim / install.esd*
+        # Fallback: idiomas via install.wim / install.esd
         $wimLangs = @(Get-WindowsImageLanguagesFromInstallMedia -IsoRoot $isoDrive)
         if ($wimLangs.Count -gt 0) {
             $first = [string]$wimLangs[0]
@@ -85,7 +86,7 @@ function Set-UnattendLanguageInPlace {
 
     $xmlText = Get-Content -LiteralPath $UnattendXmlPath -Raw -ErrorAction Stop
 
-    # *Substituir valores de locale em WinPE, OOBE e secções gerais*
+    # Substituir valores de locale em WinPE, OOBE e secções gerais
     $xmlText = [regex]::Replace($xmlText, '<UILanguage>\s*[^<]+\s*</UILanguage>', "<UILanguage>$UiLanguage</UILanguage>")
     $xmlText = [regex]::Replace($xmlText, '<InputLocale>\s*[^<]+\s*</InputLocale>', "<InputLocale>$UiLanguage</InputLocale>")
     $xmlText = [regex]::Replace($xmlText, '<SystemLocale>\s*[^<]+\s*</SystemLocale>', "<SystemLocale>$UiLanguage</SystemLocale>")
@@ -122,7 +123,7 @@ function Set-UnattendGuestCredentialsInPlace {
         throw "Set-UnattendGuestCredentialsInPlace: Password vazia."
     }
 
-    # *Escapar valores para XML seguro*
+    # Escapar valores para XML seguro
     $escapedUser = [System.Security.SecurityElement]::Escape($UserName)
     $escapedDisplay = [System.Security.SecurityElement]::Escape($DisplayName)
     $escapedPassword = [System.Security.SecurityElement]::Escape($Password)
@@ -203,7 +204,7 @@ function Remove-UnattendInternationalSettings {
 
     $xmlText = Get-Content -LiteralPath $UnattendXmlPath -Raw -ErrorAction Stop
 
-    # *Remover bloco WinPE international core*
+    # Remover bloco WinPE international core
     $xmlText = [regex]::Replace(
         $xmlText,
         '<component\s+name="Microsoft-Windows-International-Core-WinPE"[\s\S]*?</component>\s*',
@@ -211,7 +212,7 @@ function Remove-UnattendInternationalSettings {
         [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
     )
 
-    # *Remover bloco OOBE international core*
+    # Remover bloco OOBE international core
     $xmlText = [regex]::Replace(
         $xmlText,
         '<component\s+name="Microsoft-Windows-International-Core"[\s\S]*?</component>\s*',
