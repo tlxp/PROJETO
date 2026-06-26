@@ -42,7 +42,7 @@ async def storage_estimate() -> dict:
     }
 
 
-# --- Limpeza de artefactos antigos (retenção soft) ---
+# --- Limpeza de artefatos antigos (retenção soft) ---
 @router.post("/api/storage/cleanup", dependencies=[Depends(require_api_token)])
 async def storage_cleanup(req: StorageCleanupRequest) -> dict:
     result = cleanup_job_artifacts(req.retentionDays, req.keepMostRecent)

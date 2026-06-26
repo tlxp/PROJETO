@@ -110,10 +110,6 @@ export function isVmClassificationBenign(classification: string | null | undefin
   return normalized === "BENIGNO";
 }
 
-function localizeVmSectionTitle(title: string): string {
-  return canonicalVmSectionTitle(title);
-}
-
 export function parseVmScoringFromReport(report: string | null | undefined): VmScoringSummary | null {
   if (!report?.trim()) return null;
   const lines = repairVmReportText(report ?? "").split(/\r?\n/);
@@ -207,7 +203,7 @@ function normalizeVmBulletLine(trimmed: string): string {
 
 function shouldVmLineBeBullet(trimmed: string): boolean {
   if (/^[-•]\s/.test(trimmed) || /^\s{2}-\s/.test(trimmed)) return true;
-  if (/^[\+\-~]/.test(trimmed)) return true;
+  if (/^[+\-~]/.test(trimmed)) return true;
   return /^(Foi (?:criado|modificado|removido|observado|detetado)|Application Error:|WER:|SideBySide:)/i.test(
     trimmed
   );
@@ -275,7 +271,7 @@ function extractVmBehaviorCounts(lines: string[]): {
     const t = line.trim();
     if (/^Foi (?:criado|modificado|removido) o ficheiro:/i.test(t)) files++;
     if (/^Foi (?:criado|observado) o processo:/i.test(t)) processes++;
-    if (/^[\+\-~]/.test(t)) registry++;
+    if (/^[+\-~]/.test(t)) registry++;
     if (/Foram observadas (?:diferenças nas conexões|alterações nas conexões)/i.test(t)) {
       network = "alterada";
     }

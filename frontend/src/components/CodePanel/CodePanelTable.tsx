@@ -3,7 +3,7 @@
 
 import React from "react";
 import { ChevronRight, ChevronDown } from "lucide-react";
-import type { DisplayLineRange, FunctionHighlight, Row } from "./types";
+import type { DisplayLineRange, FunctionHighlight } from "./types";
 import type { VirtualSlice } from "./useCodePanelVirtualization";
 import { HighlightedLine } from "./HighlightedLine";
 

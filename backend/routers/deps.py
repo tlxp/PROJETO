@@ -113,7 +113,7 @@ async def read_upload_bytes(file: UploadFile, max_bytes: int) -> bytes:
     return bytes(buf)
 
 
-# --- Leitura segura de ficheiro (inclui fallback a artefactos arquivados em zip) ---
+# --- Leitura segura de ficheiro (inclui fallback a artefatos arquivados em zip) ---
 def read_file_safe(path: str | None, encoding: str = "utf-8", errors: str = "replace") -> str:
     if not path:
         return ""

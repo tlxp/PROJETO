@@ -51,7 +51,7 @@ internal static class LocalArtifactCleanup
 
 
 
-    // --- Estima Local artefactos ---
+    // --- Estima Local artefatos ---
     internal static StorageEstimate EstimateLocalArtifacts()
     {
         var estimate = new StorageEstimate
@@ -104,7 +104,7 @@ internal static class LocalArtifactCleanup
 
 
 
-    // --- Limpa sandbox job artefactos ---
+    // --- Limpa sandbox job artefatos ---
     internal static CleanupSummary CleanupSandboxJobArtifacts()
     {
         var summary = new CleanupSummary();

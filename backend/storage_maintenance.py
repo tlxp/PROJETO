@@ -1,5 +1,5 @@
 # --- Módulo: storage_maintenance ---
-# Estimativa, limpeza, arquivo frio e leitura de artefactos em sandbox_jobs.
+# Estimativa, limpeza, arquivo frio e leitura de artefatos em sandbox_jobs.
 
 from __future__ import annotations
 
@@ -259,7 +259,7 @@ def purge_all_storage() -> dict:
     }
 
 
-# --- Leitura de artefacto texto: out/ normal ou out.zip (caminho relativo a out/) ---
+# --- Leitura de artefato texto: out/ normal ou out.zip (caminho relativo a out/) ---
 def read_text_artifact_from_job(job_id: str, relative_path: str) -> Optional[str]:
     base_dir = Path(config.SANDBOX_JOBS_DIR) / job_id
     out_dir = base_dir / "out"

@@ -23,9 +23,9 @@ public sealed class BenignVmTestPathsTests
 
 
 
-    // --- Artefactos devem estar sob o diretório de trabalho ---
+    // --- Artefatos devem estar sob o diretório de trabalho ---
     [Fact]
-    // --- artefacto caminhos Are Under trabalho pasta ---
+    // --- artefato caminhos Are Under trabalho pasta ---
     public void ArtifactPaths_AreUnderWorkDir()
     {
         Assert.StartsWith(BenignVmTestPaths.WorkDir, BenignVmTestPaths.MarkerPath);

@@ -184,7 +184,7 @@ try {
     $launchLog = Join-Path $workDir "analysis_launch.log"
     $alivePath = Join-Path $workDir "guest_alive.txt"
 
-    # Limpa artefactos de arranques anteriores
+    # Limpa artefatos de arranques anteriores
     try { if (Test-Path -LiteralPath $alivePath) { Remove-Item -LiteralPath $alivePath -Force -ErrorAction SilentlyContinue } } catch { }
     try { if (Test-Path -LiteralPath $launchLog) { Remove-Item -LiteralPath $launchLog -Force -ErrorAction SilentlyContinue } } catch { }
 

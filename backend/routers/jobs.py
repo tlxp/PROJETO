@@ -114,7 +114,7 @@ def _ensure_job_output_dir(job_id: str) -> Path:
     return out_dir
 
 
-# --- Escrita segura de artefacto de texto no disco ---
+# --- Escrita segura de artefato de texto no disco ---
 def _write_text_artifact(path: Path, content: str, *, job_id: str, artifact_label: str) -> None:
     try:
         path.write_text(content, encoding="utf-8", errors="replace")
@@ -122,7 +122,7 @@ def _write_text_artifact(path: Path, content: str, *, job_id: str, artifact_labe
         logger.warning("Falha ao guardar artefato %s para job_id=%s", artifact_label, job_id)
 
 
-# --- Gravação de artefactos estáticos (report, C, IL) ---
+# --- Gravação de artefatos estáticos (report, C, IL) ---
 def _write_static_artifact_files(
     out_dir: Path,
     *,
@@ -421,7 +421,7 @@ async def upload_dynamic_analysis(payload: DynamicAnalysisUpload) -> dict:
     return {"jobId": job_id, "analysisType": analysis_type, "status": job_status.value}
 
 
-# --- Artefacto de trechos obfuscados (obfuscated ou deobfuscated) ---
+# --- Artefato de trechos obfuscados (obfuscated ou deobfuscated) ---
 @router.get("/api/analysis/{job_id}/artifacts/obfuscated_snippets", response_class=PlainTextResponse)
 async def get_obfuscated_snippets_artifact(
     job_id: str,
