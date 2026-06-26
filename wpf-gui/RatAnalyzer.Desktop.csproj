@@ -5,8 +5,12 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <RootNamespace>RatAnalyzer.Desktop</RootNamespace>
+    <AssemblyName>Rat Analyzer</AssemblyName>
+    <Product>Rat Analyzer</Product>
+    <AssemblyTitle>Rat Analyzer</AssemblyTitle>
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app-icon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="RatAnalyzer.Desktop.Tests" />
@@ -17,5 +21,10 @@
     <Content Remove="RatAnalyzer.Desktop.Tests\**" />
     <None Remove="RatAnalyzer.Desktop.Tests\**" />
     <EmbeddedResource Remove="RatAnalyzer.Desktop.Tests\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\app-icon.ico" />
+    <Resource Include="Assets\app-icon.png" />
   </ItemGroup>
 </Project>

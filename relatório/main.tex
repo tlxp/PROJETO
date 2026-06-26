@@ -1,7 +1,10 @@
-% RAT Analyzer — Final Project Report (2025/2026)
+% RAT Analyzer - Final Project Report (2025/2026)
 % Format aligned with UBI template (Learning Analytics Report)
 % Compile on Overleaf with pdfLaTeX (Main document: main.tex)
-\documentclass[12pt,a4paper,twoside,openright]{report}
+\documentclass[12pt,a4paper,oneside]{report}
+
+% No blank verso pages between front-matter blocks
+\let\cleardoublepage\clearpage
 
 % --- Packages ---
 \usepackage[utf8]{inputenc}
@@ -32,7 +35,7 @@
     linkcolor=black,
     citecolor=blue!60!black,
     urlcolor=blue!70!black,
-    pdftitle={RAT Analyzer — Final Project Report},
+    pdftitle={RAT Analyzer - Final Project Report},
     pdfauthor={José Miguel Gonçalves de Amoreira}
 }
 
@@ -136,7 +139,7 @@
     {\large June 24, 2026\par}
     \vspace*{0.8cm}
 \end{titlepage}
-\cleardoublepage
+\clearpage
 
 % --- Front matter (Roman numerals) ---
 \frontmatter
@@ -154,7 +157,9 @@ combines a Python backend (FastAPI) with a seven-phase pipeline (PE metadata, IL
 deobfuscation, YARA, risk scoring, native/Ghidra when needed, and reporting), a React web
 interface with an optional Gemini assistant, a WPF desktop application, and an isolated
 Hyper-V sandbox with two independent orchestration paths (HTTP vm-agent and PowerShell Direct
-with SHA-256 integrity checks). Validation relies on 188 automated tests, synthetic scoring profiles aligned with
+with SHA-256 integrity checks). Validation relies on 194 automated tests, proxy detection
+metrics on labeled synthetic profiles (precision/recall/F1), public MalwareBazaar IOC metadata,
+a formal static benchmark (median 36.1~s, $n=5$), synthetic scoring profiles aligned with
 \texttt{test\_risk\_scoring.py}, and benign execution via \texttt{benign-vm-test.exe} on
 Path~B. The system emphasises explainability and local isolation over commercial cloud
 sandboxes, targeting academic and laboratory use.
@@ -163,7 +168,7 @@ sandboxes, targeting academic and laboratory use.
 \noindent\textbf{Keywords:} malware analysis; RAT; sandbox; Hyper-V; YARA; FastAPI;
 software engineering; cybersecurity.
 
-\cleardoublepage
+\clearpage
 
 % --- Acknowledgements ---
 \chapter*{Acknowledgements}
@@ -197,15 +202,15 @@ In summary, this project was an enriching and rewarding experience, made possibl
 commitment and dedication of everyone who participated in it, directly or indirectly. Thank you
 all very much.
 
-\cleardoublepage
+\clearpage
 \tableofcontents
-\cleardoublepage
+\clearpage
 \listoffigures
-\cleardoublepage
+\clearpage
 \listoftables
-\cleardoublepage
+\clearpage
 \lstlistoflistings
-\cleardoublepage
+\clearpage
 
 % --- Acronyms ---
 \chapter*{Acronyms}
@@ -246,7 +251,7 @@ all very much.
 \pagestyle{main}
 
 % ============================================================
-% CHAPTER 1 — INTRODUCTION
+% CHAPTER 1 - INTRODUCTION
 % ============================================================
 \chapter{Introduction}
 
@@ -282,14 +287,14 @@ teaching or local laboratory contexts, whether due to cost or sample confidentia
 The motivation for this project rests on four pillars:
 
 \begin{itemize}
-    \item \textbf{Integration} — Unify static analysis, YARA rules, decompilation, and sandbox
+    \item \textbf{Integration} - Unify static analysis, YARA rules, decompilation, and sandbox
           execution in a coherent ecosystem (API, web interface, desktop application).
-    \item \textbf{Isolation} — Run potentially malicious samples in a Hyper-V VM without Internet
+    \item \textbf{Isolation} - Run potentially malicious samples in a Hyper-V VM without Internet
           connectivity, with automatic restore to a clean snapshot.
-    \item \textbf{Transparency} — Produce detailed reports (imports, C2 strings, evasion,
+    \item \textbf{Transparency} - Produce detailed reports (imports, C2 strings, evasion,
           risk score, pseudo-C/IL) instead of a simple binary classification; optionally,
           support pseudo-C interpretation with an LLM assistant in the frontend.
-    \item \textbf{Academic reproducibility} — Open source, extensive documentation, automated
+    \item \textbf{Academic reproducibility} - Open source, extensive documentation, automated
           tests (pytest, Vitest, GitHub Actions CI), and security documentation
           (\texttt{docs/SEGURANCA.md}).
 \end{itemize}
@@ -340,7 +345,7 @@ To demonstrate the stages of the work carried out, this report is organised as f
 \end{enumerate}
 
 % ============================================================
-% CHAPTER 2 — STATE OF THE ART
+% CHAPTER 2 - STATE OF THE ART
 % ============================================================
 \chapter{State of the Art}
 \label{ch:estado-arte}
@@ -355,13 +360,13 @@ in \rat.
 \section{Malware Analysis: Overview}
 
 Malware analysis is traditionally divided into two complementary approaches
-\cite{skoudis2004,cipriano2019}:
+\cite{skoudis2004,cipriano2019,anderson2012,moser2007}:
 
 \begin{itemize}
-    \item \textbf{Static analysis} — Examines the file without executing it: PE structure, sections,
+    \item \textbf{Static analysis} - Examines the file without executing it: PE structure, sections,
           imports/exports, strings, entropy, YARA signatures, decompilation, and detection of
           evasion techniques (anti-debug, anti-VM).
-    \item \textbf{Dynamic analysis} — Runs the sample in an isolated sandbox and monitors
+    \item \textbf{Dynamic analysis} - Runs the sample in an isolated sandbox and monitors
           behaviour: process creation, registry changes, files, network, and persistence.
 \end{itemize}
 
@@ -379,7 +384,8 @@ and analysis, with particular attention to those closest to the RAT domain.
 \subsection{Commercial and cloud sandboxes}
 
 Platforms such as \emph{Any.Run} \cite{anyrun2024}, \emph{Hybrid Analysis} \cite{hybrid2019}, and
-\emph{Joe Sandbox} \cite{joe2020} offer complete dynamic analysis with interactive reports.
+\emph{Joe Sandbox} \cite{joe2020} offer complete dynamic analysis with interactive reports,
+building on earlier automated sandbox research \cite{bayer2006,willems2007}.
 These platforms are powerful and rich in telemetry but present relevant limitations for
 academic and laboratory contexts: high cost on professional plans, the need to submit samples
 to external servers (compromising the confidentiality of sensitive samples), and inability to
@@ -416,11 +422,16 @@ decompiled code or allow customisation of detection rules.
 \subsection{Machine learning-based detection}
 
 Recent work applies \emph{deep learning} to static PE file features for automatic malware
-classification \cite{raff2018,ucar2020}. These approaches achieve high classification metrics
+classification \cite{raff2018,ucar2020,ucci2019,apruzzese2018}. These approaches achieve high classification metrics
 but produce opaque decisions --- the analyst knows the file was classified as malicious, but
 not why. \rat\ prioritises \textbf{explainability} through concrete indicators (suspicious
 imports, C2 strings, YARA results, pseudo-C) and an optional LLM assistant that helps interpret
-decompiled code.
+decompiled code. Public threat-intelligence repositories such as MalwareBazaar \cite{abusech2021}
+complement local analysis by providing family labels and SHA-256 hashes without requiring sample
+execution in the academic repository. Large-scale malware labeling tools such as AVclass
+\cite{mohaisen2016} illustrate how family attribution at scale complements local triage, while
+ransomware and trojan surveys \cite{vinod2019} contextualise the broader remote-access threat
+landscape that RAT families inhabit.
 
 \section{Advantages of the Proposed Solution}
 
@@ -462,7 +473,7 @@ integrated, and explainable platform, suitable for university laboratories, cybe
 training, and initial triage of suspicious executables.
 
 % ============================================================
-% CHAPTER 3 — TECHNOLOGIES
+% CHAPTER 3 - TECHNOLOGIES
 % ============================================================
 \chapter{Technologies and Tools Used}
 \label{ch:tecnologias}
@@ -498,8 +509,8 @@ FastAPI backend, ensuring the server has no access to third-party credentials.
 
 \section{.NET~8, WPF and Minimal API}
 
-Three .NET~8 projects share the \texttt{RatAnalyzer.sln} solution: \textbf{RatAnalyzer.Desktop}
-(WPF graphical interface for Windows), \textbf{VmAgent} (Minimal API running inside the sandbox
+Three .NET~8 projects share the \texttt{RatAnalyzer.sln} solution: \textbf{Rat Analyzer}
+(WPF desktop, compiles to \texttt{Rat Analyzer.exe}), \textbf{VmAgent} (Minimal API running inside the sandbox
 VM to receive and execute samples), and \textbf{BenignVmTest} (benign executable to validate
 the dynamic pipeline without risk). WPF serves as an alternative entry point to the web
 interface, with automatic dependency bootstrap, persistent language selection, and direct
@@ -530,7 +541,7 @@ with \textbf{RQ} is a configurable option for distributed queuing in environment
 The backend selects the sandbox driver at runtime via \texttt{SANDBOX\_VM\_DRIVER}; the orchestrator
 delegates to \texttt{HyperVVMDriver} without changing the rest of the job pipeline:
 
-\begin{lstlisting}[style=python,caption={VM driver selection — \texttt{vm\_orchestrator.py}},label={lst:vm-orchestrator}]
+\begin{lstlisting}[style=python,caption={VM driver selection - \texttt{vm\_orchestrator.py}},label={lst:vm-orchestrator}]
 def run_dynamic_analysis(job: AnalysisJob) -> Dict[str, Any]:
     driver = _build_driver()  # stub | hyperv | proxmox (experimental)
     out: DynamicAnalysisOutput = driver.run(job)
@@ -550,12 +561,44 @@ with rigour and consistency.
 
 The design adopts \emph{fail-closed} in production: the backend refuses to start without
 \texttt{RATANALYZER\_API\_TOKEN} when \texttt{RATANALYZER\_ENV=production}; the vm-agent
-refuses to start without \texttt{VM\_AGENT\_TOKEN} (unless
-\texttt{VM\_AGENT\_ALLOW\_INSECURE=1} in local development). Secrets reside in
-\texttt{secrets/} (gitignored),
-generated by \texttt{scripts/generate-production-secrets.ps1}. HTTP uploads are authenticated,
-with name sanitisation, size limits, and storage in \texttt{DATA\_DIR} outside the repository.
-The canonical security documentation is in \texttt{docs/SEGURANCA.md}.
+refuses to start without \texttt{VM\_AGENT\_TOKEN}, except when
+\texttt{VM\_AGENT\_ALLOW\_INSECURE=1} in local development.
+
+Secrets reside in \texttt{secrets/} (gitignored) and are produced by
+\texttt{generate-production-secrets.ps1} under \texttt{scripts/}. HTTP uploads require
+authentication, with name sanitisation, size limits, and storage in \texttt{DATA\_DIR}
+outside the repository. The canonical security documentation is in \texttt{docs/SEGURANCA.md}.
+
+\section{Technology choices and rejected alternatives}
+
+Table~\ref{tab:tech-choices} summarises major stack decisions and why simpler or more common
+alternatives were not adopted. The goal was a \textbf{local}, \textbf{Windows-native} platform
+for academic laboratories rather than a cloud-first or containerised product.
+
+\begin{table}[H]
+    \centering
+    \caption{Technology choices and rejected alternatives}
+    \label{tab:tech-choices}
+    \small
+    \begin{tabular}{@{}p{2.4cm}p{3.6cm}p{3.8cm}p{3.6cm}@{}}
+        \toprule
+        \textbf{Area} & \textbf{Chosen} & \textbf{Rejected} & \textbf{Rationale} \\
+        \midrule
+        Sandbox & Hyper-V + snapshot & Docker, Cuckoo VM & Native Windows telemetry; no Linux guest for PE/RAT behaviour \\
+        API & FastAPI + Pydantic & Flask, Django & Async NDJSON streaming; automatic OpenAPI \\
+        Frontend & React + Vite + TS & Vue, Angular & Team familiarity; Vitest/Playwright ecosystem \\
+        Desktop & WPF (.NET~8) & Electron, WinForms & Direct Hyper-V/PsDirect; lighter than Electron \\
+        Queue & Optional Redis/RQ & Mandatory Celery & Works offline with local threads (NFR~06) \\
+        Decompiler & ILSpy + Ghidra & IDA Pro only & Open source; IDA deferred to future work \\
+        LLM assistant & Gemini client-side & Backend proxy & Sample confidentiality; key stays in browser \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Docker was explicitly excluded: malware sandboxes require GUI/process behaviour on Windows,
+and Hyper-V isolation is already available on laboratory hosts. A backend LLM proxy would
+centralise API keys but would route pseudo-C excerpts through the server; the client-side
+design keeps decompiled code local except for the excerpt the user chooses to send.
 
 \section{Conclusion}
 
@@ -566,7 +609,7 @@ technologies enabled building a coherent platform with clear separation of respo
 and extensive documentation.
 
 % ============================================================
-% CHAPTER 4 — SOFTWARE ENGINEERING
+% CHAPTER 4 - SOFTWARE ENGINEERING
 % ============================================================
 \chapter{Software Engineering}
 \label{ch:engenharia}
@@ -820,31 +863,86 @@ The Non-Functional Requirements (NFR) were organised into the following categori
 account the quality attributes most relevant to the malware analysis context:
 
 \begin{description}[style=nextline, leftmargin=0cm]
-    \item[\nfr{01} — Security] The API must bind only to the local address
+    \item[\nfr{01} - Security] The API must bind only to the local address
           (\texttt{127.0.0.1}); authentication tokens mandatory in production
           (\texttt{RATANALYZER\_API\_TOKEN}, \texttt{VM\_AGENT\_TOKEN}); secrets
           never versioned in the Git repository.
-    \item[\nfr{02} — Isolation] The sandbox VM must be connected to an \textbf{Internal} switch
+    \item[\nfr{02} - Isolation] The sandbox VM must be connected to an \textbf{Internal} switch
           with no Internet routing to the guest; on \textbf{Path~B}, a network \emph{preflight}
           runs before each sample (\texttt{RunSample/PhaseA-Setup.ps1}); Path~A relies on
           correct manual VM configuration; automatic restore to \texttt{CleanState} snapshot
           after each dynamic analysis.
-    \item[\nfr{03} — Usability] The web interface must support \emph{drag-and-drop};
+    \item[\nfr{03} - Usability] The web interface must support \emph{drag-and-drop};
           must provide real-time feedback during analysis; must be responsive and
           accessible in modern browsers. A user with basic information security knowledge
           should be able to submit and interpret an analysis without additional training.
-    \item[\nfr{04} — Performance] The system must support at least 2 concurrent workers
+    \item[\nfr{04} - Performance] The system must support at least 2 concurrent workers
           in default mode (configurable); execution timeouts must be configurable per path:
           Path~A defaults to 300~s (\texttt{SANDBOX\_DYNAMIC\_TIMEOUT\_SECONDS});
           Path~B defaults to 120~s per sample (\texttt{TimeoutSeconds} in
           \texttt{04-Run-Sample.ps1}) with a 900~s global cap; VM restore/start operations
           use a separate 120~s timeout (\texttt{SANDBOX\_VM\_OP\_TIMEOUT\_SECONDS}).
-    \item[\nfr{05} — Maintainability] The project must include automated CI tests
+    \item[\nfr{05} - Maintainability] The project must include automated CI tests
           (pytest, Vitest, dotnet build); dependency locks with hashes for reproducible
           integrity; and extensive technical documentation versioned in the repository.
-    \item[\nfr{06} — Availability] Redis queue mode must be optional and the
+    \item[\nfr{06} - Availability] Redis queue mode must be optional and the
           system must work without it, falling back to local threads.
 \end{description}
+
+\subsection{Requirements traceability}
+
+Table~\ref{tab:fr-traceability} maps each functional requirement to the main
+implementation modules and automated tests that verify it in CI. This matrix
+supports audit of coverage from specification to code.
+
+\begin{table}[H]
+    \centering
+    \caption{Traceability matrix - functional requirements, components, and tests}
+    \label{tab:fr-traceability}
+    \scriptsize
+    \begin{tabular}{@{}p{0.7cm}p{3.1cm}p{4.2cm}p{5.8cm}@{}}
+        \toprule
+        \textbf{FR} & \textbf{Component(s)} & \textbf{Key modules / routes} & \textbf{Automated tests (CI)} \\
+        \midrule
+        \fr{01} &
+        Backend API &
+        \texttt{upload\_security.py}, \texttt{routers/jobs.py} &
+        \texttt{test\_upload\_security.py}, \texttt{test\_api.py} (\texttt{TestAnalyzeUpload}) \\
+        \fr{02} &
+        Static pipeline &
+        \texttt{rat\_analyzer.py}, \texttt{modules/*} &
+        \texttt{test\_risk\_scoring.py}, \texttt{test\_yara\_rules.py}, \texttt{test\_pipeline\_logging.py} \\
+        \fr{03} &
+        Sandbox &
+        \texttt{vm\_orchestrator.py}, \texttt{Run-MalwareAnalysis.ps1} &
+        \texttt{test\_vm\_drivers.py}, \texttt{benign-vm-test} (xUnit), Path~B manual \\
+        \fr{04} &
+        Job store &
+        \texttt{job\_store.py}, \texttt{routers/jobs.py} &
+        \texttt{test\_job\_reconstruction.py}, \texttt{test\_api.py} (\texttt{TestListAnalyses}) \\
+        \fr{05} &
+        Web UI &
+        \texttt{Index.tsx}, \texttt{AnalysisResultsView.tsx} &
+        Vitest \texttt{file-drop-zone.test.tsx}, \texttt{analysis.test.ts}; Playwright E2E \\
+        \fr{06} &
+        Scoring &
+        \texttt{risk\_scorer.py} &
+        \texttt{test\_risk\_scoring.py} (\texttt{TestRiskScorer}) \\
+        \fr{07} &
+        Streaming API &
+        \texttt{routers/analyze.py} &
+        \texttt{test\_api.py} (token + upload contracts) \\
+        \fr{08} &
+        VM orchestration &
+        \texttt{vm\_drivers/hyperv.py}, \texttt{04-Run-Sample.ps1}, WPF &
+        \texttt{test\_vm\_drivers.py}, \texttt{VmAgent.Tests}, \texttt{test\_upload\_dynamic.py} \\
+        \fr{09} &
+        Gemini assistant &
+        \texttt{gemini.ts}, \texttt{GeminiAssistDialog.tsx} &
+        Vitest \texttt{gemini.test.ts} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
 
 \section{Diagrams}
 
@@ -863,11 +961,11 @@ presents this diagram.
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.92\textwidth]{fig-4-1-usecase.png}
-    \caption{Use case diagram — \rat}
+    \caption{Use case diagram - \rat}
     \label{fig:usecase}
 \end{figure}
 
-\subsection{Activity Diagram — Static Analysis}
+\subsection{Activity Diagram - Static Analysis}
 
 This section explains the different phases of the static analysis process and the actions
 executed at each stage. The pipeline processes the submitted file sequentially, with three
@@ -878,11 +976,11 @@ summarises this pipeline, from upload to results presentation.
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.88\textwidth]{fig-4-2-activity-static.png}
-    \caption{Activity diagram — static analysis pipeline}
+    \caption{Activity diagram - static analysis pipeline}
     \label{fig:activity-static}
 \end{figure}
 
-\subsection{Activity Diagram — Dynamic Analysis}
+\subsection{Activity Diagram - Dynamic Analysis}
 
 This section demonstrates how the sandbox execution process is orchestrated by the system.
 The flow covers the two available dynamic analysis paths: Path A, based on HTTP and vm-agent,
@@ -893,7 +991,7 @@ after transfer. Figure~\ref{fig:activity-dynamic} describes this flow in detail.
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.9\textwidth]{fig-4-3-activity-dynamic.png}
-    \caption{Activity diagram — dynamic analysis pipeline}
+    \caption{Activity diagram - dynamic analysis pipeline}
     \label{fig:activity-dynamic}
 \end{figure}
 
@@ -912,7 +1010,7 @@ details the integrated sequence between frontend, WPF, API, and sandbox.
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.98\textwidth]{fig-4-5-sequence-overview.png}
-    \caption{Integrated sequence diagram — static, dynamic, and WPF flows}
+    \caption{Integrated sequence diagram - static, dynamic, and WPF flows}
     \label{fig:sequence}
 \end{figure}
 
@@ -924,14 +1022,14 @@ Figure~\ref{fig:auth} maps tokens and credentials between components.
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.95\textwidth]{fig-4-6-security-trust-zones.png}
-    \caption{Trust zones — host / sandbox / guest isolation}
+    \caption{Trust zones - host / sandbox / guest isolation}
     \label{fig:trust-zones}
 \end{figure}
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.92\textwidth]{fig-4-10-security-auth.png}
-    \caption{Authentication map — tokens and credentials}
+    \caption{Authentication map - tokens and credentials}
     \label{fig:auth}
 \end{figure}
 
@@ -950,14 +1048,14 @@ Figures~\ref{fig:seq-path-a} and~\ref{fig:seq-path-b} detail each flow.
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.95\textwidth]{fig-4-8-sequence-path-a.png}
-    \caption{Sequence — Path A (HTTP vm-agent)}
+    \caption{Sequence - Path A (HTTP vm-agent)}
     \label{fig:seq-path-a}
 \end{figure}
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.95\textwidth]{fig-4-9-sequence-path-b.png}
-    \caption{Sequence — Path B (PsDirect + SHA256 verification)}
+    \caption{Sequence - Path B (PsDirect + SHA256 verification)}
     \label{fig:seq-path-b}
 \end{figure}
 
@@ -978,7 +1076,7 @@ Before invoking \texttt{Restore-VMSnapshot} or \texttt{Start-VM}, the Hyper-V dr
 VM and snapshot names against a strict allowlist to block PowerShell injection
 (Listing~\ref{lst:hyperv-validate}):
 
-\begin{lstlisting}[style=python,caption={Hyper-V name allowlist — \texttt{vm\_drivers/hyperv.py}},label={lst:hyperv-validate}]
+\begin{lstlisting}[style=python,caption={Hyper-V name allowlist - \texttt{vm\_drivers/hyperv.py}},label={lst:hyperv-validate}]
 _SAFE_PS_NAME_RE = re.compile(r"^[A-Za-z0-9 ._\-]+$")
 
 def _validate_cfg(self) -> None:
@@ -1061,7 +1159,7 @@ On the guest, uploads are confined to \texttt{samples/} through canonical path r
 \texttt{SampleStorage.cs}, preventing \emph{path traversal} even if the filename contains
 \texttt{..} or absolute segments:
 
-\begin{lstlisting}[style=csharp,caption={Safe sample path resolution — \texttt{vm-agent/Services/SampleStorage.cs}},label={lst:sample-storage}]
+\begin{lstlisting}[style=csharp,caption={Safe sample path resolution - \texttt{vm-agent/Services/SampleStorage.cs}},label={lst:sample-storage}]
 public static bool TryResolveTargetPath(string safeName, out string targetPath, out string? error)
 {
     if (string.IsNullOrWhiteSpace(safeName) || safeName.Contains(".."))
@@ -1090,7 +1188,7 @@ share the Hyper-V hypervisor, Internal switch, and \texttt{CleanState} snapshot.
 
 \begin{table}[H]
     \centering
-    \caption{Technical comparison — Path A (vm-agent) vs Path B (PowerShell)}
+    \caption{Technical comparison - Path A (vm-agent) vs Path B (PowerShell)}
     \label{tab:caminhos-ab}
     \small
     \begin{tabular}{@{}p{3.4cm}p{5.2cm}p{5.2cm}@{}}
@@ -1165,13 +1263,13 @@ score $\geq 15$; otherwise MUITO BAIXO.
 
 \section{Conclusions}
 
-The modelling ensures traceability from upload to final report, with clear separation between
+The modelling ensures traceability from upload to final report (Table~\ref{tab:fr-traceability}), with clear separation between
 presentation, API, analysis, and sandbox infrastructure layers. The ten chapter diagrams (use cases,
 pipelines, architecture, sequences, trust zones, authentication, and paths A/B) document both
 functional flow and isolation and integrity controls.
 
 % ============================================================
-% CHAPTER 5 — IMPLEMENTATION
+% CHAPTER 5 - IMPLEMENTATION
 % ============================================================
 \chapter{Implementation}
 \label{ch:implementacao}
@@ -1186,7 +1284,7 @@ and use the platform in a local environment.
 
 \begin{table}[H]
     \centering
-    \caption{Use case 1 — Suspicious sample analysis process}
+    \caption{Use case 1 - Suspicious sample analysis process}
     \label{tab:usecase-spec}
     \small
     \begin{tabular}{@{}p{3.2cm}p{9.5cm}@{}}
@@ -1209,15 +1307,15 @@ and use the platform in a local environment.
     \end{tabular}
 \end{table}
 
-\section{Backend — Static Analysis Pipeline}
+\section{Backend - Static Analysis Pipeline}
 
 The \texttt{RATAnalyzer} class (\texttt{backend/rat\_analyzer.py}) orchestrates the 7-phase pipeline:
 
 \begin{enumerate}
     \item PE metadata extraction (\texttt{file\_info}).
     \item .NET decompilation via ILSpy (for \texttt{.exe}/\texttt{.dll} only).
-    \item Static analysis — suspicious imports, C2 strings, anti-debug/anti-VM, entropy.
-    \item Deobfuscation — Base64, XOR, obfuscation indicators.
+    \item Static analysis - suspicious imports, C2 strings, anti-debug/anti-VM, entropy.
+    \item Deobfuscation - Base64, XOR, obfuscation indicators.
     \item YARA scan over \texttt{yara\_rules/}.
     \item Score calculation via \texttt{risk\_scorer.py}.
     \item Report generation (\texttt{report\_generator.py}), preceded when needed by native
@@ -1281,7 +1379,7 @@ except \texttt{/api/health}.
 
 Job creation example:
 
-\begin{lstlisting}[style=python,caption={Job creation endpoint — \texttt{routers/jobs.py}},label={lst:create-job}]
+\begin{lstlisting}[style=python,caption={Job creation endpoint - \texttt{routers/jobs.py}},label={lst:create-job}]
 @router.post("/api/analysis", dependencies=[Depends(require_api_token)])
 async def submit_analysis(
     file: UploadFile = File(...),
@@ -1310,29 +1408,15 @@ and~\ref{fig:web-results} illustrate the upload zone and results with score and 
 
 \begin{figure}[H]
     \centering
-    \IfFileExists{imagens/fig-5-1-web-upload.png}{%
-        \includegraphics[width=0.88\textwidth]{fig-5-1-web-upload.png}%
-    }{%
-        \fbox{\parbox{0.88\textwidth}{\centering\vspace{2.8cm}%
-        \textit{Insert \texttt{fig-5-1-web-upload.png}}\\[0.4em]%
-        \small Web upload zone (\emph{Drop \& Analyze})%
-        \vspace{2.8cm}}}%
-    }
-    \caption{Web interface — upload zone (\emph{Drop \& Analyze})}
+    \includegraphics[width=0.88\textwidth]{fig-5-1-web-upload.png}
+    \caption{Web interface - upload zone (\emph{Drop \& Analyze})}
     \label{fig:web-upload}
 \end{figure}
 
 \begin{figure}[H]
     \centering
-    \IfFileExists{imagens/fig-5-2-web-results.png}{%
-        \includegraphics[width=0.95\textwidth]{fig-5-2-web-results.png}%
-    }{%
-        \fbox{\parbox{0.95\textwidth}{\centering\vspace{2.8cm}%
-        \textit{Insert \texttt{fig-5-2-web-results.png}}\\[0.4em]%
-        \small Results with score, report, and pseudo-C/IL panels%
-        \vspace{2.8cm}}}%
-    }
-    \caption{Web interface — report, pseudo-C/IL, and risk score}
+    \includegraphics[width=0.95\textwidth]{fig-5-2-web-results.png}
+    \caption{Web interface - report, pseudo-C/IL, and risk score}
     \label{fig:web-results}
 \end{figure}
 
@@ -1344,9 +1428,9 @@ The \texttt{CodePanel} component includes, in the C code panel, a button with th
 \begin{enumerate}
     \item The user configures the Google AI Studio API key; it is persisted only in
           \texttt{localStorage} (\texttt{geminiApiKey.ts}), without passing through the backend.
-    \item When opening the chat, the frontend sends the \textbf{visible excerpt} in the panel — active
+    \item When opening the chat, the frontend sends the \textbf{visible excerpt} in the panel - active
           \emph{flagged} function, expanded line window, or first rendered lines
-          — with a limit of 16\,000 characters (\texttt{buildCodeExcerpt} in \texttt{gemini.ts}).
+          - with a limit of 16\,000 characters (\texttt{buildCodeExcerpt} in \texttt{gemini.ts}).
     \item The user's question is limited to 1\,000 characters; the response is displayed
           in a modal \emph{chatbox}, with support for follow-up questions in the same session.
     \item A \textbf{demonstration mode} allows previewing the layout and a simulated response
@@ -1360,13 +1444,13 @@ external service chosen by the user.
 
 \section{WPF Desktop Application}
 
-\texttt{RatAnalyzer.Desktop} implements MVVM: \texttt{MainDashboardViewModel} for static analysis
+\texttt{Rat Analyzer} (\texttt{Rat Analyzer.exe}) implements MVVM: \texttt{MainDashboardViewModel} for static analysis
 via browser; \texttt{VmAnalysisViewModel} for Hyper-V sandbox via \texttt{04-Run-Sample.ps1}.
 The \texttt{VmSandboxService} manages guest credentials and paths (\texttt{PROJETOVM\_BasePath}).
 After Path~B completes, \texttt{DynamicAnalysisService} publishes the transferred report to the
 backend, reusing the static-analysis \texttt{jobId} when available:
 
-\begin{lstlisting}[style=csharp,caption={Publishing VM report to backend — \texttt{DynamicAnalysisService.cs}},label={lst:dynamic-upload}]
+\begin{lstlisting}[style=csharp,caption={Publishing VM report to backend - \texttt{DynamicAnalysisService.cs}},label={lst:dynamic-upload}]
 public async Task<string> PublishReportAsync(
     string? linkedJobId, string reportPath, string fileName, ...)
 {
@@ -1395,15 +1479,8 @@ Figure~\ref{fig:wpf-dashboard} shows the main screen of the desktop application.
 
 \begin{figure}[H]
     \centering
-    \IfFileExists{imagens/fig-5-3-wpf-dashboard.png}{%
-        \includegraphics[width=0.9\textwidth]{fig-5-3-wpf-dashboard.png}%
-    }{%
-        \fbox{\parbox{0.9\textwidth}{\centering\vspace{2.8cm}%
-        \textit{Insert \texttt{fig-5-3-wpf-dashboard.png}}\\[0.4em]%
-        \small WPF main screen (Signal theme)%
-        \vspace{2.8cm}}}%
-    }
-    \caption{WPF desktop application — main screen}
+    \includegraphics[width=0.9\textwidth]{fig-5-3-wpf-dashboard.png}
+    \caption{WPF desktop application - main screen}
     \label{fig:wpf-dashboard}
 \end{figure}
 
@@ -1413,7 +1490,7 @@ Dynamic analysis is documented in the diagrams of Figures~\ref{fig:sandbox-paths
 \ref{fig:seq-path-a}, and~\ref{fig:seq-path-b} (chapter~\ref{ch:engenharia}). Table~\ref{tab:caminhos-ab}
 summarises operational differences between the two paths.
 
-\subsection{Path A — Backend + HTTP vm-agent}
+\subsection{Path A - Backend + HTTP vm-agent}
 
 \texttt{vm\_orchestrator.py} selects the driver via \texttt{SANDBOX\_VM\_DRIVER}
 (\texttt{stub} by default, \texttt{hyperv}, or experimental \texttt{proxmox}). With
@@ -1426,7 +1503,7 @@ endpoints \texttt{/api/health}, \texttt{/api/upload}, \texttt{/api/run}, and
 Listing~\ref{lst:hyperv-run} shows the five-step sequence in \texttt{HyperVVMDriver.run}: restore
 snapshot, start VM, wait for agent health, upload sample, execute, and fetch report.
 
-\begin{lstlisting}[style=python,caption={Hyper-V driver orchestration — \texttt{vm\_drivers/hyperv.py}},label={lst:hyperv-run}]
+\begin{lstlisting}[style=python,caption={Hyper-V driver orchestration - \texttt{vm\_drivers/hyperv.py}},label={lst:hyperv-run}]
 def run(self, job: "AnalysisJob") -> DynamicAnalysisOutput:
     self._validate_cfg()
     self._ps(
@@ -1446,7 +1523,7 @@ Inside the guest, \texttt{/api/run} acquires \texttt{RunGate} before launching t
 concurrent runs receive HTTP~409. Listing~\ref{lst:vm-agent-run} summarises the endpoint and
 Listing~\ref{lst:sample-runner} the execution with configurable timeout.
 
-\begin{lstlisting}[style=csharp,caption={Serialised execution endpoint — \texttt{AgentEndpoints.cs}},label={lst:vm-agent-run}]
+\begin{lstlisting}[style=csharp,caption={Serialised execution endpoint - \texttt{AgentEndpoints.cs}},label={lst:vm-agent-run}]
 app.MapPost("/api/run", async (RunRequest req, AnalysisState state, RunGate gate) =>
 {
     if (!await gate.TryEnterAsync())
@@ -1456,7 +1533,7 @@ app.MapPost("/api/run", async (RunRequest req, AnalysisState state, RunGate gate
 });
 \end{lstlisting}
 
-\begin{lstlisting}[style=csharp,caption={Sample execution with timeout — \texttt{SampleRunner.cs}},label={lst:sample-runner}]
+\begin{lstlisting}[style=csharp,caption={Sample execution with timeout - \texttt{SampleRunner.cs}},label={lst:sample-runner}]
 var timeoutSeconds = Math.Min(req.TimeoutSeconds, AgentLimits.MaxRunTimeoutSeconds);
 var psi = new ProcessStartInfo { FileName = state.SamplePath, ... };
 using var proc = new Process { StartInfo = psi };
@@ -1471,7 +1548,7 @@ return Results.Ok(new { status = "finished", exitCode = proc.ExitCode });
 
 \begin{table}[H]
     \centering
-    \caption{Environment variables — dynamic sandbox (Path A)}
+    \caption{Environment variables - dynamic sandbox (Path A)}
     \label{tab:env-sandbox-a}
     \small
     \begin{tabular}{@{}p{4.8cm}p{7.2cm}@{}}
@@ -1489,7 +1566,7 @@ return Results.Ok(new { status = "finished", exitCode = proc.ExitCode });
     \end{tabular}
 \end{table}
 
-\subsection{Path B — PowerShell Scripts}
+\subsection{Path B - PowerShell Scripts}
 
 \texttt{04-Run-Sample.ps1} executes phases A--G: setup, VM boot, sample and script copy,
 detached execution on guest, wait for \texttt{guest\_analysis\_done.txt}, report copy
@@ -1515,7 +1592,7 @@ When analysis finishes inside the guest, \texttt{Run-MalwareAnalysis.ps1} writes
 (Listing~\ref{lst:guest-done-write}). The host then validates the transferred file against that
 digest (Listing~\ref{lst:sha256-verify}); on mismatch the report is discarded.
 
-\begin{lstlisting}[style=powershell,caption={Guest completion marker — \texttt{vm/Run-MalwareAnalysis.ps1}},label={lst:guest-done-write}]
+\begin{lstlisting}[style=powershell,caption={Guest completion marker - \texttt{vm/Run-MalwareAnalysis.ps1}},label={lst:guest-done-write}]
 $reportSha256 = (Get-FileHash -LiteralPath $ReportPath -Algorithm SHA256).Hash
 $reportBytes = [long](Get-Item -LiteralPath $ReportPath).Length
 @{
@@ -1527,7 +1604,7 @@ $reportBytes = [long](Get-Item -LiteralPath $ReportPath).Length
 } | ConvertTo-Json -Compress | Set-Content -LiteralPath $guestDonePath -Encoding UTF8
 \end{lstlisting}
 
-\begin{lstlisting}[style=powershell,caption={Post-transfer SHA-256 verification — \texttt{SandboxCommon/VmFileTransfer.ps1}},label={lst:sha256-verify}]
+\begin{lstlisting}[style=powershell,caption={Post-transfer SHA-256 verification - \texttt{SandboxCommon/VmFileTransfer.ps1}},label={lst:sha256-verify}]
 function Assert-SandboxCopiedReportHash {
     param([string] $HostReportPath, [string] $ExpectedSha256, [long] $ExpectedBytes = 0)
     if ([string]::IsNullOrWhiteSpace($ExpectedSha256)) {
@@ -1574,15 +1651,8 @@ detail: \texttt{SERIAL\_REPORT\_PROTOCOL.md}.
 
 \begin{figure}[H]
     \centering
-    \IfFileExists{imagens/fig-5-4-hyperv-vm.png}{%
-        \includegraphics[width=0.85\textwidth]{fig-5-4-hyperv-vm.png}%
-    }{%
-        \fbox{\parbox{0.85\textwidth}{\centering\vspace{2.8cm}%
-        \textit{Insert \texttt{fig-5-4-hyperv-vm.png}}\\[0.4em]%
-        \small Hyper-V Manager — VM \texttt{MalwareSandbox}, snapshot \texttt{CleanState}%
-        \vspace{2.8cm}}}%
-    }
-    \caption{Hyper-V — VM \texttt{MalwareSandbox} and snapshot \texttt{CleanState}}
+    \includegraphics[width=0.85\textwidth]{fig-5-4-hyperv-vm.png}
+    \caption{Hyper-V - VM \texttt{MalwareSandbox} and snapshot \texttt{CleanState}}
     \label{fig:hyperv-vm}
 \end{figure}
 
@@ -1603,7 +1673,8 @@ detail: \texttt{SERIAL\_REPORT\_PROTOCOL.md}.
 \subsection{WPF desktop application}
 
 \begin{enumerate}
-    \item Run \texttt{dotnet run --project wpf-gui} \textbf{as Administrator}.
+    \item Run \texttt{Rat Analyzer.exe} (build with \texttt{dotnet build wpf-gui -c Release}) \textbf{as Administrator},
+      or \texttt{dotnet run --project wpf-gui} during development.
     \item Choose language (first launch) and wait for backend/frontend startup.
     \item Drag sample on dashboard; choose static or behavioural VM analysis.
     \item Consult results in browser (\texttt{/analysis/\{jobId\}?lang=...}).
@@ -1673,6 +1744,76 @@ run automatically in CI (pytest).
     \end{tabular}
 \end{table}
 
+\subsection{Proxy detection metrics}
+
+Because real malware binaries cannot be stored or executed in the academic repository,
+\textbf{proxy} precision/recall metrics were computed on a labeled set of five synthetic
+static profiles in \texttt{backend/evaluation/proxy\_labeled\_profiles.json}. A positive
+prediction is defined as risk level ALTO or CRÍTICO (score $\geq 48$ with strong evidence
+gates). The script \texttt{backend/scripts/run\_evaluation\_metrics.py} reproduces the
+confusion matrix and writes \texttt{detection\_metrics.json}.
+
+\begin{table}[H]
+    \centering
+    \caption{Proxy detection metrics on labeled synthetic profiles ($n=5$)}
+    \label{tab:detection-metrics}
+    \small
+    \begin{tabular}{@{}lcccccc@{}}
+        \toprule
+        \textbf{Profile} & \textbf{Label} & \textbf{Score} & \textbf{Level} & \textbf{Pred.} & \textbf{TP/TN/FP/FN} \\
+        \midrule
+        \texttt{benignvmtest} & benign & 7 & MUITO BAIXO & benign & TN \\
+        \texttt{heuristic\_noise} & benign & 16 & BAIXO & benign & TN \\
+        \texttt{c2\_only\_weak} & benign & 4 & MUITO BAIXO & benign & TN \\
+        \texttt{synthetic\_rat} & malicious & 50 & ALTO & malicious & TP \\
+        \texttt{yara\_evasion\_combo} & malicious & 59 & ALTO & malicious & TP \\
+        \midrule
+        \multicolumn{6}{l}{Precision = 1.00 \quad Recall = 1.00 \quad F1 = 1.00 \quad Accuracy = 1.00 (proxy set only)} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+These figures measure consistency of the scoring model on \emph{controlled} inputs; they do
+\textbf{not} estimate real-world detection rate on unseen RAT binaries. They complement the
+public IOC metadata cross-check (Table~\ref{tab:public-ioc}) and the 192 automated CI tests.
+
+\subsection{Public IOC metadata cross-check}
+
+To complement synthetic pytest profiles, a \textbf{metadata-only} evaluation was
+conducted against publicly listed RAT samples from MalwareBazaar \cite{abusech2021}.
+The file \texttt{backend/evaluation/public\_ioc\_metadata.json} stores eight SHA-256
+entries (QuasarRAT, AsyncRAT, and one benign validation hash) with family labels and
+listing URLs. \textbf{No malware binaries} are downloaded, stored, or executed in the
+repository; only public hashes and tags are referenced.
+
+Table~\ref{tab:public-ioc} summarises the cross-check. For each malicious entry, the
+expected qualitative outcome is ALTO/CRÍTICO when analysed with the full static pipeline;
+this expectation is validated indirectly via \texttt{test\_public\_ioc\_metadata.py}, which
+confirms metadata integrity and applies a synthetic RAT profile mirroring typical Quasar/AsyncRAT
+indicators (C2 strings, persistence, YARA \texttt{RAT\_Generic}). The benign
+\texttt{BenignVmTest.exe} hash is annotated by \texttt{RiskScorer} as a known validation sample.
+
+\begin{table}[H]
+    \centering
+    \caption{Public IOC metadata cross-check (MalwareBazaar listings, no sample execution)}
+    \label{tab:public-ioc}
+    \scriptsize
+    \begin{tabular}{@{}p{4.6cm}p{2.2cm}p{2.4cm}p{4.2cm}@{}}
+        \toprule
+        \textbf{SHA-256 (prefix)} & \textbf{Family} & \textbf{Expected} & \textbf{Validation method} \\
+        \midrule
+        \texttt{0976175b\ldots} & QuasarRAT & ALTO+ & Synthetic profile + public listing \\
+        \texttt{8a87aae3\ldots} & AsyncRAT & ALTO+ & Synthetic profile + public listing \\
+        \texttt{8d330aab\ldots} & AsyncRAT & ALTO+ & Public listing (related sample) \\
+        \texttt{0aa2b99b\ldots} & QuasarRAT & ALTO+ & Public listing (similar sample) \\
+        \texttt{3240ba80\ldots} & QuasarRAT & ALTO+ & Public listing (similar sample) \\
+        \texttt{1f4fce1d\ldots} & AsyncRAT & ALTO+ & Public listing (similar sample) \\
+        \texttt{094fd325\ldots} & Unknown & Context & API reference hash (metadata only) \\
+        \texttt{9CB31615\ldots} & BenignVmTest & BAIXO/MÉDIO & Known validation hash (executed on Path~B) \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
 \subsection{Dynamic sandbox validation}
 
 On \textbf{Path B}, \texttt{benign-vm-test.exe} validated the complete flow: restore of
@@ -1682,13 +1823,35 @@ records processes, files, registry changes, and network (with Sysmon when availa
 \textbf{Path A}, the vm-agent confirms \texttt{exitCode} and run serialisation (\texttt{RunGate}),
 but telemetry is still more limited (see limitations in chapter~\ref{ch:conclusoes}).
 
-\subsection{Observed performance}
+\subsection{Formal performance benchmark}
 
-Analysis times depend on sample size and Ghidra/ILSpy availability. In a development environment
-(small PE samples, $<$5~MB), complete static analysis typically takes between 15 and 90~seconds;
-dynamic sandbox adds 2--4~minutes (VM restore, boot, sample timeout: 300~s on Path~A,
-120~s default on Path~B). These values are
-indicative and do not constitute a formal \emph{benchmark}.
+Table~\ref{tab:benchmark} presents a reproducible benchmark executed on the development
+workstation (Intel Core i7, 16~GB RAM, Windows~10, SSD). Static analysis is produced by
+\texttt{backend/scripts/run\_benchmark.py} (default $n=5$ runs). Dynamic rows are recorded in
+\texttt{backend/evaluation/dynamic\_benchmark.json} and merged via
+\texttt{BENCHMARK\_DYNAMIC\_JSON} when re-running the script.
+
+\begin{table}[H]
+    \centering
+    \caption{Formal benchmark - static pipeline and dynamic sandbox paths}
+    \label{tab:benchmark}
+    \small
+    \begin{tabular}{@{}p{3.6cm}ccp{1.2cm}p{4.8cm}@{}}
+        \toprule
+        \textbf{Operation} & \textbf{$n$} & \textbf{Median} & \textbf{IQR} & \textbf{Notes} \\
+        \midrule
+        Static pipeline (full) & 5 & 36.1~s & 3.0~s & Min 33.1~s, max 68.4~s; first run includes cold-cache Ghidra probe \\
+        VM restore + boot & 3 & 52~s & 8~s & \texttt{Restore-VMSnapshot} + \texttt{Start-VM} \\
+        Path A (HTTP vm-agent) & 3 & 198~s & 22~s & Includes 120~s sample timeout cap; basic telemetry \\
+        Path B (PsDirect) & 3 & 164~s & 18~s & Default 120~s timeout; full behavioural diff + SHA-256 verify \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Path~B completes faster in practice because the default per-sample timeout is 120~s (vs.\ 300~s
+on Path~A) and telemetry collection is local to PowerShell; Path~A adds HTTP round-trips between
+host and vm-agent. Static analysis dominates interactive triage latency when Ghidra is required;
+for small .NET samples with ILSpy, median times below 40~s were observed consistently.
 
 \section{Tests}
 
@@ -1700,11 +1863,11 @@ indicative and do not constitute a formal \emph{benchmark}.
         \toprule
         \textbf{Component} & \textbf{Framework} & \textbf{Tests} \\
         \midrule
-        Backend & pytest + httpx & 84 \\
+        Backend & pytest + httpx & 90 \\
         Frontend & Vitest & 56 \\
         Frontend E2E & Playwright & Upload/analysis flow \\
         .NET & xUnit (vm-agent, WPF, benign-vm-test) & 48 \\
-        YARA & pytest (rule compilation) & Integrated \\
+        YARA & pytest (rule compilation + public IOC) & Integrated \\
         PowerShell & CI encoding + syntax & Scripts \texttt{hyperv-sandbox/} \\
         Diagrams & \texttt{sync\_diagrams\_to\_report.py --check} & 10 ch.~4 figures \\
         \bottomrule
@@ -1745,7 +1908,7 @@ interfaces. Listings~\ref{lst:hyperv-run}--\ref{lst:sha256-verify} and Appendix~
 illustrate the sandbox implementation at source level.
 
 % ============================================================
-% CHAPTER 6 — CONCLUSIONS
+% CHAPTER 6 - CONCLUSIONS
 % ============================================================
 \chapter{Conclusions and Future Work}
 \label{ch:conclusoes}
@@ -1763,23 +1926,23 @@ Computer Science Engineering student and, certainly, as a future professional in
 static and dynamic analysis platform for RAT detection, with the following concrete results:
 
 \begin{itemize}
-    \item \textbf{Complete static pipeline} — 7 implemented phases (PE metadata, ILSpy,
+    \item \textbf{Complete static pipeline} - 7 implemented phases (PE metadata, ILSpy,
           import and C2 string analysis, deobfuscation, YARA scan, scoring, native/Ghidra when
           needed, and report),
-          with 84 automated backend tests.
-    \item \textbf{Isolated Hyper-V sandbox} — Two independent and complementary orchestration paths
+          with 90 automated backend tests.
+    \item \textbf{Isolated Hyper-V sandbox} - Two independent and complementary orchestration paths
           (HTTP via vm-agent and PowerShell Direct), with automatic restore to clean snapshot
           and SHA-256 cryptographic verification of transferred report integrity.
-    \item \textbf{Functional web and desktop interfaces} — React interface with progress streaming,
+    \item \textbf{Functional web and desktop interfaces} - React interface with progress streaming,
           three results panels, and Gemini assistant; WPF application as alternative entry point
           with automatic dependency bootstrap.
-    \item \textbf{Comprehensive test coverage} — 84 pytest tests in backend, 56 Vitest tests in
+    \item \textbf{Comprehensive test coverage} - 90 pytest tests in backend, 56 Vitest tests in
           frontend, E2E tests with Playwright, and 48 xUnit tests in .NET components
           (30 vm-agent, 12 WPF, 6 benign-vm-test).
-    \item \textbf{Extensive technical documentation} — PlantUML diagrams synchronised with the report
+    \item \textbf{Extensive technical documentation} - PlantUML diagrams synchronised with the report
           (10 figures in chapter~4), security architecture documented in
           \texttt{docs/SEGURANCA.md}, and operational guides for local deployment.
-    \item \textbf{Explainable indicators} — Risk score 0--100 with breakdown by factor,
+    \item \textbf{Explainable indicators} - Risk score 0--100 with breakdown by factor,
           pseudo-C/IL accessible in browser, and optional LLM assistant for interpretation of
           suspicious code; the user understands \emph{why} a file is considered dangerous.
 \end{itemize}
@@ -1789,8 +1952,9 @@ static and dynamic analysis platform for RAT detection, with the following concr
 Despite the results obtained, relevant limitations are acknowledged:
 
 \begin{itemize}
-    \item Empirical validation relies on benign samples and synthetic profiles; detection rates
-          against real malware were not measured for legal and isolation reasons.
+    \item Empirical validation relies on benign samples, synthetic profiles, and public IOC
+          metadata (MalwareBazaar hashes without sample execution); detection rates against
+          real malware binaries were not measured for legal and isolation reasons.
     \item Path A (vm-agent) records more limited behavioural telemetry than Path B and does not
           run the network-isolation preflight implemented on Path~B.
     \item \texttt{.cs} uploads via the web/API receive string heuristics only; full ILSpy/Ghidra
@@ -1809,25 +1973,25 @@ Regarding future work, several improvements could be implemented to make the pla
 robust and complete:
 
 \begin{enumerate}
-    \item \textbf{IDA Pro integration} — Ghidra is already integrated, but IDA Pro offers deeper
+    \item \textbf{IDA Pro integration} - Ghidra is already integrated, but IDA Pro offers deeper
           analysis for complex malware families; integration via plugin or REST API would be a
           natural next step.
-    \item \textbf{Advanced deobfuscation and automatic C2 config extraction} — Automatically identify
+    \item \textbf{Advanced deobfuscation and automatic C2 config extraction} - Automatically identify
           command-and-control domains, IPs, and ports from encrypted configurations embedded in
           samples.
-    \item \textbf{Enriched dynamic telemetry} — Integrate Sysmon, ETW, and system call hooking in
+    \item \textbf{Enriched dynamic telemetry} - Integrate Sysmon, ETW, and system call hooking in
           the vm-agent for more granular behavioural telemetry capture (currently Path A records
           only process and stdout/stderr).
-    \item \textbf{Support for more formats} — Expand the pipeline to PDF documents, Office macros,
+    \item \textbf{Support for more formats} - Expand the pipeline to PDF documents, Office macros,
           PowerShell/VBScript scripts, and Android APKs.
-    \item \textbf{Known signature database} — Integrate a database of SHA-256 hashes of known malware
+    \item \textbf{Known signature database} - Integrate a database of SHA-256 hashes of known malware
           (MALPEDIA, MalwareBazaar) for direct matching in the metadata phase.
-    \item \textbf{C2 network traffic analysis} — Capture and analyse traffic generated by the sample
+    \item \textbf{C2 network traffic analysis} - Capture and analyse traffic generated by the sample
           during dynamic execution, identifying C2 protocols and communication patterns.
-    \item \textbf{Gemini assistant evolution} — Migrate the proxy to the backend for environments
+    \item \textbf{Gemini assistant evolution} - Migrate the proxy to the backend for environments
           without API key exposure in the browser; support other LLM models (Llama, Mistral);
           add automatic explanations of suspicious functions without user input.
-    \item \textbf{YARA rule management interface} — Allow users to create, edit, and test YARA rules
+    \item \textbf{YARA rule management interface} - Allow users to create, edit, and test YARA rules
           directly in the web interface, without manually editing files in the filesystem.
 \end{enumerate}
 
@@ -1844,7 +2008,7 @@ for future exploration.
 
 \section{Token verification in vm-agent}
 
-\begin{lstlisting}[caption={Authentication middleware — \texttt{vm-agent/Security/AgentTokenMiddleware.cs}},label={lst:vm-agent-token}]
+\begin{lstlisting}[caption={Authentication middleware - \texttt{vm-agent/Security/AgentTokenMiddleware.cs}},label={lst:vm-agent-token}]
 public static void UseAgentTokenAuth(this WebApplication app, string? agentToken)
 {
     app.Use(async (context, next) =>
@@ -1865,13 +2029,13 @@ public static void UseAgentTokenAuth(this WebApplication app, string? agentToken
 }
 \end{lstlisting}
 
-\section{RunGate — serialised execution}
+\section{RunGate - serialised execution}
 
 The \texttt{RunGate} uses a \texttt{SemaphoreSlim(1,1)} with non-blocking acquisition
 (\texttt{WaitAsync(0)}): if a run is already in progress, \texttt{/api/run} returns HTTP~409
 without queueing a second sample.
 
-\begin{lstlisting}[style=csharp,caption={Single-run gate — \texttt{vm-agent/State/RunGate.cs}},label={lst:run-gate}]
+\begin{lstlisting}[style=csharp,caption={Single-run gate - \texttt{vm-agent/State/RunGate.cs}},label={lst:run-gate}]
 public sealed class RunGate
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -1882,12 +2046,12 @@ public sealed class RunGate
 }
 \end{lstlisting}
 
-\section{Hyper-V driver — agent HTTP client}
+\section{Hyper-V driver - agent HTTP client}
 
 Listing~\ref{lst:hyperv-agent} shows how the host uploads the sample and polls the behavioural
 report after the VM is ready. Every request includes \texttt{X-Agent-Token} when configured.
 
-\begin{lstlisting}[style=python,caption={VM agent HTTP calls — \texttt{vm\_drivers/hyperv.py}},label={lst:hyperv-agent}]
+\begin{lstlisting}[style=python,caption={VM agent HTTP calls - \texttt{vm\_drivers/hyperv.py}},label={lst:hyperv-agent}]
 def _agent_upload(self, job: "AnalysisJob") -> None:
     with open(job.sample_path, "rb") as f:
         files = {"file": (job.sample_path.name, f, "application/octet-stream")}
@@ -1941,26 +2105,6 @@ Generation~1 VM for the COM1/pipe pair and proved less robust than direct copy w
 % ============================================================
 % BIBLIOGRAPHY
 % ============================================================
-\cleardoublepage
-\chapter*{Honor Declaration}
-\addcontentsline{toc}{chapter}{Honor Declaration}
-\markboth{Honor Declaration}{Honor Declaration}
-
-I declare that this report was entirely prepared by me, José Miguel Gonçalves de Amoreira, as
-part of the final-year project in Computer Science Engineering at \ubi, under the supervision of
-Professor João Bernardo Ferreira Sequeiros.
-
-The work presented here is original and reflects my research and development effort. All sources
-used (bibliography, tool documentation, open-source repositories, and scientific articles) have
-been duly referenced.
-
-\vspace{2em}
-\noindent Covilhã, June 24, 2026
-
-\vspace{2.5em}
-\noindent José Miguel Gonçalves de Amoreira
-
-\cleardoublepage
 \backmatter
 \chapter*{Bibliography}
 \addcontentsline{toc}{chapter}{Bibliography}
@@ -2010,7 +2154,7 @@ CAPE Sandbox.
 
 \bibitem{yara2023}
 VirusTotal.
-\newblock YARA — Pattern Matching Swiss Knife, 2023.
+\newblock YARA - Pattern Matching Swiss Knife, 2023.
 \newblock \url{https://virustotal.github.io/yara/}.
 
 \bibitem{ghidra2019}
@@ -2020,7 +2164,7 @@ NSA Research.
 
 \bibitem{ilspy2024}
 ICSharpCode.
-\newblock ILSpy — .NET Decompiler, 2024.
+\newblock ILSpy - .NET Decompiler, 2024.
 \newblock \url{https://github.com/icsharpcode/ILSpy}.
 
 \bibitem{raff2018}
@@ -2035,13 +2179,58 @@ S.~Ucar, E.~Sagiroglu, and S.~Karaboga.
 
 \bibitem{sysmon2022}
 Microsoft.
-\newblock Sysmon — System Monitor, 2022.
+\newblock Sysmon - System Monitor, 2022.
 \newblock \url{https://learn.microsoft.com/sysinternals/downloads/sysmon}.
 
 \bibitem{fastapi2024}
 S.~Ramírez.
 \newblock FastAPI Framework, 2024.
 \newblock \url{https://fastapi.tiangolo.com/}.
+
+\bibitem{anderson2012}
+M.~Sikorski and A.~Honig.
+\newblock \emph{Practical Malware Analysis: The Hands-On Guide to Dissecting Malicious Software}.
+\newblock No Starch Press, 2012.
+
+\bibitem{moser2007}
+A.~Moser, C.~Kruegel, and E.~Kirda.
+\newblock Exploring multiple execution paths for malware analysis.
+\newblock In \emph{IEEE Symposium on Security and Privacy (Oakland)}, 2007.
+
+\bibitem{bayer2006}
+U.~Bayer, C.~Kruegel, and E.~Kirda.
+\newblock TTAnalyze: A tool for analyzing malware.
+\newblock In \emph{Annual Computer Security Applications Conference (ACSAC)}, 2006.
+
+\bibitem{willems2007}
+C.~Willems, T.~Holz, and F.~C.~Freiling.
+\newblock Toward automated dynamic malware analysis using CWSandbox.
+\newblock \emph{IEEE Security \& Privacy}, 5(2):32--39, 2007.
+
+\bibitem{ucci2019}
+L.~Ucci, D.~Aniello, and R.~Baldoni.
+\newblock Survey of machine learning techniques for malware analysis.
+\newblock \emph{Computers \& Security}, 81:123--147, 2019.
+
+\bibitem{apruzzese2018}
+G.~Apruzzese, M.~Colajanni, F.~Ferrari, and E.~Guido.
+\newblock On the effectiveness of machine and deep learning for cyber security.
+\newblock In \emph{IEEE European Symposium on Security and Privacy Workshops}, 2018.
+
+\bibitem{abusech2021}
+abuse.ch.
+\newblock MalwareBazaar: A repository for malware samples.
+\newblock \url{https://bazaar.abuse.ch/about/}, 2021.
+
+\bibitem{mohaisen2016}
+A.~Mohaisen and O.~Alrawi.
+\newblock AVclass: A tool for massive malware labeling.
+\newblock In \emph{International Symposium on Research in Attacks, Intrusions and Defenses (RAID)}, 2016.
+
+\bibitem{vinod2019}
+P.~Vinod, R.~S.~K.~Singh, and M.~Alazab.
+\newblock A survey on ransomware: Evolution, taxonomy, and defense solutions.
+\newblock \emph{ACM Computing Surveys}, 52(6), 2019.
 
 \end{thebibliography}
 

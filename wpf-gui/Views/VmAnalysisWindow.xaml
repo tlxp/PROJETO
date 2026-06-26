@@ -4,6 +4,7 @@
         xmlns:views="clr-namespace:RatAnalyzer.Desktop.Views"
         xmlns:loc="clr-namespace:RatAnalyzer.Desktop.Localization"
         Title="Análise comportamental em VM"
+        Icon="/Assets/app-icon.ico"
         Width="920"
         Height="640"
         MinWidth="700"

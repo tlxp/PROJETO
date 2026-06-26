@@ -1,0 +1,57 @@
+{
+  "methodology": "Proxy metrics on labeled synthetic static profiles (no real malware binaries). Positive prediction: risk level ALTO or CRITICO.",
+  "profiles_path": "backend\\evaluation\\proxy_labeled_profiles.json",
+  "n_profiles": 5,
+  "confusion_matrix": {
+    "tp": 2,
+    "tn": 3,
+    "fp": 0,
+    "fn": 0
+  },
+  "precision": 1.0,
+  "recall": 1.0,
+  "f1": 1.0,
+  "accuracy": 1.0,
+  "profiles": [
+    {
+      "id": "benignvmtest",
+      "label": "benign",
+      "score": 7,
+      "level": "MUITO BAIXO",
+      "predicted_malicious": false,
+      "correct": true
+    },
+    {
+      "id": "heuristic_noise",
+      "label": "benign",
+      "score": 16,
+      "level": "BAIXO",
+      "predicted_malicious": false,
+      "correct": true
+    },
+    {
+      "id": "synthetic_rat",
+      "label": "malicious",
+      "score": 50,
+      "level": "ALTO",
+      "predicted_malicious": true,
+      "correct": true
+    },
+    {
+      "id": "c2_only_weak",
+      "label": "benign",
+      "score": 4,
+      "level": "MUITO BAIXO",
+      "predicted_malicious": false,
+      "correct": true
+    },
+    {
+      "id": "yara_evasion_combo",
+      "label": "malicious",
+      "score": 59,
+      "level": "ALTO",
+      "predicted_malicious": true,
+      "correct": true
+    }
+  ]
+}

@@ -1,12 +1,12 @@
-' --- Diagrama: mapa de autenticação e tokens ---
+' --- Diagram: authentication map and tokens ---
 @startuml
-title Mapa de autenticação — tokens e credenciais
+title Authentication map — tokens and credentials
 skinparam shadowing false
 skinparam componentStyle rectangle
 
-actor "Analista" as U
+actor "Analyst" as U
 
-package "Cliente" #E8F5E9 {
+package "Client" #E8F5E9 {
   [Frontend React\nVITE_API_TOKEN] as FE
   [WPF Desktop] as WPF
 }
@@ -18,7 +18,7 @@ package "API host" #E3F2FD {
 
 package "Sandbox" #FFE0B2 {
   [vm-agent\nVM_AGENT_TOKEN] as AGENT
-  [Scripts Hyper-V\nPROJETOVM_Guest*] as PS
+  [Hyper-V Scripts\nPROJETOVM_Guest*] as PS
 }
 
 database "secrets/\nbackend.env" as SEC
@@ -26,39 +26,39 @@ database "secrets/\nbackend.env" as SEC
 U --> FE
 U --> WPF
 
-' *Token API partilhado entre clientes e backend*
+' *API token shared between clients and backend*
 FE --> API : X-API-Token
 WPF --> API : X-API-Token
-WPF --> PS : credenciais guest
-API --> UP : validar uploads
-API --> AGENT : X-Agent-Token\n(driver hyperv)
+WPF --> PS : guest credentials
+API --> UP : validate uploads
+API --> AGENT : X-Agent-Token\n(hyperv driver)
 
-' *Fonte única de segredos em secrets/backend.env*
+' *Single secrets source in secrets/backend.env*
 SEC ..> API : RATANALYZER_API_TOKEN
 SEC ..> FE : build-time token
 SEC ..> AGENT : VM_AGENT_TOKEN
 SEC ..> PS : PROJETOVM_GuestPassword
 
 note right of API
-  **Fail-closed** em produção:
+  **Fail-closed** in production:
   RATANALYZER_ENV=production
-  exige token válido
+  requires valid token
 end note
 
 note bottom of AGENT
-  Comparação em tempo constante
+  Constant-time comparison
   (TokenComparer.cs)
 end note
 
 note bottom of PS
   PowerShell Direct —
-  sem token HTTP;
-  password obrigatória
-  (exceto flag dev)
+  no HTTP token;
+  password required
+  (except dev flag)
 end note
 
-' *Driver stub não executa amostras nem requer auth*
-rectangle "Driver stub" as STUB #F5F5F5
-API ..> STUB : sem auth\n(não executa amostras)
+' *Stub driver does not execute samples or require auth*
+rectangle "Stub driver" as STUB #F5F5F5
+API ..> STUB : no auth\n(does not execute samples)
 
 @enduml

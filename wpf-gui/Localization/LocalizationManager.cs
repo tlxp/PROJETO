@@ -80,7 +80,7 @@ public static class LocalizationManager
 
     private static Dictionary<string, string> Pt() => new()
     {
-        [LocKeys.AppTitle] = "RAT Analyzer - VM Sandbox",
+        [LocKeys.AppTitle] = AppConstants.AppDisplayName,
         [LocKeys.LanguageSection] = "IDIOMA",
         [LocKeys.LanguageTitle] = "Escolha o idioma",
         [LocKeys.LanguageSubtitle] = "Pode alterar mais tarde no painel principal.",
@@ -132,12 +132,12 @@ public static class LocalizationManager
         [LocKeys.MsgResultsBrowserFailed] = "Não foi possível abrir a página de resultados no navegador.\n\n{0}",
         [LocKeys.MsgMaintenanceFailed] = "Não foi possível abrir a janela de manutenção.\n\n{0}",
         [LocKeys.MsgJobIdFormat] = "Job ID: {0}",
-        [LocKeys.MsgAdminRequired] = "Esta operação requer direitos de administrador.\n\nFeche a aplicação e execute-a como Administrador:\n• Clique direito em RatAnalyzer.Desktop.exe → \"Executar como administrador\"\n• Ou abra o PowerShell como Administrador e execute: dotnet run",
+        [LocKeys.MsgAdminRequired] = $"Esta operação requer direitos de administrador.\n\nFeche a aplicação e execute-a como Administrador:\n• Clique direito em {AppConstants.ExeFileName} → \"Executar como administrador\"\n• Ou abra o PowerShell como Administrador e execute: dotnet run",
         [LocKeys.MsgAdminRequiredTitle] = "Elevação necessária",
         [LocKeys.MsgStartupFailed] = "Falha no arranque do ambiente.",
         [LocKeys.MsgStartupFailedDetail] = "{0}\n\nPode iniciar manualmente o backend (pasta 'backend') e o frontend (pasta 'frontend').",
         [LocKeys.MsgStartupFailedTitle] = "Erro ao iniciar ambiente",
-        [LocKeys.MsgElevationRequired] = "O RAT Analyzer deve ser executado como Administrador (Hyper-V, scripts PowerShell e outras funcionalidades).\n\nClique direito em RatAnalyzer.Desktop.exe → \"Executar como administrador\"\nou abra o PowerShell como Administrador e execute: dotnet run",
+        [LocKeys.MsgElevationRequired] = $"{AppConstants.AppDisplayName} deve ser executado como Administrador (Hyper-V, scripts PowerShell e outras funcionalidades).\n\nClique direito em {AppConstants.ExeFileName} → \"Executar como administrador\"\nou abra o PowerShell como Administrador e execute: dotnet run",
         [LocKeys.DialogPickFileTitle] = "Selecionar ficheiro para análise",
         [LocKeys.DialogPickFileFilter] = "Executáveis e ficheiros|*.exe;*.dll;*.zip|Todos os ficheiros (*.*)|*.*",
         [LocKeys.VmWindowTitle] = "Análise comportamental em VM",
@@ -179,7 +179,7 @@ public static class LocalizationManager
 
     private static Dictionary<string, string> En() => new()
     {
-        [LocKeys.AppTitle] = "RAT Analyzer - VM Sandbox",
+        [LocKeys.AppTitle] = AppConstants.AppDisplayName,
         [LocKeys.LanguageSection] = "LANGUAGE",
         [LocKeys.LanguageTitle] = "Choose your language",
         [LocKeys.LanguageSubtitle] = "You can change this later from the main dashboard.",
@@ -231,12 +231,12 @@ public static class LocalizationManager
         [LocKeys.MsgResultsBrowserFailed] = "Could not open the results page in the browser.\n\n{0}",
         [LocKeys.MsgMaintenanceFailed] = "Could not open the maintenance window.\n\n{0}",
         [LocKeys.MsgJobIdFormat] = "Job ID: {0}",
-        [LocKeys.MsgAdminRequired] = "This operation requires administrator rights.\n\nClose the app and run as Administrator:\n• Right-click RatAnalyzer.Desktop.exe → \"Run as administrator\"\n• Or open PowerShell as Administrator and run: dotnet run",
+        [LocKeys.MsgAdminRequired] = $"This operation requires administrator rights.\n\nClose the app and run as Administrator:\n• Right-click {AppConstants.ExeFileName} → \"Run as administrator\"\n• Or open PowerShell as Administrator and run: dotnet run",
         [LocKeys.MsgAdminRequiredTitle] = "Elevation required",
         [LocKeys.MsgStartupFailed] = "Environment startup failed.",
         [LocKeys.MsgStartupFailedDetail] = "{0}\n\nYou can start the backend ('backend' folder) and frontend ('frontend' folder) manually.",
         [LocKeys.MsgStartupFailedTitle] = "Startup error",
-        [LocKeys.MsgElevationRequired] = "RAT Analyzer must be run as Administrator (Hyper-V, PowerShell scripts and other features).\n\nRight-click RatAnalyzer.Desktop.exe → \"Run as administrator\"\nor open PowerShell as Administrator and run: dotnet run",
+        [LocKeys.MsgElevationRequired] = $"{AppConstants.AppDisplayName} must be run as Administrator (Hyper-V, PowerShell scripts and other features).\n\nRight-click {AppConstants.ExeFileName} → \"Run as administrator\"\nor open PowerShell as Administrator and run: dotnet run",
         [LocKeys.DialogPickFileTitle] = "Select file for analysis",
         [LocKeys.DialogPickFileFilter] = "Executables and archives|*.exe;*.dll;*.zip|All files (*.*)|*.*",
         [LocKeys.VmWindowTitle] = "Behavioral VM analysis",

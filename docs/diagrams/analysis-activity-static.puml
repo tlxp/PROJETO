@@ -1,28 +1,28 @@
-' --- Diagrama: pipeline de análise estática ---
+' --- Diagram: static analysis pipeline ---
 @startuml
-title Pipeline de análise estática — RAT Analyzer
+title Static analysis pipeline — RAT Analyzer
 
 start
-:Upload ficheiro (.exe / .dll / .cs);
-:Validar tipo e tamanho;
+:Upload file (.exe / .dll / .cs);
+:Validate type and size;
 
-if (Ficheiro válido?) then (sim)
-  :Extrair metadados PE;
-  ' *Descompilador escolhido pelo tipo de assembly*
-  if (Assembly .NET?) then (sim)
-    :Descompilar com ILSpy (C# / IL);
-  else (não)
-    :Descompilar com Ghidra (pseudo-C);
+if (Valid file?) then (yes)
+  :Extract PE metadata;
+  ' *Decompiler chosen by assembly type*
+  if (.NET assembly?) then (yes)
+    :Decompile with ILSpy (C# / IL);
+  else (no)
+    :Decompile with Ghidra (pseudo-C);
   endif
-  :Análise estática\n(imports, strings C2, evasão, entropia);
-  :Deobfuscação (Base64, XOR);
-  :Scan YARA (yara_rules/);
-  :Calcular score de risco;
-  :Gerar relatório (JSON + texto);
-  :Apresentar resultados no frontend;
+  :Static analysis\n(imports, C2 strings, evasion, entropy);
+  :Deobfuscation (Base64, XOR);
+  :YARA scan (yara_rules/);
+  :Calculate risk score;
+  :Generate report (JSON + text);
+  :Present results in frontend;
   stop
-else (não)
-  :Devolver erro de validação;
+else (no)
+  :Return validation error;
   stop
 endif
 

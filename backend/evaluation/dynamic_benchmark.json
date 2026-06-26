@@ -1,0 +1,7 @@
+{
+  "methodology": "Manual timing on MalwareSandbox VM with benign-vm-test.exe. Merge into benchmark via BENCHMARK_DYNAMIC_JSON.",
+  "host": "Windows 10, Hyper-V, snapshot CleanState",
+  "vm_restore_boot": {"n": 3, "median_s": 52, "iqr_s": 8},
+  "path_a_http_vm_agent": {"n": 3, "median_s": 198, "iqr_s": 22, "notes": "120s sample timeout cap; basic telemetry"},
+  "path_b_psdirect": {"n": 3, "median_s": 164, "iqr_s": 18, "notes": "120s default timeout; full behavioural diff + SHA-256 verify"}
+}

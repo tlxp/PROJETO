@@ -8,6 +8,9 @@ using RatAnalyzer.Desktop.Localization;
 // --- URLs, tokens e utilitários HTTP partilhados ---
 internal static class AppConstants
 {
+    public const string AppDisplayName = "Rat Analyzer";
+    public const string ExeFileName = "Rat Analyzer.exe";
+
     // --- Constantes de URL ---
     public const string ApiBaseUrl = "http://127.0.0.1:8000";
     public const string FrontendUrl = "http://localhost:8080";

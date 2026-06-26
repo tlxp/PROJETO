@@ -1,56 +1,56 @@
-' --- Diagrama: sequência integrada (estática + dinâmica + WPF) ---
+' --- Diagram: integrated sequence (static + dynamic + WPF) ---
 @startuml
-title Sequência integrada — RAT Analyzer (resumida)
+title Integrated sequence — RAT Analyzer (summary)
 
 autonumber
 skinparam responseMessageBelowArrow true
 
-actor "Utilizador" as U
+actor "User" as U
 participant "Frontend React" as FE
 participant "WPF Desktop" as WPF
 participant "API FastAPI" as API
 participant "Jobs" as JOBS
 participant "RAT Analyzer" as RAT
 participant "VM Orchestrator" as VMO
-participant "Driver VM" as DRV
+participant "VM Driver" as DRV
 participant "vm-agent" as AGENT
 database "SQLite +\nsandbox_jobs" as DB
 
-group Análise estática (streaming)
-  U -> FE : Carregar ficheiro
+group Static analysis (streaming)
+  U -> FE : Load file
   FE -> API : POST /api/analyze_stream
-  API -> RAT : Pipeline estática
-  RAT --> API : Resultado + logs NDJSON
-  API --> FE : Progresso e relatório final
+  API -> RAT : Static pipeline
+  RAT --> API : Result + NDJSON logs
+  API --> FE : Progress and final report
 end
 
-group Job dinâmico ou combinado
-  U -> FE : Carregar + modo dynamic/both
+group Dynamic or combined job
+  U -> FE : Load file + dynamic/both mode
   FE -> API : POST /api/analysis
   API -> JOBS : create_job
-  JOBS -> DB : estado queued/running
-  JOBS -> VMO : pipeline dinâmica
-  ' *Driver real ou stub conforme configuração*
+  JOBS -> DB : state queued/running
+  JOBS -> VMO : dynamic pipeline
+  ' *Real or stub driver depending on configuration*
   alt hyperv / proxmox
-    VMO -> DRV : driver real
+    VMO -> DRV : real driver
     DRV -> AGENT : upload, run, report
-    AGENT --> DRV : comportamento
+    AGENT --> DRV : behaviour
   else stub
-    DRV --> VMO : resultado sintético
+    DRV --> VMO : synthetic result
   end
   JOBS -> DB : dynamicResult
   loop polling
     FE -> API : GET /api/analysis/{jobId}
-    API -> DB : ler estado
-    API --> FE : resultados
+    API -> DB : read state
+    API --> FE : results
   end
 end
 
 group WPF → browser
-  U -> WPF : Drag-and-drop + análise
-  WPF -> API : análise + publicar job
-  API -> DB : guardar jobId
-  WPF -> FE : abrir /resultados?jobId=...
+  U -> WPF : Drag-and-drop + analysis
+  WPF -> API : analysis + publish job
+  API -> DB : store jobId
+  WPF -> FE : open /analysis?jobId=...
 end
 
 @enduml

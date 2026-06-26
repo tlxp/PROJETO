@@ -4,6 +4,7 @@
         xmlns:local="clr-namespace:RatAnalyzer.Desktop.Views"
         xmlns:loc="clr-namespace:RatAnalyzer.Desktop.Localization"
         Title="Manutenção de armazenamento"
+        Icon="/Assets/app-icon.ico"
         Width="780"
         Height="540"
         MinWidth="640"

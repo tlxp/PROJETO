@@ -1,6 +1,8 @@
 ﻿// --- Módulo: IMainDashboardDialogs.cs ---
 using System;
 
+using RatAnalyzer.Desktop.Infrastructure;
+
 namespace RatAnalyzer.Desktop.ViewModels;
 
 // --- Diálogos e navegação do dashboard principal — implementado pela view WPF ---
@@ -8,7 +10,7 @@ public interface IMainDashboardDialogs
 {
     string? PickAnalysisFile();
 
-    void ShowInfo(string message, string title = "RAT Analyzer");
+    void ShowInfo(string message, string title = AppConstants.AppDisplayName);
 
     void ShowError(string message, string title);
 

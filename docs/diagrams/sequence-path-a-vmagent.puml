@@ -1,45 +1,45 @@
-' --- Diagrama: sequência Caminho A (vm-agent HTTP) ---
+' --- Diagram: Path A sequence (vm-agent HTTP) ---
 @startuml
-title Sequência — Caminho A (vm-agent HTTP)
+title Sequence — Path A (vm-agent HTTP)
 autonumber
 skinparam responseMessageBelowArrow true
 
-actor "Utilizador" as U
+actor "User" as U
 participant "Frontend" as FE
 participant "API FastAPI" as API
 participant "VM Orchestrator" as VMO
-participant "Driver hyperv" as DRV
+participant "hyperv driver" as DRV
 participant "Hyper-V host" as HV
 participant "vm-agent" as AGENT
 database "sandbox_jobs" as DB
 
-U -> FE : submeter amostra (dynamic/both)
+U -> FE : submit sample (dynamic/both)
 FE -> API : POST /api/analysis\nX-API-Token
 API -> DB : create_job (queued)
 API --> FE : jobId
 
-API -> VMO : pipeline dinâmica
-' *Restore snapshot e arranque da VM isolada*
+API -> VMO : dynamic pipeline
+' *Restore snapshot and start isolated VM*
 VMO -> DRV : restore + start VM
 DRV -> HV : Restore-VMSnapshot CleanState
 DRV -> HV : Start-VM
-DRV -> AGENT : GET /health\nX-Agent-Token
+DRV -> AGENT : GET /api/health\nX-Agent-Token
 
-' *Ciclo upload → run → report via HTTP*
-DRV -> AGENT : POST /samples/upload
-AGENT --> DRV : sampleId
+' *Upload → run → report cycle via HTTP*
+DRV -> AGENT : POST /api/upload
+AGENT --> DRV : uploaded
 
-DRV -> AGENT : POST /samples/{id}/run\n(timeout)
-AGENT -> AGENT : executar amostra\nisolada na guest
-AGENT --> DRV : comportamento JSON
+DRV -> AGENT : POST /api/run\n(timeout)
+AGENT -> AGENT : execute sample\nisolated in guest
+AGENT --> DRV : behaviour JSON
 
 DRV -> HV : Stop-VM + restore snapshot
 VMO -> DB : dynamicResult (completed)
 
 loop polling
   FE -> API : GET /api/analysis/{jobId}
-  API -> DB : ler estado
-  API --> FE : relatório comportamental
+  API -> DB : read state
+  API --> FE : behavioural report
 end
 
 @enduml

@@ -1,49 +1,49 @@
-' --- Diagrama: zonas de confiança (host, sandbox, guest) ---
+' --- Diagram: trust zones (host, sandbox, guest) ---
 @startuml
-title Zonas de confiança — RAT Analyzer
+title Trust zones — RAT Analyzer
 skinparam shadowing false
 skinparam packageStyle rectangle
 
 cloud "Internet" as NET #FFCDD2
 
-package "Zona host (operador)" #E8F5E9 {
+package "Host zone (operator)" #E8F5E9 {
   [Frontend :8080] as WEB
   [Backend API :8000] as API
   [WPF Desktop] as WPF
-  [Scripts Hyper-V\nhyperv-sandbox] as PS
+  [Hyper-V Scripts\nhyperv-sandbox] as PS
 }
 
-package "Rede interna sandbox\n(switch Internal Hyper-V)" #E3F2FD {
+package "Internal sandbox network\n(Hyper-V Internal switch)" #E3F2FD {
   [vm-agent :5000] as VMA
 }
 
-package "Zona guest (não confiável)" #FFE0B2 {
-  [Amostra malware] as SAMPLE
+package "Guest zone (untrusted)" #FFE0B2 {
+  [Malware sample] as SAMPLE
   [Run-MalwareAnalysis.ps1] as VMPS
 }
 
-' *Autenticação por token entre camadas*
+' *Token authentication between layers*
 WEB --> API : X-API-Token
 WPF --> API : X-API-Token
-WPF --> PS : orquestração local
-API --> VMA : driver hyperv\nX-Agent-Token
+WPF --> PS : local orchestration
+API --> VMA : hyperv driver\nX-Agent-Token
 PS --> VMPS : PsDirect +\nSHA256
 VMA --> SAMPLE : upload / run
-VMPS --> SAMPLE : execução isolada
+VMPS --> SAMPLE : isolated execution
 
-' *Guest sem acesso à Internet*
-NET ..> SAMPLE : bloqueado
-NET ..> VMPS : bloqueado
+' *Guest has no Internet access*
+NET ..> SAMPLE : blocked
+NET ..> VMPS : blocked
 
 note right of API
-  Tokens e credenciais
-  permanecem no host
+  Tokens and credentials
+  remain on the host
 end note
 
 note bottom of SAMPLE
-  Sem Internet;
-  snapshot CleanState
-  antes de cada run
+  No Internet;
+  CleanState snapshot
+  before each run
 end note
 
 @enduml

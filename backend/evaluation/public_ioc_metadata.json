@@ -1,0 +1,63 @@
+{
+  "source": "abuse.ch MalwareBazaar (public listings, metadata only)",
+  "retrieved_utc": "2026-06-26",
+  "notes": "SHA-256 hashes and family labels from public MalwareBazaar sample pages. No malware binaries are stored or executed in this repository.",
+  "samples": [
+    {
+      "sha256": "0976175b7e0c9271c5184581534a744dae6b4d81ec7df93c2544e83e9d391601",
+      "family": "QuasarRAT",
+      "tags": ["exe", "QuasarRAT", "Malpedia"],
+      "file_type": "exe",
+      "listing_url": "https://bazaar.abuse.ch/sample/0976175b7e0c9271c5184581534a744dae6b4d81ec7df93c2544e83e9d391601/"
+    },
+    {
+      "sha256": "8a87aae368cd9817f313ece0e4bb52568017c01e245b7883b03db4bb03d80a1a",
+      "family": "AsyncRAT",
+      "tags": ["exe", "AsyncRAT", "Malpedia"],
+      "file_type": "exe",
+      "listing_url": "https://bazaar.abuse.ch/sample/8a87aae368cd9817f313ece0e4bb52568017c01e245b7883b03db4bb03d80a1a/"
+    },
+    {
+      "sha256": "8d330aabb2f7c7ca00d5ace55110f7d4f977f2bae53f5605f2bf4230b19eb494",
+      "family": "AsyncRAT",
+      "tags": ["exe", "AsyncRAT"],
+      "file_type": "exe",
+      "listing_url": "https://bazaar.abuse.ch/sample/8d330aabb2f7c7ca00d5ace55110f7d4f977f2bae53f5605f2bf4230b19eb494/"
+    },
+    {
+      "sha256": "0aa2b99b072736a522905c80505e8bfb45f545ee4d4f5a2fc02fb8f163b44225",
+      "family": "QuasarRAT",
+      "tags": ["exe", "QuasarRAT"],
+      "file_type": "exe",
+      "listing_url": "https://bazaar.abuse.ch/browse/signature/QuasarRAT/"
+    },
+    {
+      "sha256": "3240ba805b47c8113426171d02796e776b782cbd76560c024cbea07fbe519d7d",
+      "family": "QuasarRAT",
+      "tags": ["exe", "QuasarRAT"],
+      "file_type": "exe",
+      "listing_url": "https://bazaar.abuse.ch/browse/signature/QuasarRAT/"
+    },
+    {
+      "sha256": "1f4fce1da15f3dc8063a427ff2af18556dda4620b4082a47c6a9436c047d5e8c",
+      "family": "AsyncRAT",
+      "tags": ["exe", "AsyncRAT"],
+      "file_type": "exe",
+      "listing_url": "https://bazaar.abuse.ch/browse/signature/AsyncRAT/"
+    },
+    {
+      "sha256": "094fd325049b8a9cf6d3e5ef2a6d4cc6a567d7d49c35f8bb8dd9e3c6acf3d78d",
+      "family": "unknown",
+      "tags": ["exe"],
+      "file_type": "exe",
+      "listing_url": "https://bazaar.abuse.ch/api/"
+    },
+    {
+      "sha256": "9CB316156CA52F30F322B347CA78C46B2DE29CE1DF3204A5AF8F8914359995C8",
+      "family": "BenignVmTest",
+      "tags": ["benign", "validation"],
+      "file_type": "exe",
+      "listing_url": "local:benign-vm-test"
+    }
+  ]
+}

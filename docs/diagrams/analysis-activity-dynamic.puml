@@ -1,36 +1,36 @@
-' --- Diagrama: pipeline de análise dinâmica ---
+' --- Diagram: dynamic analysis pipeline ---
 @startuml
-title Pipeline de análise dinâmica — RAT Analyzer
+title Dynamic analysis pipeline — RAT Analyzer
 
 start
-:Utilizador submete amostra\n(modo dynamic ou both);
-:Criar job na API (SQLite);
-:Orquestrador VM seleciona driver;
+:User submits sample\n(mode dynamic or both);
+:Create job in API (SQLite);
+:VM orchestrator selects driver;
 
-if (Driver configurado?) then (hyperv / proxmox)
-  :Restaurar snapshot CleanState;
-  :Arrancar VM isolada (sem Internet);
-  ' *Caminho A: HTTP vm-agent; Caminho B: scripts PowerShell/WPF*
-  if (Caminho A — vm-agent HTTP?) then (sim)
+if (Driver configured?) then (hyperv / proxmox)
+  :Restore CleanState snapshot;
+  :Start isolated VM (no Internet);
+  ' *Path A: HTTP vm-agent; Path B: PowerShell/WPF scripts*
+  if (Path A — vm-agent HTTP?) then (yes)
     :Upload + run + report via vm-agent;
-    :Executar amostra com timeout;
-    :Recolher comportamento\n(processos, ficheiros, registo, rede);
-  else (Caminho B — PowerShell / WPF)
-    :04-Run-Sample.ps1\n(restore, copiar amostra/scripts);
-    :Executar Run-MalwareAnalysis na VM;
-    :Aguardar guest_analysis_done.txt;
-    :Copiar relatório guest→host\n(PsDirect / Copy-VMFile);
-    :Verificar SHA256 após cópia;
+    :Execute sample with timeout;
+    :Collect behaviour\n(processes, files, registry, network);
+  else (Path B — PowerShell / WPF)
+    :04-Run-Sample.ps1\n(restore, copy sample/scripts);
+    :Run Run-MalwareAnalysis in VM;
+    :Wait for guest_analysis_done.txt;
+    :Copy report guest→host\n(PsDirect / Copy-VMFile);
+    :Verify SHA256 after copy;
   endif
-  :Restaurar snapshot e parar VM;
+  :Restore snapshot and stop VM;
 else (stub)
-  ' *Driver stub: resultado sintético sem execução real*
-  :Gerar resultado sintético (sem execução real);
+  ' *Stub driver: synthetic result without real execution*
+  :Generate synthetic result (no real execution);
 endif
 
-:Guardar dynamicResult no job;
-:Frontend consulta estado (polling);
-:Apresentar relatório comportamental;
+:Save dynamicResult in job;
+:Frontend polls job state;
+:Present behavioural report;
 stop
 
 @enduml

@@ -1,43 +1,43 @@
-' --- Diagrama: sequência Caminho B (PowerShell / PsDirect) ---
+' --- Diagram: Path B sequence (PowerShell / PsDirect) ---
 @startuml
-title Sequência — Caminho B (PowerShell / PsDirect + SHA256)
+title Sequence — Path B (PowerShell / PsDirect + SHA256)
 autonumber
 skinparam responseMessageBelowArrow true
 
-actor "Utilizador" as U
+actor "User" as U
 participant "WPF Desktop" as WPF
 participant "04-Run-Sample.ps1" as PS
 participant "Hyper-V host" as HV
 participant "Guest VM" as GUEST
 participant "Run-MalwareAnalysis.ps1" as ANALYSIS
 
-U -> WPF : drag-and-drop +\nanálise dinâmica
-WPF -> PS : invocar pipeline\n(credenciais guest)
+U -> WPF : drag-and-drop +\ndynamic analysis
+WPF -> PS : invoke pipeline\n(guest credentials)
 PS -> HV : Restore-VMSnapshot CleanState
 PS -> HV : Start-VM
-PS -> GUEST : copiar amostra +\nscripts (PsDirect)
+PS -> GUEST : copy sample +\nscripts (PsDirect)
 
 PS -> ANALYSIS : Invoke-Command\nRun-MalwareAnalysis.ps1
-ANALYSIS -> ANALYSIS : monitorizar\nficheiros · registry · rede
-' *Ficheiro de conclusão com hash SHA256*
-ANALYSIS -> GUEST : gravar C:\analysis.txt\n+ guest_analysis_done.txt\n(SHA256)
+ANALYSIS -> ANALYSIS : monitor\nfiles · registry · network
+' *Completion file with SHA256 hash*
+ANALYSIS -> GUEST : write C:\analysis.txt\n+ guest_analysis_done.txt\n(SHA256)
 
 loop PhaseE-WaitReport
-  PS -> GUEST : polling guest_analysis_done.txt
+  PS -> GUEST : poll guest_analysis_done.txt
 end
 
-PS -> GUEST : Copy-SandboxVMFileFromGuest\n(PsDirect ou Copy-VMFile)
+PS -> GUEST : Copy-SandboxVMFileFromGuest\n(PsDirect or Copy-VMFile)
 GUEST --> PS : analysis_<RunId>.txt
 
-' *Verificação de integridade antes de aceitar relatório*
-PS -> PS : Assert-SandboxCopiedReportHash\n(comparar SHA256)
-alt hash inválido
-  PS -> PS : apagar ficheiro no host
-  PS --> WPF : erro de integridade
-else hash válido
+' *Integrity verification before accepting report*
+PS -> PS : Assert-SandboxCopiedReportHash\n(compare SHA256)
+alt invalid hash
+  PS -> PS : delete file on host
+  PS --> WPF : integrity error
+else valid hash
   PS -> HV : Stop-VM + restore snapshot
-  PS --> WPF : relatório + run JSON
-  WPF -> WPF : publicar job na API\n(opcional: abrir browser)
+  PS --> WPF : report + run JSON
+  WPF -> WPF : publish job to API\n(optional: open browser)
 end
 
 @enduml

@@ -1,49 +1,49 @@
-' --- Diagrama: arquitetura conceptual em camadas ---
+' --- Diagram: layered conceptual architecture ---
 @startuml
-title Arquitetura conceptual — RAT Analyzer
+title Conceptual architecture — RAT Analyzer
 skinparam componentStyle rectangle
 skinparam shadowing false
 
-package "Camada de Apresentação" #E8F5E9 {
+package "Presentation Layer" #E8F5E9 {
   [Frontend React\nDrop & Analyze] as FE
-  [Desktop WPF\nRatAnalyzer.Desktop] as WPF
+  [Desktop WPF\nRat Analyzer] as WPF
   [CLI Python\nrat_analyzer.py] as CLI
 }
 
-package "Camada API / Orquestração" #E3F2FD {
+package "API / Orchestration Layer" #E3F2FD {
   [FastAPI\nbackend/api.py] as API
   [Job Store\nSQLite + sandbox_jobs] as DB
   [VM Orchestrator] as VMO
 }
 
-package "Camada de Análise" #FFF9C4 {
+package "Analysis Layer" #FFF9C4 {
   [Static Analyzer] as SA
   [YARA Scanner] as YARA
   [Decompilers\nILSpy / Ghidra] as DEC
   [Risk Scorer] as RS
 }
 
-package "Infraestrutura Sandbox" #FFE0B2 {
+package "Sandbox Infrastructure" #FFE0B2 {
   [Hyper-V VM\nMalwareSandbox] as HV
   [vm-agent\nMinimal API] as AGENT
-  [Scripts PowerShell\nhyperv-sandbox] as PS1
+  [PowerShell Scripts\nhyperv-sandbox] as PS1
 }
 
-' *Clientes HTTP e orquestração local*
+' *HTTP clients and local orchestration*
 FE --> API : HTTP REST
 WPF --> API : HTTP REST
-WPF --> PS1 : orquestração local
-CLI --> SA : biblioteca direta
+WPF --> PS1 : local orchestration
+CLI --> SA : direct library
 API --> SA
 API --> DB
 API --> VMO
 SA --> YARA
 SA --> DEC
 SA --> RS
-' *Dois caminhos independentes para sandbox*
-VMO --> AGENT : Caminho A
+' *Two independent sandbox paths*
+VMO --> AGENT : Path A
 VMO --> HV
-PS1 --> HV : Caminho B
+PS1 --> HV : Path B
 AGENT --> HV
 
 @enduml
