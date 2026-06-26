@@ -1,5 +1,5 @@
-# --- Regra: evasion ---
-# --- Técnicas de evasão (anti-debug, anti-VM) ---
+// --- Regra: evasion ---
+// --- Técnicas de evasão (anti-debug, anti-VM) ---
 import "pe"
 
 // --- Regra: Evasion_Techniques ---

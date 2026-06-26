@@ -1,5 +1,5 @@
-# --- Regra: rat_generic ---
-# --- Indicadores genéricos de RAT (injeção, rede, persistência) ---
+// --- Regra: rat_generic ---
+// --- Indicadores genéricos de RAT (injeção, rede, persistência) ---
 import "pe"
 
 // --- Regra: RAT_Generic_Indicators ---

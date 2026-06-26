@@ -1,5 +1,5 @@
-# --- Regra: c2_patterns ---
-# --- Padrões C2 (beacon, exfiltração, webhooks) ---
+// --- Regra: c2_patterns ---
+// --- Padrões C2 (beacon, exfiltração, webhooks) ---
 import "pe"
 
 // --- Regra: C2_Communication_Patterns ---

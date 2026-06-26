@@ -1,5 +1,5 @@
-# --- Regra: stealer ---
-# --- Indicadores de stealer (credenciais de browser) ---
+// --- Regra: stealer ---
+// --- Indicadores de stealer (credenciais de browser) ---
 import "pe"
 
 // --- Regra: Stealer_Credential_Indicators ---
