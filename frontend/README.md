@@ -6,9 +6,9 @@ Documentação geral: [`docs/README.md`](../docs/README.md) · Segurança: [`doc
 
 ## Funcionalidades
 
-- **Zona de arrastar** - Arraste ficheiros `.exe`, `.dll` ou `.cs` para iniciar a análise
-- **Modos de análise** - Estática (streaming ou job), dinâmica ou ambas (`useIndexAnalysisSession`)
-- **Três painéis** - Código C, IL e **Relatório** (dividido horizontalmente em *estático* + *VM* quando ambos existem no mesmo `jobId`)
+- **Modos de análise** - Estática (streaming), dinâmica ou ambas (`useIndexAnalysisSession`)
+- **Dinâmica / ambas (Caminho A)** - `POST /api/analysis` + polling; orquestrador backend (`vm_orchestrator` + vm-agent quando `SANDBOX_VM_DRIVER=hyperv`)
+- **Três painéis** - Código C, IL e **Relatório** (dividido em *estático* + *VM* quando ambos existem no mesmo `jobId`)
 - **Score de risco** - Nível (CRÍTICO, ALTO, MÉDIO, BAIXO, MUITO BAIXO) e indicadores destacados no código
 - **Navegação contextual** - Saltar do relatório para as linhas relevantes no pseudo-C e no IL
 - **Assistência Gemini** *(opcional)* - Explicar excertos de pseudo-C com Google Gemini (API key no browser)
@@ -161,5 +161,6 @@ Arquitetura completa: [`docs/SEGURANCA.md`](../docs/SEGURANCA.md) · segredos: [
 ## Notas
 
 - Streaming estático: endpoint `/api/analyze_stream` (NDJSON).
-- Jobs dinâmicos/ambos: `POST /api/analysis` + polling `GET /api/analysis/{jobId}`.
+- Jobs dinâmicos/ambos (Caminho A): `POST /api/analysis?analysis_type=dynamic|both` + polling `GET /api/analysis/{jobId}`.
+- Relatório VM (Caminho B): publicado pelo WPF via `POST /api/analysis/upload_dynamic`.
 - Pseudo-C nativo: `pip install --require-hashes -r backend/requirements-ghidra.lock` e `GHIDRA_INSTALL_DIR`.

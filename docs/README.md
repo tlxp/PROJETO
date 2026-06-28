@@ -6,12 +6,14 @@
 
 | Quer… | Caminho | Orquestrador | Documentação |
 |-------|---------|--------------|--------------|
-| Webapp ou API com driver `hyperv` | **A** - VM Agent HTTP | `vm_orchestrator.py` → `vm-agent` | [`sandbox-hyperv-setup.md`](sandbox-hyperv-setup.md) · [`../vm-agent/README.md`](../vm-agent/README.md) |
-| Telemetria completa (ficheiros, registry, rede) via WPF ou scripts | **B** - PowerShell Hyper-V | WPF / `04-Run-Sample.ps1` | [`../scripts/hyperv-sandbox/README.md`](../scripts/hyperv-sandbox/README.md) |
+| Dinâmica ou ambas na **web** | **A** - VM Agent HTTP | Frontend → `POST /api/analysis` → `vm_orchestrator` → vm-agent | [`sandbox-hyperv-setup.md`](sandbox-hyperv-setup.md) · [`../vm-agent/README.md`](../vm-agent/README.md) |
+| Telemetria completa (ficheiros, registry, rede) | **B** - PowerShell Hyper-V | **WPF** / `04-Run-Sample.ps1` | [`../scripts/hyperv-sandbox/README.md`](../scripts/hyperv-sandbox/README.md) · [`../wpf-gui/README.md`](../wpf-gui/README.md) |
 | Validar fluxo sem VM | `stub` | Backend (seguro) | [`../backend/README.md`](../backend/README.md) |
 | Smoke test na VM (sem telemetria) | **A** + benign-vm-test | vm-agent | [`../benign-vm-test/README.md`](../benign-vm-test/README.md) |
 
-Os caminhos A e B são **independentes** na orquestração (HTTP vs PsDirect/Copy-VMFile), mas o **Caminho B** publica o relatório VM no backend via `POST /api/analysis/upload_dynamic`, permitindo reutilizar o mesmo `jobId` da análise estática e visualizar ambos os relatórios em `/analysis/{jobId}`.
+> **Interface web:** modo **estática** via streaming; modos **dinâmica** e **ambas** via `POST /api/analysis` (Caminho A). Relatórios VM do **WPF** (Caminho B) também aparecem em `/analysis/{jobId}`.
+
+Os caminhos A e B são **independentes** na orquestração (HTTP vs PsDirect/Copy-VMFile). O **Caminho B** publica via `POST /api/analysis/upload_dynamic`, permitindo reutilizar o mesmo `jobId` e visualizar estático + VM no frontend.
 
 ![Comparação Caminho A vs B](../relatório/imagens/fig-4-7-sandbox-paths.png) · fonte [`diagrams/sandbox-paths-comparison.puml`](diagrams/sandbox-paths-comparison.puml)
 
@@ -19,7 +21,7 @@ Os caminhos A e B são **independentes** na orquestração (HTTP vs PsDirect/Cop
 > `backend/vm_drivers/proxmox.py` (Caminho A via vm-agent HTTP). **Sem guia de configuração**, sem testes de
 > integração no CI e sem suporte operacional. Variáveis: ver seção Proxmox em
 > [`sandbox-hyperv-setup.md`](sandbox-hyperv-setup.md#variáveis-de-ambiente-para-ligar-um-hypervisor-real).
-> Para produção, use **Caminho A com `hyperv`** ou **Caminho B**.
+> Para produção, use **Caminho A com `hyperv`** ou **Caminho B** (WPF).
 
 ## Guias
 
@@ -36,7 +38,6 @@ Os caminhos A e B são **independentes** na orquestração (HTTP vs PsDirect/Cop
 | [`ps1-scripts.md`](ps1-scripts.md) | UTF-8 BOM e idioma dos `.ps1` |
 | [`diagrams/README.md`](diagrams/README.md) | Diagramas PlantUML (fonte única) |
 | [`adr/README.md`](adr/README.md) | Architecture Decision Records (ADRs) |
-| [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | Testes, convenções, contribuição |
 | [`../CHANGELOG.md`](../CHANGELOG.md) | Histórico de alterações |
 
 ## Componentes

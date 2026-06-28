@@ -12,13 +12,18 @@ A análise comportamental exige VM isolada. Telemetria completa (ficheiros, regi
 
 Manter **dois caminhos independentes**:
 
-- **Caminho A** — `vm_orchestrator` + vm-agent HTTP (telemetria básica)
+- **Caminho A** — `vm_orchestrator` + vm-agent HTTP (telemetria básica); entrada via **frontend web** (modos dinâmica/ambas) ou API
 - **Caminho B** — WPF / `04-Run-Sample.ps1` (telemetria completa)
 
-Ambos publicam no mesmo backend (`upload_dynamic`) para unificar o frontend em `/analysis/{jobId}`.
+Ambos convergem no backend: Caminho A grava `dynamicResult` no job; Caminho B usa `upload_dynamic`. O frontend unifica visualização em `/analysis/{jobId}`.
+
+## Entrada do utilizador
+
+- **Web:** estática (stream), dinâmica ou ambas (Caminho A via `POST /api/analysis`)
+- **WPF:** estática e/ou comportamental (Caminho B)
 
 ## Consequências
 
 - Documentação e testes duplicados parcialmente
-- Utilizador deve escolher o caminho adequado (tabela em `docs/README.md`)
+- Utilizador escolhe caminho conforme telemetria necessária (tabela em `docs/README.md`)
 - Driver `stub` por defeito para dev seguro

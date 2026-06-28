@@ -251,7 +251,7 @@ Use antes de cada deploy ou demonstração com amostras reais:
 | [`../vm-agent/README.md`](../vm-agent/README.md) | Segurança do agent na VM |
 | [`../wpf-gui/README.md`](../wpf-gui/README.md) | Credenciais guest e tokens WPF |
 | [`i18n.md`](i18n.md) | Idiomas PT/EN (sem impacto em isolamento; preferência de UI) |
-| [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | Regras para contribuidores |
+| [`../README.md`](../README.md#testes-e-ci) | Testes locais e convenções de desenvolvimento |
 
 ---
 

@@ -3,32 +3,29 @@
 title Dynamic analysis pipeline — RAT Analyzer
 
 start
-:User submits sample\n(mode dynamic or both);
-:Create job in API (SQLite);
-:VM orchestrator selects driver;
+:User submits sample\n(mode dynamic or both on web,\nor WPF for Path B);
 
-if (Driver configured?) then (hyperv / proxmox)
-  :Restore CleanState snapshot;
-  :Start isolated VM (no Internet);
-  ' *Path A: HTTP vm-agent; Path B: PowerShell/WPF scripts*
-  if (Path A — vm-agent HTTP?) then (yes)
+if (Entry point?) then (Web — Path A)
+  :Create job via POST /api/analysis;
+  :VM orchestrator selects driver;
+  if (Driver configured?) then (hyperv / proxmox)
+    :Restore CleanState snapshot;
+    :Start isolated VM (no Internet);
     :Upload + run + report via vm-agent;
-    :Execute sample with timeout;
-    :Collect behaviour\n(processes, files, registry, network);
-  else (Path B — PowerShell / WPF)
-    :04-Run-Sample.ps1\n(restore, copy sample/scripts);
-    :Run Run-MalwareAnalysis in VM;
-    :Wait for guest_analysis_done.txt;
-    :Copy report guest→host\n(PsDirect / Copy-VMFile);
-    :Verify SHA256 after copy;
+    :Collect behaviour (basic telemetry);
+    :Restore snapshot and stop VM;
+  else (stub)
+    :Generate synthetic result (no real execution);
   endif
-  :Restore snapshot and stop VM;
-else (stub)
-  ' *Stub driver: synthetic result without real execution*
-  :Generate synthetic result (no real execution);
+  :Save dynamicResult in job;
+else (WPF — Path B)
+  :04-Run-Sample.ps1 (restore, copy, run);
+  :Run Run-MalwareAnalysis in VM;
+  :Copy report guest→host (PsDirect);
+  :Verify SHA256 after copy;
+  :POST /api/analysis/upload_dynamic;
 endif
 
-:Save dynamicResult in job;
 :Frontend polls job state;
 :Present behavioural report;
 stop

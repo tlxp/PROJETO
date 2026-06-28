@@ -1,5 +1,5 @@
 // --- Módulo: useAnalysisJob.ts ---
-// Submissão e polling de jobs de análise na API.
+// Submissão e polling de jobs de análise na API (Caminho A: vm_orchestrator).
 
 import { useCallback, useEffect, useRef } from "react";
 import { getT } from "@/i18n";
@@ -71,7 +71,6 @@ export function useAnalysisJob() {
         {
           method: "POST",
           body: formData,
-          // O upload pode demorar; cancelamento via signal.
           timeoutMs: 0,
           signal,
         }
@@ -91,7 +90,6 @@ export function useAnalysisJob() {
   );
 
   // --- Polling até concluir, falhar ou esgotar tentativas ---
-  // *Timeout devolve `still-running` em vez de erro, para aviso na UI*
   const pollJob = useCallback(
     async (
       jobId: string,

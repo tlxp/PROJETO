@@ -1,17 +1,17 @@
 {
   "methodology": "Métricas proxy em perfis estáticos sintéticos etiquetados (sem binários maliciosos). Predição positiva: nível ALTO ou CRÍTICO.",
-  "profiles_path": "backend\\evaluation\\proxy_labeled_profiles.json",
+  "profiles_path": "C:\\Users\\msh\\AppData\\Local\\Temp\\pytest-of-msh\\pytest-9\\test_run_synthetic_eval_exit_c0\\tampered_profiles.json",
   "n_profiles": 59,
   "confusion_matrix": {
     "tp": 22,
-    "tn": 37,
+    "tn": 36,
     "fp": 0,
-    "fn": 0
+    "fn": 1
   },
   "precision": 1.0,
-  "recall": 1.0,
-  "f1": 1.0,
-  "accuracy": 1.0,
+  "recall": 0.957,
+  "f1": 0.978,
+  "accuracy": 0.983,
   "severity_breakdown": {
     "MUITO BAIXO": {
       "predicted_count": 19,
@@ -177,14 +177,15 @@
     "n_level_match": 59,
     "accuracy": 1.0
   },
+  "label_mismatches": 1,
   "profiles": [
     {
       "id": "benign_empty",
-      "label": "benign",
+      "label": "malicious",
       "score": 0,
       "level": "MUITO BAIXO",
       "predicted_malicious": false,
-      "correct": true,
+      "correct": false,
       "expected_level": "MUITO BAIXO",
       "level_correct": true
     },
@@ -768,5 +769,19 @@
       "expected_level": "BAIXO",
       "level_correct": true
     }
-  ]
+  ],
+  "failures": [
+    {
+      "id": "benign_empty",
+      "kinds": [
+        "fn"
+      ],
+      "label": "malicious",
+      "level": "MUITO BAIXO",
+      "score": 0,
+      "predicted_malicious": false,
+      "expected_level": "MUITO BAIXO"
+    }
+  ],
+  "all_labels_correct": false
 }

@@ -1,12 +1,7 @@
-% RAT Analyzer - Final Project Report (2025/2026)
-% Format aligned with UBI template (Learning Analytics Report)
-% Compile on Overleaf with pdfLaTeX (Main document: main.tex)
 \documentclass[12pt,a4paper,oneside]{report}
 
-% No blank verso pages between front-matter blocks
 \let\cleardoublepage\clearpage
 
-% --- Packages ---
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage[english]{babel}
@@ -20,6 +15,7 @@
 \usepackage{array}
 \usepackage{multirow}
 \usepackage{float}
+\usepackage{placeins}
 \usepackage{caption}
 \usepackage{hyperref}
 \usepackage{xcolor}
@@ -39,7 +35,6 @@
     pdfauthor={José Miguel Gonçalves de Amoreira}
 }
 
-% --- Chapter style (e.g. "Chapter / 1 / Introduction") ---
 \titleformat{\chapter}[display]
   {\normalfont\huge\bfseries}
   {\chaptername}
@@ -47,7 +42,6 @@
   {\Huge}
 \titlespacing*{\chapter}{0pt}{-10pt}{25pt}
 
-% --- Headers and footers ---
 \fancypagestyle{plain}{%
     \fancyhf{}
     \fancyfoot[C]{\thepage}
@@ -67,7 +61,6 @@
 }
 \pagestyle{main}
 
-% --- Code listings ---
 \definecolor{codebg}{RGB}{245,245,245}
 \definecolor{codeframe}{RGB}{200,200,200}
 \renewcommand{\lstlistingname}{Code excerpt}
@@ -110,12 +103,12 @@
 \newcommand{\ubi}{Universidade da Beira Interior}
 \newcommand{\fr}[1]{\textbf{FR~#1}}
 \newcommand{\nfr}[1]{\textbf{NFR~#1}}
+\newcommand{\reportfig}[1]{%
+    \includegraphics[width=\textwidth,height=0.72\textheight,keepaspectratio]{#1}%
+}
 
-% ============================================================
 \begin{document}
-% ============================================================
 
-% --- Cover page (UBI format) ---
 \begin{titlepage}
     \thispagestyle{empty}
     \centering
@@ -126,7 +119,7 @@
     \vspace{1.6cm}
     {\large Nº 1 - 2025/2026: RAT Analyzer --- Integrated Static and Dynamic Analysis\\Platform for Remote Access Trojan Detection\par}
     \vspace{0.9cm}
-    \includegraphics[width=0.34\textwidth]{logo.png}
+    \includegraphics[width=0.34\textwidth]{logo.png}\par
     \vspace{1.1cm}
     {\large Developed by:\par}
     \vspace{0.25cm}
@@ -141,11 +134,9 @@
 \end{titlepage}
 \clearpage
 
-% --- Front matter (Roman numerals) ---
 \frontmatter
 \pagestyle{frontmatter}
 
-% --- Abstract ---
 \chapter*{Abstract}
 \addcontentsline{toc}{chapter}{Abstract}
 \markboth{Abstract}{Abstract}
@@ -155,10 +146,11 @@ This report presents \rat{}, an integrated static and dynamic analysis platform 
 developed as the final-year project in Computer Science Engineering at \ubi{}. The solution
 combines a Python backend (FastAPI) with a seven-phase pipeline (PE metadata, ILSpy, heuristics,
 deobfuscation, YARA, risk scoring, native/Ghidra when needed, and reporting), a React web
-interface with an optional Gemini assistant, a WPF desktop application, and an isolated
+interface (with optional Gemini assistant), a WPF desktop application, and an isolated
 Hyper-V sandbox with two independent orchestration paths (HTTP vm-agent and PowerShell Direct
-with SHA-256 integrity checks). Validation relies on 203 automated tests, proxy detection
-metrics on labeled synthetic profiles (precision/recall/F1), a benign corpus of eight compiled
+with SHA-256 integrity checks). Validation relies on 220 automated tests, proxy detection
+metrics on 59 labeled synthetic profiles stratified across five severity levels
+(precision/recall/F1 and level accuracy 1.00), a benign corpus of eight compiled
 PEs analysed statically (specificity 1.00, zero false positives), public MalwareBazaar IOC metadata
 (without host-side malware storage), a formal static benchmark (median 36.1~s, $n=5$), synthetic scoring profiles aligned with
 \texttt{test\_risk\_scoring.py}, and benign execution via \texttt{benign-vm-test.exe} on
@@ -169,9 +161,6 @@ sandboxes, targeting academic and laboratory use.
 \noindent\textbf{Keywords:} malware analysis; RAT; sandbox; Hyper-V; YARA; FastAPI;
 software engineering; cybersecurity.
 
-\clearpage
-
-% --- Resumo (português) ---
 \chapter*{Resumo}
 \addcontentsline{toc}{chapter}{Resumo}
 \markboth{Resumo}{Resumo}
@@ -183,8 +172,9 @@ reduzido), desenvolvida no âmbito do projeto final de Licenciatura em Engenhari
 ILSpy, heurísticas, desofuscação, YARA, scoring de risco, nativo/Ghidra quando necessário e
 relatório), uma interface web React com assistente Gemini opcional, uma aplicação desktop WPF e
 uma sandbox Hyper-V isolada com dois caminhos de orquestração independentes (vm-agent HTTP e
-PowerShell Direct com verificação de integridade SHA-256). A validação assenta em 203 testes
-automatizados, métricas de deteção proxy em perfis sintéticos etiquetados (precisão/recall/F1), um
+PowerShell Direct com verificação de integridade SHA-256). A validação assenta em 220 testes
+automatizados, métricas de deteção proxy em 59 perfis sintéticos etiquetados estratificados por
+cinco níveis de severidade (precisão/recall/F1 e exatidão de nível 1{,}00), um
 corpus benigno de oito PEs compilados analisados estaticamente (especificidade 1{,}00, zero falsos
 positivos), metadados IOC públicos do MalwareBazaar (sem armazenamento de malware no host), um
 benchmark estático formal (mediana 36{,}1~s, $n=5$), perfis de scoring sintéticos alinhados com
@@ -196,9 +186,6 @@ comerciais na cloud, destinando-se a uso académico e laboratorial.
 \noindent\textbf{Palavras-chave:} análise de malware; RAT; sandbox; Hyper-V; YARA; FastAPI;
 engenharia de software; cibersegurança.
 
-\clearpage
-
-% --- Acknowledgements ---
 \chapter*{Acknowledgements}
 \addcontentsline{toc}{chapter}{Acknowledgements}
 \markboth{Acknowledgements}{Acknowledgements}
@@ -240,7 +227,6 @@ all very much.
 \lstlistoflistings
 \clearpage
 
-% --- Acronyms ---
 \chapter*{Acronyms}
 \addcontentsline{toc}{chapter}{Acronyms}
 \markboth{Acronyms}{Acronyms}
@@ -272,15 +258,9 @@ all very much.
     YARA & Yet Another Recursive Acronym (detection rule language) \\
 \end{tabular}
 
-% ============================================================
-% DOCUMENT BODY (Arabic numerals)
-% ============================================================
 \mainmatter
 \pagestyle{main}
 
-% ============================================================
-% CHAPTER 1 - INTRODUCTION
-% ============================================================
 \chapter{Introduction}
 
 \section{Context}
@@ -336,12 +316,13 @@ The main objectives of the project are:
           running a complete static analysis pipeline, and orchestrating dynamic analysis jobs
           (\texttt{static}, \texttt{dynamic}, or \texttt{both}).
     \item Implement a \textbf{web interface} (React + Vite + TypeScript) with a
-          \emph{drag-and-drop} zone, progress streaming, report visualisation, pseudo-C
+          \emph{drag-and-drop} zone, analysis modes (\texttt{static}, \texttt{dynamic},
+          \texttt{both}), progress streaming, report visualisation, pseudo-C
           (Ghidra) and IL (.NET), a Gemini assistant to explain C code excerpts, and
           bilingual support (Portuguese/English).
     \item Provide a \textbf{WPF desktop application} (.NET~8) as an alternative entry point,
           including dependency bootstrap, persistent language selection, and integration with
-          the Hyper-V sandbox.
+          the Hyper-V sandbox (Path~B).
     \item Build a \textbf{VM agent} (Minimal API .NET) and PowerShell scripts for isolated
           sample execution and behavioural telemetry collection.
     \item Define a \textbf{scoring model} (0--100) that aggregates multiple indicators
@@ -372,9 +353,6 @@ To demonstrate the stages of the work carried out, this report is organised as f
     \item The \emph{Bibliography} collects the references cited throughout the document.
 \end{enumerate}
 
-% ============================================================
-% CHAPTER 2 - STATE OF THE ART
-% ============================================================
 \chapter{State of the Art}
 \label{ch:estado-arte}
 
@@ -468,7 +446,7 @@ generic frameworks. Instead of replicating a conventional sandbox, \rat\ combine
 static analysis with a native Hyper-V sandbox and integrated decompilation, exposed through
 a web interface and a WPF desktop application.
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Comparison of the \rat\ solution with existing alternatives}
     \label{tab:comparacao}
@@ -498,9 +476,6 @@ Commercial solutions are powerful but inaccessible in academic contexts; open-so
 are flexible but require significant manual integration. \rat\ targets local use in university laboratories and cybersecurity training, with
 explainable indicators rather than opaque classification alone.
 
-% ============================================================
-% CHAPTER 3 - TECHNOLOGIES
-% ============================================================
 \chapter{Technologies and Tools Used}
 \label{ch:tecnologias}
 
@@ -540,7 +515,7 @@ Three .NET~8 projects share the \texttt{RatAnalyzer.sln} solution: \textbf{Rat A
 VM to receive and execute samples), and \textbf{BenignVmTest} (benign executable to validate
 the dynamic pipeline without risk). WPF serves as an alternative entry point to the web
 interface, with automatic dependency bootstrap, persistent language selection, and direct
-integration with the Hyper-V sandbox.
+integration with the Hyper-V sandbox (Path~B).
 
 \section{YARA, Ghidra and ILSpy}
 
@@ -578,7 +553,7 @@ def run_dynamic_analysis(job: AnalysisJob) -> Dict[str, Any]:
 
 \textbf{GitHub} hosts the project repository, with Git version control and continuous integration
 via \textbf{GitHub Actions} (CI with pytest, Vitest, and dotnet build). Changes are recorded in
-\texttt{CHANGELOG.md} and contribution conventions in \texttt{CONTRIBUTING.md}. This report was
+\texttt{CHANGELOG.md} and development conventions in the root \texttt{README.md}. This report was
 written in \textbf{\LaTeX}, a typesetting system widely used in academic and scientific contexts,
 which automatically manages section numbering, figures, tables, and bibliographic references
 with rigour and consistency.
@@ -601,7 +576,7 @@ Table~\ref{tab:tech-choices} summarises major stack decisions and why simpler or
 alternatives were not adopted. The goal was a \textbf{local}, \textbf{Windows-native} platform
 for academic laboratories rather than a cloud-first or containerised product.
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Technology choices and rejected alternatives}
     \label{tab:tech-choices}
@@ -634,9 +609,6 @@ Hyper-V ecosystem, and PowerShell for infrastructure automation. The combination
 technologies support a separation of responsibilities between pipeline, UI, and sandbox
 automation; documentation is versioned in the repository.
 
-% ============================================================
-% CHAPTER 4 - SOFTWARE ENGINEERING
-% ============================================================
 \chapter{Software Engineering}
 \label{ch:engenharia}
 
@@ -677,7 +649,8 @@ disassembly/Ghidra (when ILSpy is unavailable), and report. \\
 \fr{03} &
 \textbf{Dynamic analysis in sandbox.} Run sample in an isolated Hyper-V VM (no Internet),
 monitor behaviour, and return behavioural report. Supports \texttt{static},
-\texttt{dynamic}, and \texttt{both} modes. \\
+\texttt{dynamic}, and \texttt{both} modes (web: Path~A via \texttt{POST /api/analysis};
+WPF: Path~B). \\
 \fr{04} &
 \textbf{Job management.} Create, query, and list jobs (\texttt{POST/GET /api/analysis}).
 Persistence in SQLite with UUID v4; artefacts in \texttt{sandbox\_jobs/}. \\
@@ -709,7 +682,7 @@ response exists, without API call. \\
 
 \noindent Table~\ref{tab:fr-spec-01} details the specification for requirement FR~01.
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Specification table for FR~01}
     \label{tab:fr-spec-01}
@@ -731,7 +704,7 @@ response exists, without API call. \\
     \end{tabular}
 \end{table}
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Specification table for FR~02}
     \label{tab:fr-spec-02}
@@ -755,7 +728,7 @@ response exists, without API call. \\
     \end{tabular}
 \end{table}
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Specification table for FR~03}
     \label{tab:fr-spec-03}
@@ -780,7 +753,7 @@ response exists, without API call. \\
 \noindent Tables~\ref{tab:fr-spec-04} to~\ref{tab:fr-spec-09} summarise the remaining
 functional requirements.
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Specification table for FR~04}
     \label{tab:fr-spec-04}
@@ -797,7 +770,7 @@ functional requirements.
     \end{tabular}
 \end{table}
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Specification table for FR~05}
     \label{tab:fr-spec-05}
@@ -814,7 +787,7 @@ functional requirements.
     \end{tabular}
 \end{table}
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Specification table for FR~06}
     \label{tab:fr-spec-06}
@@ -832,7 +805,7 @@ functional requirements.
     \end{tabular}
 \end{table}
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Specification table for FR~07}
     \label{tab:fr-spec-07}
@@ -849,7 +822,7 @@ functional requirements.
     \end{tabular}
 \end{table}
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Specification table for FR~08}
     \label{tab:fr-spec-08}
@@ -857,7 +830,7 @@ functional requirements.
         \toprule
         \textbf{FR~08} & \textbf{VM orchestration} \\
         \midrule
-        Function & Run dynamic analysis on Path A (HTTP) or B (PowerShell). \\
+        Function & Run dynamic analysis on Path A (HTTP, web/API) or B (PowerShell, WPF). \\
         Inputs & Sample; timeout; guest credentials (Path B). \\
         Outputs & Behavioural report; SHA-256 integrity (Path B). \\
         Action & Restore snapshot; transfer sample; collect telemetry. \\
@@ -866,7 +839,7 @@ functional requirements.
     \end{tabular}
 \end{table}
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Specification table for FR~09}
     \label{tab:fr-spec-09}
@@ -921,7 +894,7 @@ Table~\ref{tab:fr-traceability} maps each functional requirement to the main
 implementation modules and automated tests that verify it in CI. This matrix
 supports audit of coverage from specification to code.
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Traceability matrix - functional requirements, components, and tests}
     \label{tab:fr-traceability}
@@ -970,6 +943,7 @@ supports audit of coverage from specification to code.
     \end{tabular}
 \end{table}
 
+\FloatBarrier
 \section{Diagrams}
 
 The following diagrams were produced with PlantUML and automatically synchronised with the
@@ -986,7 +960,7 @@ presents this diagram.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.92\textwidth]{fig-4-1-usecase.png}
+    \reportfig{fig-4-1-usecase.png}
     \caption{Use case diagram - \rat}
     \label{fig:usecase}
 \end{figure}
@@ -1001,7 +975,7 @@ summarises this pipeline, from upload to results presentation.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.88\textwidth]{fig-4-2-activity-static.png}
+    \reportfig{fig-4-2-activity-static.png}
     \caption{Activity diagram - static analysis pipeline}
     \label{fig:activity-static}
 \end{figure}
@@ -1009,14 +983,14 @@ summarises this pipeline, from upload to results presentation.
 \subsection{Activity Diagram - Dynamic Analysis}
 
 This section demonstrates how the sandbox execution process is orchestrated by the system.
-The flow covers the two available dynamic analysis paths: Path A, based on HTTP and vm-agent,
-and Path B, based on PowerShell Direct and SHA-256 verification. In either case, the system
-ensures restore of the clean snapshot before execution and validation of report integrity
-after transfer. Figure~\ref{fig:activity-dynamic} describes this flow in detail.
+The flow covers two dynamic analysis paths: Path~A (HTTP vm-agent, triggered from the web
+interface or API) and Path~B (PowerShell Direct and SHA-256 verification via WPF). In either
+case, the system ensures restore of the clean snapshot before execution and validation of
+report integrity after transfer. Figure~\ref{fig:activity-dynamic} describes this flow in detail.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.9\textwidth]{fig-4-3-activity-dynamic.png}
+    \reportfig{fig-4-3-activity-dynamic.png}
     \caption{Activity diagram - dynamic analysis pipeline}
     \label{fig:activity-dynamic}
 \end{figure}
@@ -1028,14 +1002,15 @@ details the integrated sequence between frontend, WPF, API, and sandbox.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.95\textwidth]{fig-4-4-architecture.png}
+    \reportfig{fig-4-4-architecture.png}
     \caption{Conceptual architecture of \rat}
     \label{fig:architecture}
 \end{figure}
 
+\clearpage
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.98\textwidth]{fig-4-5-sequence-overview.png}
+    \reportfig{fig-4-5-sequence-overview.png}
     \caption{Integrated sequence diagram - static, dynamic, and WPF flows}
     \label{fig:sequence}
 \end{figure}
@@ -1047,14 +1022,15 @@ Figure~\ref{fig:auth} maps tokens and credentials between components.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.95\textwidth]{fig-4-6-security-trust-zones.png}
+    \reportfig{fig-4-6-security-trust-zones.png}
     \caption{Trust zones - host / sandbox / guest isolation}
     \label{fig:trust-zones}
 \end{figure}
 
+\clearpage
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.92\textwidth]{fig-4-10-security-auth.png}
+    \reportfig{fig-4-10-security-auth.png}
     \caption{Authentication map - tokens and credentials}
     \label{fig:auth}
 \end{figure}
@@ -1066,25 +1042,28 @@ Figures~\ref{fig:seq-path-a} and~\ref{fig:seq-path-b} detail each flow.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.98\textwidth]{fig-4-7-sandbox-paths.png}
+    \reportfig{fig-4-7-sandbox-paths.png}
     \caption{Comparison of paths A (HTTP vm-agent) and B (Hyper-V PowerShell)}
     \label{fig:sandbox-paths}
 \end{figure}
 
+\clearpage
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.95\textwidth]{fig-4-8-sequence-path-a.png}
+    \reportfig{fig-4-8-sequence-path-a.png}
     \caption{Sequence - Path A (HTTP vm-agent)}
     \label{fig:seq-path-a}
 \end{figure}
 
+\clearpage
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.95\textwidth]{fig-4-9-sequence-path-b.png}
+    \reportfig{fig-4-9-sequence-path-b.png}
     \caption{Sequence - Path B (PsDirect + SHA256 verification)}
     \label{fig:seq-path-b}
 \end{figure}
 
+\FloatBarrier
 \section{Security Architecture}
 \label{sec:seguranca}
 
@@ -1116,12 +1095,12 @@ def _validate_cfg(self) -> None:
             raise ValueError(f"{label} contém caracteres inválidos.")
 \end{lstlisting}
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Security principles and implementation}
     \label{tab:seguranca-principios}
     \small
-    \begin{tabular}{@{}p{3.2cm}p{9.8cm}@{}}
+    \begin{tabular}{@{}p{3.2cm}p{9.5cm}@{}}
         \toprule
         \textbf{Principle} & \textbf{Implementation} \\
         \midrule
@@ -1136,7 +1115,7 @@ def _validate_cfg(self) -> None:
     \end{tabular}
 \end{table}
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Authentication by component}
     \label{tab:auth}
@@ -1155,7 +1134,7 @@ def _validate_cfg(self) -> None:
     \end{tabular}
 \end{table}
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Attack surfaces and structural mitigations}
     \label{tab:attack-surfaces}
@@ -1212,7 +1191,7 @@ the vm-agent over HTTP and \textbf{does not} invoke \texttt{04-Run-Sample.ps1}. 
 by the WPF application or directly by scripts in \texttt{scripts/hyperv-sandbox/}. Both
 share the Hyper-V hypervisor, Internal switch, and \texttt{CleanState} snapshot.
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Technical comparison - Path A (vm-agent) vs Path B (PowerShell)}
     \label{tab:caminhos-ab}
@@ -1244,7 +1223,7 @@ Persistence relies on \textbf{SQLite} (\texttt{analysis.db}) under \texttt{DATA\
 \texttt{sandbox\_jobs/\{job\_id\}/}: static report (\texttt{last\_analysis.json}),
 dynamic report, obfuscated excerpts, and sample copy.
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Job lifecycle (\texttt{analysis\_jobs.py})}
     \label{tab:job-states}
@@ -1264,11 +1243,11 @@ Table~\ref{tab:scoring}
 summarises the maximum caps per factor in \texttt{risk\_scorer.py} (each factor contributes up to
 its respective cap; the final score is limited to 100).
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Risk score factors (0--100)}
     \label{tab:scoring}
-    \begin{tabular}{@{}lr@{\hspace{2cm}}lr@{}}
+    \begin{tabular}{@{}lr@{\hspace{1.2cm}}lr@{}}
         \toprule
         \textbf{Factor} & \textbf{Cap} & \textbf{Factor} & \textbf{Cap} \\
         \midrule
@@ -1294,9 +1273,6 @@ presentation, API, analysis, and sandbox infrastructure layers. The ten chapter 
 pipelines, architecture, sequences, trust zones, authentication, and paths A/B) document both
 functional flow and isolation and integrity controls.
 
-% ============================================================
-% CHAPTER 5 - IMPLEMENTATION
-% ============================================================
 \chapter{Implementation}
 \label{ch:implementacao}
 
@@ -1308,7 +1284,7 @@ covered in previous chapters. It details the static analysis pipeline, Hyper-V s
 performed. In addition to the code, practical guidance is provided for those wishing to install
 and use the platform in a local environment.
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Use case 1 - Suspicious sample analysis process}
     \label{tab:usecase-spec}
@@ -1322,13 +1298,13 @@ and use the platform in a local environment.
                          file available. \\
         Data & File to analyse; analysis mode (\texttt{static}, \texttt{dynamic},
                 or \texttt{both}); optional timeout. \\
-        Description & The analyst begins by dragging the file to the upload zone of the web
-                    interface or WPF application. The system validates the file and creates a job
-                    with a unique UUID. If the mode includes static analysis, the 7-phase pipeline
-                    runs with real-time progress streaming. If it includes dynamic analysis, the
-                    backend or WPF application orchestrates the Hyper-V sandbox. The analyst
-                    consults results in the web panel, with access to pseudo-C, IL, and risk report.
-                    They may optionally ask the Gemini assistant about suspicious excerpts. \\
+        Description & The analyst drags a file to the web interface or WPF application. The
+                    system validates the file and creates a job with a unique UUID. Static
+                    analysis on the web uses real-time streaming; dynamic or combined modes
+                    submit \texttt{POST /api/analysis} (Path~A). WPF behavioural analysis uses
+                    Path~B. The analyst consults results at \texttt{/analysis/\{jobId\}}, with
+                    pseudo-C, IL, and risk reports. They may optionally ask the Gemini assistant
+                    about suspicious excerpts. \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -1359,7 +1335,7 @@ localised (PT/EN) via \texttt{i18n.py} and \texttt{RATANALYZER\_LANG}. Table~\re
 summarises the main HTTP contracts; all analysis and storage endpoints require \texttt{X-API-Token}
 except \texttt{/api/health}.
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Main backend REST endpoints}
     \label{tab:api-endpoints}
@@ -1384,7 +1360,7 @@ except \texttt{/api/health}.
     \end{tabular}
 \end{table}
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{HTTP upload controls (\texttt{upload\_security.py})}
     \label{tab:upload-security}
@@ -1422,10 +1398,12 @@ async def submit_analysis(
 
 \section{Web Frontend}
 
-The \texttt{Index.tsx} page orchestrates upload (\texttt{FileDropZone}), streaming
-(\texttt{useAnalysisStream}), and visualisation (\texttt{AnalysisResultsView}) with three panels:
-report, pseudo-C, and IL. Hooks with \texttt{AbortController} cancel pending requests when
-navigating or re-analysing. The \texttt{src/i18n/} module provides a Portuguese or English
+The \texttt{Index.tsx} page orchestrates upload (\texttt{FileDropZone}), analysis mode selection
+(\texttt{static}, \texttt{dynamic}, \texttt{both}), streaming (\texttt{useAnalysisStream}) for
+static-only runs, job submission (\texttt{POST /api/analysis}) for dynamic/combined modes
+(Path~A), and visualisation (\texttt{AnalysisResultsView}) with three panels: report, pseudo-C,
+and IL. Hooks with \texttt{AbortController} cancel pending requests when navigating or
+re-analysing. The \texttt{src/i18n/} module provides a Portuguese or English
 interface: resolution via \texttt{?lang=}, \texttt{localStorage}, and \texttt{VITE\_DEFAULT\_LOCALE};
 \texttt{apiFetch} requests send \texttt{Accept-Language}. The \textbf{Xref Explorer}
 (\texttt{/analysis/\{jobId\}/xref}) lets the analyst search and navigate cross-references in
@@ -1434,14 +1412,15 @@ and~\ref{fig:web-results} illustrate the upload zone and results with score and 
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.88\textwidth]{fig-5-1-web-upload.png}
+    \reportfig{fig-5-1-web-upload.png}
     \caption{Web interface - upload zone (\emph{Drop \& Analyze})}
     \label{fig:web-upload}
 \end{figure}
 
+\clearpage
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.95\textwidth]{fig-5-2-web-results.png}
+    \reportfig{fig-5-2-web-results.png}
     \caption{Web interface - report, pseudo-C/IL, and risk score}
     \label{fig:web-results}
 \end{figure}
@@ -1505,7 +1484,7 @@ Figure~\ref{fig:wpf-dashboard} shows the main screen of the desktop application.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.9\textwidth]{fig-5-3-wpf-dashboard.png}
+    \reportfig{fig-5-3-wpf-dashboard.png}
     \caption{WPF desktop application - main screen}
     \label{fig:wpf-dashboard}
 \end{figure}
@@ -1572,7 +1551,7 @@ state.LastBehavior["exitCode"] = proc.ExitCode;
 return Results.Ok(new { status = "finished", exitCode = proc.ExitCode });
 \end{lstlisting}
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Environment variables - dynamic sandbox (Path A)}
     \label{tab:env-sandbox-a}
@@ -1644,7 +1623,7 @@ function Assert-SandboxCopiedReportHash {
 }
 \end{lstlisting}
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Fields of \texttt{guest\_analysis\_done.txt} (PsDirect protocol)}
     \label{tab:guest-done}
@@ -1677,7 +1656,7 @@ detail: \texttt{SERIAL\_REPORT\_PROTOCOL.md}.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.85\textwidth]{fig-5-4-hyperv-vm.png}
+    \reportfig{fig-5-4-hyperv-vm.png}
     \caption{Hyper-V - VM \texttt{MalwareSandbox} and snapshot \texttt{CleanState}}
     \label{fig:hyperv-vm}
 \end{figure}
@@ -1691,7 +1670,8 @@ detail: \texttt{SERIAL\_REPORT\_PROTOCOL.md}.
           \texttt{npm i} in \texttt{frontend/}.
     \item Start backend: \texttt{uvicorn api:app --host 127.0.0.1 --port 8000}.
     \item Start frontend: \texttt{npm run dev} (port 8080); optional \texttt{?lang=en} in URL.
-    \item Drag \texttt{.exe}/\texttt{.dll} to upload zone; consult results.
+    \item Drag \texttt{.exe}/\texttt{.dll}; choose \texttt{static}, \texttt{dynamic}, or
+          \texttt{both}; consult results at \texttt{/analysis/\{jobId\}}.
     \item In the \emph{C Code} panel, use the Gemini icon to explain the visible excerpt
           (own API key or demonstration mode).
 \end{enumerate}
@@ -1732,9 +1712,11 @@ For legal, laboratory, and \textbf{host-safety} reasons, real malware samples we
 or analysed on the development workstation: keeping RAT binaries on a personal PC --- even for
 static-only analysis --- was avoided to reduce the risk of accidental execution, antivirus
 quarantine, and compromise of the host. RAT detection is therefore demonstrated through
-structured indicators (imports, C2 strings, YARA), synthetic scoring profiles, public IOC
+structured indicators (imports, C2 strings, YARA), 59 stratified synthetic scoring profiles
+(\texttt{proxy\_labeled\_profiles.json} v2.0.0; \texttt{run\_synthetic\_eval.py}), public IOC
 metadata (hashes only), and false-positive checks on compiled benign binaries, as per
-\texttt{backend/tests/test\_risk\_scoring.py}, \texttt{run\_benign\_static\_eval.py}, and
+\texttt{backend/tests/test\_risk\_scoring.py}, \texttt{test\_evaluation\_metrics.py},
+\texttt{run\_benign\_static\_eval.py}, and
 \texttt{backend/evaluation/public\_ioc\_metadata.json}.
 
 \subsection{Static scoring validation}
@@ -1742,19 +1724,19 @@ metadata (hashes only), and false-positive checks on compiled benign binaries, a
 Table~\ref{tab:avaliacao-scoring} summarises validation scenarios for \texttt{RiskScorer},
 run automatically in CI (pytest).
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Static scoring validation scenarios}
     \label{tab:avaliacao-scoring}
     \small
-    \begin{tabular}{@{}p{3.4cm}p{2.2cm}p{1.6cm}p{1.8cm}p{4.8cm}@{}}
+    \begin{tabular}{@{}p{3.0cm}p{2.0cm}c>{\centering\arraybackslash}p{2.5cm}>{\raggedright\arraybackslash}p{4.8cm}@{}}
         \toprule
         \textbf{Scenario} & \textbf{Source} & \textbf{Score} & \textbf{Level} & \textbf{Notes} \\
         \midrule
         \texttt{BenignVmTest.exe} &
         Benign binary &
         $<48$ &
-        BAIXO/MÉDIO &
+        BAIXO/\allowbreak MÉDIO &
         Known hash; \texttt{validation\_sample} annotation; no YARA matches \\
         Heuristic noise &
         Synthetic profile (pytest) &
@@ -1764,7 +1746,7 @@ run automatically in CI (pytest).
         Synthetic RAT profile &
         Synthetic profile (pytest) &
         $\geq48$ &
-        ALTO/CRÍTICO &
+        ALTO/\allowbreak CRÍTICO &
         C2 imports, persistence, YARA \texttt{RAT\_Generic} \\
         YARA rules v2.0.0 &
         CI (\texttt{test\_yara\_rules}) &
@@ -1778,28 +1760,75 @@ run automatically in CI (pytest).
 \subsection{Proxy detection metrics}
 
 Because real malware binaries cannot be stored or executed in the academic repository,
-\textbf{proxy} precision/recall metrics were computed on a labeled set of five synthetic
-static profiles in \texttt{backend/evaluation/proxy\_labeled\_profiles.json}. A positive
-prediction is defined as risk level ALTO or CRÍTICO (score $\geq 48$ with strong evidence
-gates). The script \texttt{backend/scripts/run\_evaluation\_metrics.py} reproduces the
-confusion matrix and writes \texttt{detection\_metrics.json}.
+\textbf{proxy} precision/recall metrics were computed on a labeled set of \textbf{59 synthetic}
+static profiles (version 2.0.0) in \texttt{backend/evaluation/proxy\_labeled\_profiles.json}.
+Each profile carries a \texttt{category} (e.g.\ \texttt{benign\_legitimate},
+\texttt{severity\_medium}, \texttt{malicious\_rat}, \texttt{borderline}) and an
+\texttt{expected\_level} across the five severity bands. A positive triage prediction is
+defined as risk level ALTO or CRÍTICO; benign labels must remain below ALTO. Shared logic
+lives in \texttt{backend/evaluation/metrics\_core.py}; \texttt{run\_evaluation\_metrics.py}
+writes \texttt{detection\_metrics.json} and \texttt{run\_synthetic\_eval.py} produces the
+full report (severity breakdown, level accuracy, failure list) in
+\texttt{synthetic\_eval\_results.json}.
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
-    \caption{Proxy detection metrics on labeled synthetic profiles ($n=5$)}
+    \caption{Proxy detection metrics on labeled synthetic profiles ($n=59$)}
     \label{tab:detection-metrics}
     \small
-    \begin{tabular}{@{}lcccccc@{}}
+    \begin{tabular}{@{}lrrrrrr@{}}
         \toprule
-        \textbf{Profile} & \textbf{Label} & \textbf{Score} & \textbf{Level} & \textbf{Pred.} & \textbf{TP/TN/FP/FN} \\
+        \textbf{Metric} & \textbf{TP} & \textbf{TN} & \textbf{FP} & \textbf{FN} &
+        \textbf{Prec.} & \textbf{Rec./F1} \\
         \midrule
-        \texttt{benignvmtest} & benign & 7 & MUITO BAIXO & benign & TN \\
-        \texttt{heuristic\_noise} & benign & 16 & BAIXO & benign & TN \\
-        \texttt{c2\_only\_weak} & benign & 4 & MUITO BAIXO & benign & TN \\
-        \texttt{synthetic\_rat} & malicious & 50 & ALTO & malicious & TP \\
-        \texttt{yara\_evasion\_combo} & malicious & 59 & ALTO & malicious & TP \\
+        Label (ALTO/CRÍTICO vs.\ below) & 22 & 37 & 0 & 0 & 1.00 & 1.00 / 1.00 \\
         \midrule
-        \multicolumn{6}{l}{Precision = 1.00 \quad Recall = 1.00 \quad F1 = 1.00 \quad Accuracy = 1.00 (proxy set only)} \\
+        \multicolumn{7}{l}{Accuracy = 1.00 \quad Level accuracy (expected vs.\ predicted level) = 59/59 = 1.00} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+    \centering
+    \caption{Severity breakdown of synthetic profiles ($n=59$; predicted matches expected)}
+    \label{tab:severity-breakdown}
+    \small
+    \begin{tabular}{@{}lrrp{7.2cm}@{}}
+        \toprule
+        \textbf{Level} & \textbf{Count} & \textbf{Label split} & \textbf{Representative intent} \\
+        \midrule
+        MUITO BAIXO & 19 & 19 benign & Empty profile, Microsoft URLs, single weak C2, validation hash \\
+        BAIXO & 6 & 6 benign & Heuristic noise, legitimate ws2\_32 client, YARA FP borderline \\
+        MÉDIO & 12 & 12 benign & Partial RAT signals without ALTO gate; stealer without persistence \\
+        ALTO & 14 & 14 malicious & AsyncRAT, QuasarRAT, Remcos, packed RAT, process injection \\
+        CRÍTICO & 8 & 8 malicious & Full arsenal: multi-C2, YARA, evasion, packer, obfuscation \\
+        \midrule
+        \multicolumn{4}{l}{Total: 37 benign (TN) + 22 malicious (TP); zero FP/FN on label} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Table~\ref{tab:detection-metrics-representative} lists illustrative profiles retained from the
+original pilot set ($n=5$) plus borderline and critical cases that exercise \texttt{RiskScorer}
+gates (strong C2, YARA, stealer+persistence+YARA infostealer path, noise ceiling at MÉDIO).
+
+\begin{table}[htbp]
+    \centering
+    \caption{Representative synthetic profiles (subset of $n=59$)}
+    \label{tab:detection-metrics-representative}
+    \scriptsize
+    \begin{tabular}{@{}llccp{4.8cm}@{}}
+        \toprule
+        \textbf{Profile} & \textbf{Label} & \textbf{Score} & \textbf{Level} & \textbf{Role} \\
+        \midrule
+        \texttt{benignvmtest} & benign & 7 & MUITO BAIXO & Original pilot; validation hash \\
+        \texttt{heuristic\_noise} & benign & 16 & BAIXO & Inflated heuristics without strong evidence \\
+        \texttt{c2\_only\_weak} & benign & 4 & MUITO BAIXO & Filtered false-positive C2 string \\
+        \texttt{borderline\_almost\_alto\_score} & benign & 43 & MÉDIO & Near ALTO gate; blocked without YARA \\
+        \texttt{synthetic\_rat} & malicious & 50 & ALTO & Original pilot; Quasar/AsyncRAT pattern \\
+        \texttt{yara\_evasion\_combo} & malicious & 59 & ALTO & YARA + evasion + persistence \\
+        \texttt{malicious\_stealer\_yara} & malicious & 49 & ALTO & Stealer+persist+YARA infostealer gate \\
+        \texttt{critical\_full\_rat\_arsenal} & malicious & 100 & CRÍTICO & Maximum composite indicators \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -1807,7 +1836,7 @@ confusion matrix and writes \texttt{detection\_metrics.json}.
 These figures measure consistency of the scoring model on \emph{controlled} inputs; they do
 \textbf{not} estimate real-world detection rate on unseen RAT binaries. They complement the
 benign corpus evaluation (Table~\ref{tab:benign-corpus}), the public IOC metadata reference
-(Table~\ref{tab:public-ioc}), and the 203 automated CI tests.
+(Table~\ref{tab:public-ioc}), and the 220 automated CI tests.
 
 \subsection{Benign corpus static evaluation}
 
@@ -1825,7 +1854,7 @@ Success is defined as no sample classified ALTO or CRÍTICO (true negatives only
 is $\mathrm{TN}/(\mathrm{TN}+\mathrm{FP})$. Pytest coverage is provided by
 \texttt{test\_benign\_static\_eval.py}.
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Benign corpus static evaluation ($n=8$ PEs; measured on development host)}
     \label{tab:benign-corpus}
@@ -1870,7 +1899,7 @@ RAT profile mirroring typical Quasar/AsyncRAT indicators (C2 strings, persistenc
 \texttt{RAT\_Generic}). The benign \texttt{BenignVmTest.exe} hash is annotated by
 \texttt{RiskScorer} and was executed only on Path~B inside the Hyper-V sandbox.
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Public IOC metadata reference (MalwareBazaar listings; no host-side PE analysis)}
     \label{tab:public-ioc}
@@ -1932,7 +1961,7 @@ workstation (Intel Core i7, 16~GB RAM, Windows~10, SSD). Static analysis is prod
 \texttt{backend/evaluation/dynamic\_benchmark.json} and merged via
 \texttt{BENCHMARK\_DYNAMIC\_JSON} when re-running the script.
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Formal benchmark - static pipeline and dynamic sandbox paths}
     \label{tab:benchmark}
@@ -1956,7 +1985,7 @@ for small .NET samples with ILSpy, median times below 40~s were observed consist
 
 \section{Tests}
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Summary of automated tests}
     \label{tab:testes}
@@ -1964,7 +1993,7 @@ for small .NET samples with ILSpy, median times below 40~s were observed consist
         \toprule
         \textbf{Component} & \textbf{Framework} & \textbf{Tests} \\
         \midrule
-        Backend & pytest + httpx & 93 \\
+        Backend & pytest + httpx & 110 \\
         Frontend & Vitest & 62 \\
         Frontend E2E & Playwright & Upload/analysis flow \\
         .NET & xUnit (vm-agent, WPF, benign-vm-test) & 48 \\
@@ -1995,7 +2024,7 @@ Technical documentation is versioned in the Git repository:
     \item \texttt{docs/production-secrets.md} --- secrets, production mode, and deploy checklist.
     \item \texttt{CHANGELOG.md} --- repository change history.
     \item \texttt{docs/faq.md} --- frequently asked questions and common troubleshooting.
-    \item \texttt{CONTRIBUTING.md} --- conventions, automated tests, and contribution.
+    \item \texttt{README.md} (\S\,Testes e CI) --- local test commands and development conventions.
     \item \texttt{scripts/hyperv-sandbox/TROUBLESHOOTING.md} --- sandbox operational diagnostics.
 \end{itemize}
 
@@ -2008,9 +2037,6 @@ documented in Tables~\ref{tab:auth} and~\ref{tab:upload-security}, and web/deskt
 interfaces sharing the same backend API. Listings~\ref{lst:hyperv-run}--\ref{lst:sha256-verify} and Appendix~\ref{lst:run-gate}
 illustrate the sandbox implementation at source level.
 
-% ============================================================
-% CHAPTER 6 - CONCLUSIONS
-% ============================================================
 \chapter{Conclusions and Future Work}
 \label{ch:conclusoes}
 
@@ -2027,16 +2053,16 @@ static and dynamic analysis platform for RAT detection, with the following concr
     \item \textbf{Complete static pipeline} - 7 implemented phases (PE metadata, ILSpy,
           import and C2 string analysis, deobfuscation, YARA scan, scoring, native/Ghidra when
           needed, and report),
-          with 93 automated backend tests.
+          with 110 automated backend tests.
     \item \textbf{Isolated Hyper-V sandbox} - Two independent and complementary orchestration paths
           (HTTP via vm-agent and PowerShell Direct), with automatic restore to clean snapshot
           and SHA-256 cryptographic verification of transferred report integrity.
     \item \textbf{Functional web and desktop interfaces} - React interface with progress streaming,
           three results panels, and Gemini assistant; WPF application as alternative entry point
           with automatic dependency bootstrap.
-    \item \textbf{Automated tests} - 93 pytest tests in backend, 62 Vitest tests in
+    \item \textbf{Automated tests} - 110 pytest tests in backend, 62 Vitest tests in
           frontend, E2E tests with Playwright, and 48 xUnit tests in .NET components
-          (203 total)
+          (220 total)
           (30 vm-agent, 12 WPF, 6 benign-vm-test).
     \item \textbf{Technical documentation} - PlantUML diagrams synchronised with the report
           (10 figures in chapter~4), security architecture documented in
@@ -2052,7 +2078,7 @@ Despite the results obtained, relevant limitations are acknowledged:
 
 \begin{itemize}
     \item Empirical validation relies on the benign corpus (eight PEs, static only),
-          synthetic profiles, and public IOC metadata (MalwareBazaar hashes only). Real RAT PEs
+          59 stratified synthetic profiles, and public IOC metadata (MalwareBazaar hashes only). Real RAT PEs
           were \textbf{not} stored or statically analysed on the development host, to avoid
           infecting or compromising the personal workstation (antivirus interference, accidental
           execution, residual files). The benign corpus measures specificity (false positives)
@@ -2108,9 +2134,6 @@ response pipelines (SOAR), to use as a CTF tool in cybersecurity competitions, o
 for analysis of other types of malicious files. \rat\ constitutes a solid and extensible foundation
 for future exploration.
 
-% ============================================================
-% APPENDIX
-% ============================================================
 \appendix
 \chapter{Appendix}
 
@@ -2175,7 +2198,7 @@ def _agent_get_report(self) -> Any:
 
 \section{vm-agent limits}
 
-\begin{table}[H]
+\begin{table}[htbp]
     \centering
     \caption{Execution controls in vm-agent (\texttt{AgentLimits.cs}, \texttt{RunGate.cs})}
     \label{tab:vm-agent-limits}
@@ -2210,9 +2233,6 @@ Earlier versions sent the report \textbf{line-by-line} via COM1:
 Generation~1 VM for the COM1/pipe pair and proved less robust than direct copy with hash
 (see subsection~\ref{sec:caminho-b-historico} in the implementation chapter).
 
-% ============================================================
-% BIBLIOGRAPHY
-% ============================================================
 \backmatter
 \chapter*{Bibliography}
 \addcontentsline{toc}{chapter}{Bibliography}

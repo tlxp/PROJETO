@@ -24,6 +24,7 @@ Versionamento [SemVer](https://semver.org/) a partir de `0.1.0` (projeto académ
 - Diagrama Mermaid de decisão (Caminho A vs B) no README principal.
 
 ### Changed
+- **Frontend web:** modos estática, dinâmica e ambas restaurados; dinâmica/ambas via Caminho A (`POST /api/analysis` + polling).
 - **GUI Tkinter deprecated (legacy)** — `backend/gui/` e `rat_analyzer_gui.py` mantidos para compatibilidade; substitutos: frontend web e WPF. Ver [`backend/gui/README.md`](backend/gui/README.md).
 - WPF: URLs do frontend passam a incluir `?lang=` (`AppConstants.BuildFrontendUrl`); pedidos HTTP ao backend enviam `Accept-Language`.
 - Frontend: textos de UI, erros e labels de relatório VM reformatado traduzidos; `api.ts` envia `Accept-Language`.

@@ -33,9 +33,9 @@ Diagramas: comparação A/B · [`fig-4-7`](../relatório/imagens/fig-4-7-sandbox
 3. IP estático na VM (ex.: `192.168.100.10`); instalar **vm-agent** com `VM_AGENT_TOKEN`.
 4. Criar checkpoint limpo (`clean-snap` ou `CleanState`).
 5. No host: `SANDBOX_VM_DRIVER=hyperv`, `VM_AGENT_BASE_URL`, `VM_AGENT_TOKEN`.
-6. Frontend/backend: análise **dinâmica** ou **ambas**.
+6. Frontend/backend: modos **dinâmica** ou **ambas** (`POST /api/analysis`); modo **estática** via `/api/analyze_stream`.
 
-Detalhe nas seções seguintes. Telemetria completa: **Caminho B** - [`docs/README.md`](../docs/README.md#análise-dinâmica--qual-caminho-usar).
+Detalhe nas seções seguintes. Telemetria completa para utilizadores: **Caminho B (WPF)** - [`docs/README.md`](../docs/README.md#análise-dinâmica--qual-caminho-usar).
 
 ---
 
@@ -57,7 +57,7 @@ Detalhe nas seções seguintes. Telemetria completa: **Caminho B** - [`docs/READ
   Mantém o comportamento existente (NDJSON com logs + resultado).
 
 - **Pipeline de jobs (estática/dinâmica/ambas)**:
-  - `POST /api/analysis?analysis_type=static|dynamic|both`
+  - `POST /api/analysis?analysis_type=static|dynamic|both` — web usa isto para dinâmica/ambas (Caminho A); estática na web usa também `analyze_stream` + `upload_static`
   - `POST /api/analysis/upload_static` - publicar resultado estático já calculado noutro processo no mesmo `job_id`
   - `GET /api/analysis/{job_id}` - estado e artefatos do job
   - `GET /api/analysis/{job_id}/artifacts/obfuscated_snippets` - excertos ofuscados (texto)
@@ -412,9 +412,11 @@ Ajuste `VM_AGENT_BASE_URL` se utilizou outro IP na VM.
 
 ### 12. Uso na webapp (drag-and-drop)
 
-1. Arranque o frontend (`npm run dev` em `frontend` - **http://localhost:8080**).
-2. Escolha **«Apenas dinâmica»** ou **«Ambas»**.
-3. Faça upload do ficheiro (drag-and-drop ou seleção).
+1. Arranque backend e frontend (`npm run dev` em `frontend` — **http://localhost:8080**).
+2. Escolha **«Apenas dinâmica»** ou **«Ambas»** (Caminho A).
+3. Faça upload do ficheiro.
+
+Para telemetria completa (ficheiros, registry, rede), use o **WPF** (Caminho B) — ver [`../wpf-gui/README.md`](../wpf-gui/README.md).
 
 O backend irá:
 
@@ -423,7 +425,7 @@ O backend irá:
 3. Esperar o agent em `/api/health`.
 4. Enviar o ficheiro para `/api/upload`.
 5. Chamar `/api/run` (execução na VM com timeout).
-6. Recolher o relatório em `/api/report` e devolvê-lo à webapp.
+6. Recolher o relatório em `/api/report` e devolvê-lo à webapp (polling em `/analysis/{jobId}`).
 
 A VM fica em rede isolada; tentativas de DNS/TCP/HTTP do malware podem ser registadas pelo agent (e no
 futuro por Sysmon/ETW) sem que o tráfego saia para a internet.

@@ -95,8 +95,9 @@ Funcionalidades que devem reflectir-se no texto do PDF (`main.tex`) e nas captur
 ### Frontend (React + Vite)
 
 - Rotas: `/`, `/analysis/:jobId`, `/analysis/:jobId/xref` (legados `/resultados`, `/xref`).
-- Três painéis: pseudo-C, IL e **relatório** (dividido horizontalmente em estático + VM quando ambos existem no mesmo `jobId`).
-- Polling em tempo real via `useAnalysisJob` enquanto a análise na VM decorre.
+- Modos **estática** (stream), **dinâmica** e **ambas** (Caminho A: `POST /api/analysis` + polling).
+- Três painéis: pseudo-C, IL e relatório (dividido estático + VM no mesmo `jobId`).
+- Polling em `/analysis/{jobId}` (VM do Caminho A ou publicada pelo WPF via Caminho B).
 - Assistente **Gemini** client-side (`gemini-2.0-flash`), API key em `localStorage`.
 - Playwright E2E; flags React Router v7 future; testes `FileDropZone`.
 
@@ -116,11 +117,11 @@ Funcionalidades que devem reflectir-se no texto do PDF (`main.tex`) e nas captur
 
 ### Sandbox Hyper-V — dois caminhos (ADR 001)
 
-| Caminho | Orquestrador | Telemetria |
-|---------|--------------|------------|
-| **A** | `vm_orchestrator.py` → `vm-agent` HTTP | Básica |
-| **B** | WPF / `04-Run-Sample.ps1` | Completa (ficheiros, registry, rede, Sysmon) |
-| **stub** | Backend (default) | Nenhuma — valida fluxo sem VM |
+| Caminho | Orquestrador | Entrada do utilizador | Telemetria |
+|---------|--------------|----------------------|------------|
+| **A** | `vm_orchestrator.py` → vm-agent HTTP | **Web** (dinâmica/ambas) ou API | Básica |
+| **B** | WPF / `04-Run-Sample.ps1` | **WPF** | Completa (ficheiros, registry, rede, Sysmon) |
+| **stub** | Backend (default) | Web/API | Nenhuma — valida fluxo sem VM |
 
 > Driver **`proxmox`** é experimental (sem guia, sem CI de integração). Ver [`docs/README.md`](../docs/README.md).
 
@@ -138,12 +139,14 @@ Funcionalidades que devem reflectir-se no texto do PDF (`main.tex`) e nas captur
 
 | Componente | Framework | Testes |
 |----------|-----------|--------|
-| Backend | pytest + httpx | **93** |
+| Backend | pytest + httpx | **110** |
 | Frontend | Vitest | **62** |
 | Frontend E2E | Playwright | Fluxo upload/análise |
 | .NET | xUnit (vm-agent, WPF, benign-vm-test) | **48** |
 | Diagramas | `sync_diagrams_to_report.py --check` | 10 figuras cap. 4 |
-| **Total** | pytest + Vitest + xUnit | **203** |
+| **Total** | pytest + Vitest + xUnit | **220** |
+
+**Avaliação sintética (cap. 5):** 59 perfis em `backend/evaluation/proxy_labeled_profiles.json` (v2.0.0); métricas via `run_synthetic_eval.py` → `synthetic_eval_results.json`.
 
 **Jobs CI** (`.github/workflows/ci.yml`): `backend`, `frontend`, `frontend-e2e`, `dotnet`, `ps1-encoding`, `md-docs`, `diagrams`, `powershell`, `security` (gitleaks).
 

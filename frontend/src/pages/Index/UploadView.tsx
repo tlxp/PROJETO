@@ -78,7 +78,8 @@ const UploadView: React.FC<UploadViewProps> = ({
             key={mode.value}
             type="button"
             onClick={() => onModeChange(mode.value)}
-            className={`rounded-full px-3 py-1 border text-xs transition-colors ${
+            disabled={isAnalyzing}
+            className={`rounded-full px-3 py-1 border text-xs transition-colors disabled:opacity-50 ${
               analysisMode === mode.value
                 ? "border-primary bg-primary/10 text-primary"
                 : "border-border bg-card text-muted-foreground hover:bg-secondary/60 hover:text-foreground"

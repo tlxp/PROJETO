@@ -98,3 +98,118 @@ class TestRiskScorer:
         scorer = RiskScorer()
         assert scorer._score_c2_strings(1) < scorer._score_c2_strings(5)
         assert scorer._score_c2_strings(50) == 20
+
+    def test_yara_isolado_nao_atinge_alto(self):
+        result = RiskScorer().calculate_risk({}, [{"rule": "RAT_Generic"}], self._empty_deobf())
+        assert result["score"] < 48
+        assert result["level"] not in {"ALTO", "CRÍTICO"}
+
+    def test_yara_fp_noise_permanece_baixo(self):
+        static = {
+            "suspicious_imports": [],
+            "suspicious_functions": [],
+            "c2_strings": [],
+            "stealer_indicators": [],
+            "persistence_indicators": [],
+            "evasion_techniques": ["GetTickCount"],
+            "entropy": {},
+            "packer_indicators": [],
+        }
+        yara = [{"rule": "suspicious_generic"}]
+        deobf = {
+            "obfuscation_indicators": [
+                "String concatenation obfuscation",
+                "Base64 encoded strings",
+            ]
+        }
+        result = RiskScorer().calculate_risk(static, yara, deobf)
+        assert result["level"] == "BAIXO"
+
+    def test_stealer_persist_yara_atinge_alto_com_score_35(self):
+        static = {
+            "suspicious_imports": [],
+            "suspicious_functions": [],
+            "c2_strings": [],
+            "stealer_indicators": ["Chrome\\User Data", "Login Data", "Cookies"],
+            "persistence_indicators": ["CurrentVersion\\Run\\", "RunOnce"],
+            "evasion_techniques": ["IsDebuggerPresent", "CheckRemoteDebuggerPresent"],
+            "entropy": {".text": 7.2},
+            "packer_indicators": ["UPX"],
+        }
+        yara = [{"rule": "Stealer_Generic"}]
+        deobf = {"obfuscation_indicators": ["Base64 encoded strings"]}
+        result = RiskScorer().calculate_risk(static, yara, deobf)
+        assert result["score"] >= 35
+        assert result["level"] in {"ALTO", "CRÍTICO"}
+
+    def test_ruido_heuristico_teto_medio(self):
+        static = {
+            "suspicious_imports": [],
+            "suspicious_functions": ["VirtualAlloc"],
+            "c2_strings": ["http://noise.example/"],
+            "stealer_indicators": ["a", "b", "c", "d"],
+            "persistence_indicators": ["a", "b", "c"],
+            "evasion_techniques": ["a", "b", "c", "d"],
+            "entropy": {".text": 7.5, ".data": 7.2},
+            "packer_indicators": ["UPX", "ASPack"],
+        }
+        deobf = {"obfuscation_indicators": ["a", "b", "c", "d"]}
+        result = RiskScorer().calculate_risk(static, [], deobf)
+        assert result["score"] >= 35
+        assert result["level"] == "MÉDIO"
+
+    def test_benign_http_client_nao_atinge_medio(self):
+        static = {
+            "suspicious_imports": ["wininet.dll", "ws2_32.dll"],
+            "suspicious_functions": [],
+            "c2_strings": [],
+            "stealer_indicators": [],
+            "persistence_indicators": [],
+            "evasion_techniques": [],
+            "entropy": {},
+            "packer_indicators": [],
+        }
+        result = RiskScorer().calculate_risk(static, [], self._empty_deobf())
+        assert result["level"] in {"MUITO BAIXO", "BAIXO"}
+
+    def test_c2_unico_com_rede_nao_atinge_alto_sem_score(self):
+        static = {
+            "suspicious_imports": ["wininet.dll", "ws2_32.dll"],
+            "suspicious_functions": ["CreateRemoteThread", "WriteProcessMemory"],
+            "c2_strings": ["http://203.0.113.50:4444/"],
+            "stealer_indicators": ["Chrome"],
+            "persistence_indicators": ["Run"],
+            "evasion_techniques": ["IsDebuggerPresent"],
+            "entropy": {},
+            "packer_indicators": [],
+        }
+        result = RiskScorer().calculate_risk(static, [], self._empty_deobf())
+        assert result["score"] < 48
+        assert result["level"] not in {"ALTO", "CRÍTICO"}
+
+    def test_fronteira_critico_score_71_vs_72(self):
+        scorer = RiskScorer()
+        base = {
+            "suspicious_imports": ["wininet.dll", "ws2_32.dll"],
+            "suspicious_functions": ["CreateRemoteThread", "WriteProcessMemory"],
+            "c2_strings": ["http://a", "http://b"],
+            "stealer_indicators": ["Chrome"],
+            "persistence_indicators": ["Run"],
+            "entropy": {},
+            "packer_indicators": [],
+        }
+        deobf = {"obfuscation_indicators": ["x", "y"]}
+        alto = scorer.calculate_risk(
+            {**base, "evasion_techniques": ["IsDebuggerPresent"] * 2, "packer_indicators": []},
+            [{"rule": "RAT_Generic"}, {"rule": "evasion"}],
+            deobf,
+        )
+        critico = scorer.calculate_risk(
+            {**base, "evasion_techniques": ["IsDebuggerPresent"] * 3, "packer_indicators": []},
+            [{"rule": "RAT_Generic"}, {"rule": "evasion"}],
+            deobf,
+        )
+        assert alto["score"] == 69
+        assert alto["level"] == "ALTO"
+        assert critico["score"] == 72
+        assert critico["level"] == "CRÍTICO"

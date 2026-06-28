@@ -1,10 +1,308 @@
 {
-  "description": "Proxy labeled profiles for detection metrics (no real malware binaries). Labels reflect expected triage outcome: malicious = ALTO/CRITICO, benign = below ALTO.",
+  "version": "2.0.0",
+  "description": "Proxy labeled profiles for detection metrics (no real malware binaries). Labels reflect expected triage outcome: malicious = ALTO/CRÍTICO, benign = below ALTO. Categories support stratified academic evaluation across benign noise, partial signals, full RAT patterns, and borderline FP/FN cases.",
   "positive_label_levels": ["ALTO", "CRÍTICO"],
+  "severity_levels": ["MUITO BAIXO", "BAIXO", "MÉDIO", "ALTO", "CRÍTICO"],
   "profiles": [
+    {
+      "id": "benign_empty",
+      "label": "benign",
+      "category": "benign_legitimate",
+      "expected_level": "MUITO BAIXO",
+      "source": "Empty static profile — baseline true negative",
+      "static": {
+        "suspicious_imports": [],
+        "suspicious_functions": [],
+        "c2_strings": [],
+        "stealer_indicators": [],
+        "persistence_indicators": [],
+        "evasion_techniques": [],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "benign_microsoft_urls_only",
+      "label": "benign",
+      "category": "benign_legitimate",
+      "expected_level": "MUITO BAIXO",
+      "source": "Windows Update and Microsoft CDN URLs only — no behavioral signals",
+      "static": {
+        "suspicious_imports": [],
+        "suspicious_functions": [],
+        "c2_strings": [
+          "https://update.microsoft.com/windowsupdate/v6/default.asmx",
+          "https://www.microsoft.com/en-us/download/details.aspx"
+        ],
+        "stealer_indicators": [],
+        "persistence_indicators": [],
+        "evasion_techniques": [],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "benign_single_weak_c2",
+      "label": "benign",
+      "category": "benign_edge",
+      "expected_level": "MUITO BAIXO",
+      "source": "Single ambiguous URL string filtered as false positive",
+      "static": {
+        "suspicious_imports": [],
+        "suspicious_functions": [],
+        "c2_strings": ["http://localhost:8080/healthcheck"],
+        "stealer_indicators": [],
+        "persistence_indicators": [],
+        "evasion_techniques": [],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "benign_registry_read_only",
+      "label": "benign",
+      "category": "benign_legitimate",
+      "expected_level": "MUITO BAIXO",
+      "source": "Registry read-only configuration lookup — no write/persistence",
+      "static": {
+        "suspicious_imports": [],
+        "suspicious_functions": ["RegOpenKeyEx", "RegQueryValueEx"],
+        "c2_strings": [],
+        "stealer_indicators": [],
+        "persistence_indicators": [],
+        "evasion_techniques": [],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "benign_crypto_digest_app",
+      "label": "benign",
+      "category": "benign_legitimate",
+      "expected_level": "BAIXO",
+      "source": "File integrity / checksum utility using CryptoAPI digest functions",
+      "static": {
+        "suspicious_imports": ["advapi32.dll"],
+        "suspicious_functions": ["CryptCreateHash", "CryptHashData"],
+        "c2_strings": [],
+        "stealer_indicators": [],
+        "persistence_indicators": [],
+        "evasion_techniques": [],
+        "entropy": {".text": 6.2},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "benign_http_microsoft_pattern",
+      "label": "benign",
+      "category": "benign_legitimate",
+      "expected_level": "MUITO BAIXO",
+      "source": "HTTP client pointing exclusively to microsoft.com endpoints",
+      "static": {
+        "suspicious_imports": [],
+        "suspicious_functions": [],
+        "c2_strings": ["http://www.microsoft.com/en-us/download", "https://go.microsoft.com/fwlink/?linkid=846262"],
+        "stealer_indicators": [],
+        "persistence_indicators": [],
+        "evasion_techniques": [],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "benign_dotnet_warning_strings",
+      "label": "benign",
+      "category": "benign_noise",
+      "expected_level": "MUITO BAIXO",
+      "source": "Isolated .NET SDK warning template strings filtered as false positives",
+      "static": {
+        "suspicious_imports": [],
+        "suspicious_functions": [],
+        "c2_strings": ["https://aka.ms/dotnet-warnings/{0}"],
+        "stealer_indicators": [],
+        "persistence_indicators": [],
+        "evasion_techniques": [],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "benign_single_evasion_api",
+      "label": "benign",
+      "category": "benign_edge",
+      "expected_level": "MUITO BAIXO",
+      "source": "Single anti-debug API in legitimate diagnostic build",
+      "static": {
+        "suspicious_imports": [],
+        "suspicious_functions": [],
+        "c2_strings": [],
+        "stealer_indicators": [],
+        "persistence_indicators": [],
+        "evasion_techniques": ["IsDebuggerPresent"],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "benign_obfuscation_only",
+      "label": "benign",
+      "category": "benign_noise",
+      "expected_level": "MUITO BAIXO",
+      "source": "String concatenation obfuscation without malicious static signals",
+      "static": {
+        "suspicious_imports": [],
+        "suspicious_functions": [],
+        "c2_strings": [],
+        "stealer_indicators": [],
+        "persistence_indicators": [],
+        "evasion_techniques": [],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {
+        "obfuscation_indicators": [
+          "String concatenation obfuscation",
+          "Char array to string conversion",
+          "Base64 encoded strings"
+        ]
+      }
+    },
+    {
+      "id": "benign_runonce_only",
+      "label": "benign",
+      "category": "benign_edge",
+      "expected_level": "MUITO BAIXO",
+      "source": "RunOnce registry path without network, injection, or stealer signals",
+      "static": {
+        "suspicious_imports": [],
+        "suspicious_functions": [],
+        "c2_strings": [],
+        "stealer_indicators": [],
+        "persistence_indicators": ["CurrentVersion\\RunOnce\\"],
+        "evasion_techniques": [],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "benign_high_entropy_dotnet",
+      "label": "benign",
+      "category": "benign_edge",
+      "expected_level": "MUITO BAIXO",
+      "source": "High-entropy .NET managed code section — common in Release builds",
+      "static": {
+        "suspicious_imports": [],
+        "suspicious_functions": [],
+        "c2_strings": [],
+        "stealer_indicators": [],
+        "persistence_indicators": [],
+        "evasion_techniques": [],
+        "entropy": {".text": 7.18, ".rsrc": 5.4},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "benign_upx_legitimate_packer",
+      "label": "benign",
+      "category": "benign_edge",
+      "expected_level": "MUITO BAIXO",
+      "source": "Legitimate UPX-compressed open-source binary — packer FP test",
+      "static": {
+        "suspicious_imports": [],
+        "suspicious_functions": [],
+        "c2_strings": [],
+        "stealer_indicators": [],
+        "persistence_indicators": [],
+        "evasion_techniques": [],
+        "entropy": {".text": 7.5},
+        "packer_indicators": ["UPX"]
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "benign_validation_hash_profile",
+      "label": "benign",
+      "category": "benign_legitimate",
+      "expected_level": "MUITO BAIXO",
+      "source": "BenignVmTest.exe validation SHA256 (9CB31615…) — pipeline sanity check",
+      "static": {
+        "suspicious_imports": [],
+        "suspicious_functions": [],
+        "c2_strings": [],
+        "stealer_indicators": [],
+        "persistence_indicators": [],
+        "evasion_techniques": [],
+        "entropy": {".text": 6.1},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "benign_gui_user32_only",
+      "label": "benign",
+      "category": "benign_legitimate",
+      "expected_level": "MUITO BAIXO",
+      "source": "Standard GUI application importing user32 only",
+      "static": {
+        "suspicious_imports": ["user32.dll"],
+        "suspicious_functions": [],
+        "c2_strings": [],
+        "stealer_indicators": [],
+        "persistence_indicators": [],
+        "evasion_techniques": [],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "benign_multiple_weak_heuristics",
+      "label": "benign",
+      "category": "benign_noise",
+      "expected_level": "BAIXO",
+      "source": "Synthetic inflated heuristics without strong evidence gate",
+      "static": {
+        "suspicious_imports": [],
+        "suspicious_functions": [],
+        "c2_strings": [],
+        "stealer_indicators": [],
+        "persistence_indicators": ["RegSetValueEx"],
+        "evasion_techniques": ["GetTickCount", "IsDebuggerPresent", "OutputDebugString"],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": ["String concatenation obfuscation", "XOR string decoding"]}
+    },
     {
       "id": "benignvmtest",
       "label": "benign",
+      "category": "benign_edge",
+      "expected_level": "MUITO BAIXO",
       "source": "BenignVmTest.exe typical post-tuning profile",
       "static": {
         "suspicious_imports": [],
@@ -20,25 +318,320 @@
       "deobf": {"obfuscation_indicators": ["String concatenation obfuscation", "String concatenation obfuscation"]}
     },
     {
-      "id": "heuristic_noise",
+      "id": "benign_telemetry_endpoint",
       "label": "benign",
-      "source": "Synthetic inflated heuristics without strong evidence",
+      "category": "benign_legitimate",
+      "expected_level": "MUITO BAIXO",
+      "source": "Visual Studio / Application Insights telemetry URL",
       "static": {
-        "suspicious_imports": [],
+        "suspicious_imports": ["wininet.dll"],
         "suspicious_functions": [],
-        "c2_strings": [],
+        "c2_strings": ["https://telemetry.visualstudio.com/collect"],
         "stealer_indicators": [],
-        "persistence_indicators": ["RegSetValueEx"],
-        "evasion_techniques": ["GetTickCount", "IsDebuggerPresent", "OutputDebugString"],
+        "persistence_indicators": [],
+        "evasion_techniques": [],
         "entropy": {},
         "packer_indicators": []
       },
       "yara": [],
-      "deobf": {"obfuscation_indicators": ["x", "y"]}
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "benign_installer_persist",
+      "label": "benign",
+      "category": "benign_legitimate",
+      "expected_level": "MUITO BAIXO",
+      "source": "Software installer with Run key registration — no C2 or injection",
+      "static": {
+        "suspicious_imports": ["shell32.dll"],
+        "suspicious_functions": [],
+        "c2_strings": [],
+        "stealer_indicators": [],
+        "persistence_indicators": ["CurrentVersion\\Run\\MyApp"],
+        "evasion_techniques": [],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "benign_document_viewer",
+      "label": "benign",
+      "category": "benign_legitimate",
+      "expected_level": "MUITO BAIXO",
+      "source": "PDF/document viewer with GDI and user32 imports only",
+      "static": {
+        "suspicious_imports": ["gdi32.dll", "user32.dll"],
+        "suspicious_functions": [],
+        "c2_strings": [],
+        "stealer_indicators": [],
+        "persistence_indicators": [],
+        "evasion_techniques": [],
+        "entropy": {".text": 6.8},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "medium_partial_rat_signals",
+      "label": "benign",
+      "category": "severity_medium",
+      "expected_level": "MÉDIO",
+      "source": "Partial RAT-like static signals without YARA or ALTO score gate",
+      "static": {
+        "suspicious_imports": ["ws2_32.dll", "wininet.dll"],
+        "suspicious_functions": ["VirtualAlloc", "CreateThread"],
+        "c2_strings": ["http://203.0.113.10:8080/", "http://203.0.113.11:443/gate"],
+        "stealer_indicators": [],
+        "persistence_indicators": ["CurrentVersion\\Run\\"],
+        "evasion_techniques": ["GetTickCount"],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": ["String concatenation obfuscation"]}
+    },
+    {
+      "id": "medium_single_c2_single_import",
+      "label": "benign",
+      "category": "severity_medium",
+      "expected_level": "MÉDIO",
+      "source": "Single C2 string plus single network import — below ALTO threshold",
+      "static": {
+        "suspicious_imports": ["wininet.dll"],
+        "suspicious_functions": ["InternetOpenUrl"],
+        "c2_strings": ["http://198.51.100.5:8080/panel"],
+        "stealer_indicators": ["Login Data"],
+        "persistence_indicators": ["CurrentVersion\\Run\\"],
+        "evasion_techniques": ["IsDebuggerPresent", "GetTickCount", "Sleep"],
+        "entropy": {},
+        "packer_indicators": ["UPX"]
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": ["Base64 encoded strings"]}
+    },
+    {
+      "id": "medium_stealer_no_persistence",
+      "label": "benign",
+      "category": "severity_medium",
+      "expected_level": "MÉDIO",
+      "source": "Browser stealer paths without persistence or YARA confirmation",
+      "static": {
+        "suspicious_imports": ["crypt32.dll"],
+        "suspicious_functions": ["CryptUnprotectData", "FindFirstFile"],
+        "c2_strings": ["http://203.0.113.20/exfil"],
+        "stealer_indicators": ["Chrome\\User Data", "Login Data", "Cookies"],
+        "persistence_indicators": [],
+        "evasion_techniques": ["Sleep"],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "medium_yara_only_moderate",
+      "label": "benign",
+      "category": "severity_medium",
+      "expected_level": "MÉDIO",
+      "source": "Single YARA hit with moderate supporting signals — score below ALTO gate",
+      "static": {
+        "suspicious_imports": ["user32.dll"],
+        "suspicious_functions": ["GetAsyncKeyState"],
+        "c2_strings": ["http://203.0.113.30/beacon"],
+        "stealer_indicators": [],
+        "persistence_indicators": ["CurrentVersion\\Run\\", "RunOnce\\"],
+        "evasion_techniques": ["GetTickCount"],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [{"rule": "suspicious_generic"}],
+      "deobf": {"obfuscation_indicators": ["Base64 encoded strings"]}
+    },
+    {
+      "id": "medium_mixed_weak_indicators",
+      "label": "benign",
+      "category": "severity_medium",
+      "expected_level": "MÉDIO",
+      "source": "Mixed weak heuristics accumulating to MÉDIO without strong evidence",
+      "static": {
+        "suspicious_imports": ["ws2_32.dll", "wininet.dll"],
+        "suspicious_functions": ["connect"],
+        "c2_strings": ["http://203.0.113.40:4444/", "http://203.0.113.41:4444/"],
+        "stealer_indicators": [],
+        "persistence_indicators": ["CurrentVersion\\Run\\"],
+        "evasion_techniques": ["GetTickCount", "Sleep"],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": ["String concatenation obfuscation", "XOR string decoding"]}
+    },
+    {
+      "id": "medium_dual_import_single_func",
+      "label": "benign",
+      "category": "severity_medium",
+      "expected_level": "MÉDIO",
+      "source": "Dual network imports with single suspicious function — no YARA",
+      "static": {
+        "suspicious_imports": ["ws2_32.dll", "wininet.dll"],
+        "suspicious_functions": ["InternetConnect"],
+        "c2_strings": ["http://203.0.113.50/upload"],
+        "stealer_indicators": ["Wallet\\"],
+        "evasion_techniques": ["IsDebuggerPresent", "CheckRemoteDebuggerPresent"],
+        "entropy": {},
+        "packer_indicators": ["UPX"]
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": ["Char array to string conversion", "Base64 encoded strings"]}
+    },
+    {
+      "id": "medium_evasion_persistence_only",
+      "label": "benign",
+      "category": "severity_medium",
+      "expected_level": "MÉDIO",
+      "source": "Evasion and persistence cluster without C2 or YARA",
+      "static": {
+        "suspicious_imports": ["kernel32.dll"],
+        "suspicious_functions": ["VirtualProtect", "CreateThread"],
+        "c2_strings": [],
+        "stealer_indicators": [],
+        "persistence_indicators": ["CurrentVersion\\Run\\", "RunOnce\\", "Task Scheduler"],
+        "evasion_techniques": ["IsDebuggerPresent", "CheckRemoteDebuggerPresent", "GetTickCount", "OutputDebugString"],
+        "entropy": {},
+        "packer_indicators": ["UPX"]
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": ["String concatenation obfuscation", "XOR string decoding", "Control flow flattening"]}
+    },
+    {
+      "id": "medium_double_c2_no_yara",
+      "label": "benign",
+      "category": "severity_medium",
+      "expected_level": "MÉDIO",
+      "source": "Dual C2 strings with injection APIs but score below ALTO gate",
+      "static": {
+        "suspicious_imports": ["ws2_32.dll"],
+        "suspicious_functions": ["VirtualAllocEx", "WriteProcessMemory"],
+        "c2_strings": ["http://203.0.113.60:8080/", "http://203.0.113.61:8080/api"],
+        "stealer_indicators": [],
+        "persistence_indicators": ["CurrentVersion\\Run\\"],
+        "evasion_techniques": ["Sleep", "GetTickCount"],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": ["Base64 encoded strings"]}
+    },
+    {
+      "id": "medium_packer_obfuscation_noise",
+      "label": "benign",
+      "category": "severity_medium",
+      "expected_level": "MÉDIO",
+      "source": "Packer plus obfuscation noise with minimal malicious indicators",
+      "static": {
+        "suspicious_imports": ["kernel32.dll"],
+        "suspicious_functions": ["LoadLibrary"],
+        "c2_strings": ["http://203.0.113.70/check"],
+        "stealer_indicators": [],
+        "persistence_indicators": [],
+        "evasion_techniques": ["GetTickCount", "Sleep"],
+        "entropy": {".text": 7.4},
+        "packer_indicators": ["UPX", "MPRESS"]
+      },
+      "yara": [],
+      "deobf": {
+        "obfuscation_indicators": [
+          "String concatenation obfuscation",
+          "Base64 encoded strings",
+          "XOR string decoding",
+          "Char array to string conversion"
+        ]
+      }
+    },
+    {
+      "id": "medium_single_func_stealer",
+      "label": "benign",
+      "category": "severity_medium",
+      "expected_level": "MÉDIO",
+      "source": "Stealer path strings with single API — insufficient for ALTO",
+      "static": {
+        "suspicious_imports": ["crypt32.dll"],
+        "suspicious_functions": ["CryptUnprotectData"],
+        "c2_strings": ["http://203.0.113.80/steal"],
+        "stealer_indicators": ["Chrome\\User Data", "Login Data"],
+        "persistence_indicators": ["CurrentVersion\\Run\\"],
+        "evasion_techniques": ["Sleep", "GetTickCount"],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": ["Base64 encoded strings", "XOR string decoding"]}
+    },
+    {
+      "id": "malicious_classic_rat",
+      "label": "malicious",
+      "category": "malicious_rat",
+      "expected_level": "ALTO",
+      "source": "Classic RAT: dual C2, injection, persistence, YARA",
+      "static": {
+        "suspicious_imports": ["ws2_32.dll", "wininet.dll"],
+        "suspicious_functions": ["CreateRemoteThread", "WriteProcessMemory"],
+        "c2_strings": ["http://203.0.113.9:8080/beacon", "http://evil.c2.example/api/collect"],
+        "stealer_indicators": ["Chrome\\User Data"],
+        "persistence_indicators": ["CurrentVersion\\Run\\"],
+        "evasion_techniques": ["CheckRemoteDebuggerPresent"],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [{"rule": "RAT_Generic"}],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "malicious_asyncrat_pattern",
+      "label": "malicious",
+      "category": "malicious_rat",
+      "expected_level": "ALTO",
+      "source": "AsyncRAT public IOC pattern — Pastebin loader plus mutex evasion",
+      "static": {
+        "suspicious_imports": ["wininet.dll", "ws2_32.dll"],
+        "suspicious_functions": ["VirtualAllocEx", "CreateRemoteThread"],
+        "c2_strings": ["https://pastebin.com/raw/AsyncRAT", "203.0.113.100:6606"],
+        "stealer_indicators": [],
+        "persistence_indicators": ["CurrentVersion\\Run\\AsyncClient"],
+        "evasion_techniques": ["IsDebuggerPresent", "CheckRemoteDebuggerPresent"],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [{"rule": "AsyncRAT"}],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "malicious_quasarrat_pattern",
+      "label": "malicious",
+      "category": "malicious_rat",
+      "expected_level": "ALTO",
+      "source": "QuasarRAT public IOC pattern — Quasar client strings and persistence",
+      "static": {
+        "suspicious_imports": ["ws2_32.dll", "wininet.dll"],
+        "suspicious_functions": ["CreateRemoteThread", "WriteProcessMemory"],
+        "c2_strings": ["Quasar Client", "http://203.0.113.101:4782/"],
+        "stealer_indicators": ["Login Data"],
+        "persistence_indicators": ["CurrentVersion\\Run\\Quasar"],
+        "evasion_techniques": ["GetTickCount"],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [{"rule": "QuasarRAT"}],
+      "deobf": {"obfuscation_indicators": []}
     },
     {
       "id": "synthetic_rat",
       "label": "malicious",
+      "category": "malicious_rat",
+      "expected_level": "ALTO",
       "source": "Synthetic RAT aligned with Quasar/AsyncRAT public IOC indicators",
       "static": {
         "suspicious_imports": ["wininet.dll", "ws2_32.dll"],
@@ -54,9 +647,497 @@
       "deobf": {"obfuscation_indicators": []}
     },
     {
+      "id": "malicious_stealer_yara",
+      "label": "malicious",
+      "category": "malicious_stealer",
+      "expected_level": "ALTO",
+      "source": "RedLine-style stealer with YARA and dual C2 exfil endpoints",
+      "static": {
+        "suspicious_imports": ["crypt32.dll", "wininet.dll"],
+        "suspicious_functions": ["CryptUnprotectData"],
+        "c2_strings": ["http://203.0.113.110/exfil", "http://203.0.113.111/upload"],
+        "stealer_indicators": ["Chrome\\User Data", "Login Data", "Wallet\\"],
+        "persistence_indicators": ["CurrentVersion\\Run\\"],
+        "evasion_techniques": [],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [{"rule": "RedLine_Stealer"}],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "malicious_evasion_persist_c2",
+      "label": "malicious",
+      "category": "malicious_evasion",
+      "expected_level": "ALTO",
+      "source": "Evasion suite plus persistence and dual C2 with YARA",
+      "static": {
+        "suspicious_imports": ["ws2_32.dll", "ntdll.dll"],
+        "suspicious_functions": ["NtQueryInformationProcess", "VirtualAllocEx"],
+        "c2_strings": ["http://203.0.113.120:8443/", "http://203.0.113.121:8443/gate"],
+        "stealer_indicators": [],
+        "persistence_indicators": ["CurrentVersion\\Run\\", "RunOnce\\"],
+        "evasion_techniques": ["IsDebuggerPresent", "CheckRemoteDebuggerPresent", "GetTickCount", "OutputDebugString"],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [{"rule": "evasion_anti_vm"}],
+      "deobf": {"obfuscation_indicators": ["Control flow flattening"]}
+    },
+    {
+      "id": "malicious_multi_yara_rat",
+      "label": "malicious",
+      "category": "malicious_rat",
+      "expected_level": "ALTO",
+      "source": "Multi-YARA RAT detection — overlapping rule hits",
+      "static": {
+        "suspicious_imports": ["ws2_32.dll", "wininet.dll"],
+        "suspicious_functions": ["CreateRemoteThread", "WriteProcessMemory"],
+        "c2_strings": ["http://203.0.113.130:8080/", "http://203.0.113.131:8080/"],
+        "stealer_indicators": [],
+        "persistence_indicators": ["CurrentVersion\\Run\\"],
+        "evasion_techniques": ["IsDebuggerPresent"],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [{"rule": "RAT_Generic"}, {"rule": "njRAT"}, {"rule": "AsyncRAT"}],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "malicious_packed_rat",
+      "label": "malicious",
+      "category": "malicious_rat",
+      "expected_level": "ALTO",
+      "source": "UPX-packed RAT with C2 and YARA confirmation",
+      "static": {
+        "suspicious_imports": ["ws2_32.dll", "wininet.dll"],
+        "suspicious_functions": ["VirtualAlloc", "CreateRemoteThread"],
+        "c2_strings": ["http://203.0.113.140:8080/beacon", "http://203.0.113.141:8080/"],
+        "stealer_indicators": [],
+        "persistence_indicators": ["CurrentVersion\\Run\\"],
+        "evasion_techniques": ["Sleep"],
+        "entropy": {".text": 7.6},
+        "packer_indicators": ["UPX"]
+      },
+      "yara": [{"rule": "RAT_Generic"}],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "malicious_process_injection_combo",
+      "label": "malicious",
+      "category": "malicious_rat",
+      "expected_level": "ALTO",
+      "source": "Full process injection API combo with C2 and YARA",
+      "static": {
+        "suspicious_imports": ["kernel32.dll", "ntdll.dll"],
+        "suspicious_functions": ["VirtualAllocEx", "WriteProcessMemory", "CreateRemoteThread", "NtQueueApcThread"],
+        "c2_strings": ["http://203.0.113.150:443/panel", "http://203.0.113.151:443/"],
+        "stealer_indicators": [],
+        "persistence_indicators": [],
+        "evasion_techniques": ["CheckRemoteDebuggerPresent"],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [{"rule": "process_injection"}],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "yara_evasion_combo",
+      "label": "malicious",
+      "category": "malicious_evasion",
+      "expected_level": "ALTO",
+      "source": "YARA hit plus evasion and persistence (stealer family pattern)",
+      "static": {
+        "suspicious_imports": ["user32.dll"],
+        "suspicious_functions": ["SetWindowsHookEx"],
+        "c2_strings": ["http://203.0.113.50:4444/"],
+        "stealer_indicators": ["Login Data"],
+        "persistence_indicators": ["CurrentVersion\\Run\\"],
+        "evasion_techniques": ["IsDebuggerPresent", "CheckRemoteDebuggerPresent"],
+        "entropy": {".text": 7.2},
+        "packer_indicators": ["UPX"]
+      },
+      "yara": [{"rule": "RAT_Generic"}, {"rule": "evasion_anti_vm"}],
+      "deobf": {"obfuscation_indicators": ["Base64 encoded strings"]}
+    },
+    {
+      "id": "malicious_network_rat_yara",
+      "label": "malicious",
+      "category": "malicious_rat",
+      "expected_level": "ALTO",
+      "source": "Network RAT with socket APIs, dual C2, njRAT YARA",
+      "static": {
+        "suspicious_imports": ["ws2_32.dll", "wininet.dll"],
+        "suspicious_functions": ["connect", "send"],
+        "c2_strings": ["http://203.0.113.160:5552/", "203.0.113.161:5552"],
+        "stealer_indicators": ["Chrome\\User Data"],
+        "persistence_indicators": ["CurrentVersion\\Run\\"],
+        "evasion_techniques": ["GetTickCount"],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [{"rule": "njRAT"}],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "malicious_c2_funcs_no_yara",
+      "label": "malicious",
+      "category": "malicious_rat",
+      "expected_level": "ALTO",
+      "source": "Strong static RAT without YARA — ALTO via strong_c2 + network + injection gate",
+      "static": {
+        "suspicious_imports": ["ws2_32.dll", "wininet.dll", "kernel32.dll"],
+        "suspicious_functions": ["CreateRemoteThread", "WriteProcessMemory", "VirtualAllocEx"],
+        "c2_strings": [
+          "http://203.0.113.170:8080/",
+          "http://203.0.113.171:8080/gate",
+          "http://203.0.113.172:8080/beacon"
+        ],
+        "stealer_indicators": ["Chrome\\User Data"],
+        "persistence_indicators": ["CurrentVersion\\Run\\"],
+        "evasion_techniques": ["IsDebuggerPresent", "CheckRemoteDebuggerPresent"],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "malicious_hook_stealer",
+      "label": "malicious",
+      "category": "malicious_stealer",
+      "expected_level": "ALTO",
+      "source": "Keylogger hook plus stealer paths with YARA",
+      "static": {
+        "suspicious_imports": ["user32.dll", "wininet.dll"],
+        "suspicious_functions": ["SetWindowsHookEx", "GetAsyncKeyState"],
+        "c2_strings": ["http://203.0.113.180/exfil", "http://203.0.113.181/upload"],
+        "stealer_indicators": ["Login Data", "Chrome\\User Data"],
+        "persistence_indicators": ["CurrentVersion\\Run\\"],
+        "evasion_techniques": ["GetTickCount"],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [{"rule": "keylogger_generic"}],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "malicious_remcos_pattern",
+      "label": "malicious",
+      "category": "malicious_rat",
+      "expected_level": "ALTO",
+      "source": "Remcos RAT public IOC pattern with dual C2 and YARA",
+      "static": {
+        "suspicious_imports": ["ws2_32.dll", "wininet.dll"],
+        "suspicious_functions": ["CreateRemoteThread", "WriteProcessMemory"],
+        "c2_strings": ["Remcos", "http://203.0.113.190:2404/"],
+        "stealer_indicators": [],
+        "persistence_indicators": ["CurrentVersion\\Run\\Remcos"],
+        "evasion_techniques": ["IsDebuggerPresent", "CheckRemoteDebuggerPresent"],
+        "entropy": {},
+        "packer_indicators": ["UPX"]
+      },
+      "yara": [{"rule": "Remcos_RAT"}],
+      "deobf": {"obfuscation_indicators": ["String concatenation obfuscation"]}
+    },
+    {
+      "id": "critical_full_rat_arsenal",
+      "label": "malicious",
+      "category": "severity_critical",
+      "expected_level": "CRÍTICO",
+      "source": "Full RAT arsenal — multiple C2, injection, stealer, persistence, evasion, YARA, packer, obfuscation",
+      "static": {
+        "suspicious_imports": ["ws2_32.dll", "wininet.dll", "kernel32.dll", "ntdll.dll"],
+        "suspicious_functions": ["CreateRemoteThread", "WriteProcessMemory", "VirtualAllocEx", "NtQueueApcThread"],
+        "c2_strings": [
+          "http://203.0.113.200:8080/beacon",
+          "http://203.0.113.201:8080/gate",
+          "http://203.0.113.202:8080/panel",
+          "http://203.0.113.203:8080/collect"
+        ],
+        "stealer_indicators": ["Chrome\\User Data", "Login Data", "Wallet\\"],
+        "persistence_indicators": ["CurrentVersion\\Run\\", "RunOnce\\", "Task Scheduler"],
+        "evasion_techniques": ["IsDebuggerPresent", "CheckRemoteDebuggerPresent", "GetTickCount", "OutputDebugString"],
+        "entropy": {".text": 7.8, ".data": 7.3},
+        "packer_indicators": ["UPX", "MPRESS"]
+      },
+      "yara": [{"rule": "RAT_Generic"}, {"rule": "AsyncRAT"}, {"rule": "evasion_anti_vm"}],
+      "deobf": {
+        "obfuscation_indicators": [
+          "String concatenation obfuscation",
+          "Base64 encoded strings",
+          "XOR string decoding",
+          "Control flow flattening"
+        ]
+      }
+    },
+    {
+      "id": "critical_asyncrat_full_suite",
+      "label": "malicious",
+      "category": "severity_critical",
+      "expected_level": "CRÍTICO",
+      "source": "AsyncRAT full suite — loader, mutex, injection, stealer, multi-YARA",
+      "static": {
+        "suspicious_imports": ["wininet.dll", "ws2_32.dll", "kernel32.dll"],
+        "suspicious_functions": ["VirtualAllocEx", "CreateRemoteThread", "WriteProcessMemory"],
+        "c2_strings": ["AsyncRAT", "https://pastebin.com/raw/loader", "203.0.113.210:6606"],
+        "stealer_indicators": ["Chrome\\User Data", "Login Data"],
+        "persistence_indicators": ["CurrentVersion\\Run\\AsyncClient", "RunOnce\\"],
+        "evasion_techniques": ["IsDebuggerPresent", "CheckRemoteDebuggerPresent", "GetTickCount", "OutputDebugString"],
+        "entropy": {".text": 7.5},
+        "packer_indicators": ["UPX"]
+      },
+      "yara": [{"rule": "AsyncRAT"}, {"rule": "RAT_Generic"}],
+      "deobf": {"obfuscation_indicators": ["Base64 encoded strings", "String concatenation obfuscation", "XOR string decoding"]}
+    },
+    {
+      "id": "critical_quasar_full_suite",
+      "label": "malicious",
+      "category": "severity_critical",
+      "expected_level": "CRÍTICO",
+      "source": "QuasarRAT full suite with stealer module and triple persistence",
+      "static": {
+        "suspicious_imports": ["ws2_32.dll", "wininet.dll", "crypt32.dll"],
+        "suspicious_functions": ["CreateRemoteThread", "WriteProcessMemory", "CryptUnprotectData"],
+        "c2_strings": ["Quasar Client", "http://203.0.113.220:4782/", "http://203.0.113.221:4782/"],
+        "stealer_indicators": ["Chrome\\User Data", "Login Data"],
+        "persistence_indicators": ["CurrentVersion\\Run\\Quasar", "RunOnce\\", "Startup\\"],
+        "evasion_techniques": ["IsDebuggerPresent", "CheckRemoteDebuggerPresent", "GetTickCount"],
+        "entropy": {".text": 7.6},
+        "packer_indicators": ["UPX"]
+      },
+      "yara": [{"rule": "QuasarRAT"}, {"rule": "RAT_Generic"}],
+      "deobf": {"obfuscation_indicators": ["String concatenation obfuscation", "Control flow flattening"]}
+    },
+    {
+      "id": "critical_multi_c2_injection_stealer",
+      "label": "malicious",
+      "category": "severity_critical",
+      "expected_level": "CRÍTICO",
+      "source": "Five C2 endpoints, full injection chain, stealer plus dual YARA",
+      "static": {
+        "suspicious_imports": ["ws2_32.dll", "wininet.dll", "ntdll.dll"],
+        "suspicious_functions": ["VirtualAllocEx", "WriteProcessMemory", "CreateRemoteThread", "NtQueueApcThread"],
+        "c2_strings": [
+          "http://203.0.113.230:8080/",
+          "http://203.0.113.231:8080/",
+          "http://203.0.113.232:8080/",
+          "http://203.0.113.233:8080/",
+          "http://203.0.113.234:8080/"
+        ],
+        "stealer_indicators": ["Chrome\\User Data", "Login Data", "Wallet\\"],
+        "persistence_indicators": ["CurrentVersion\\Run\\", "RunOnce\\"],
+        "evasion_techniques": ["IsDebuggerPresent", "CheckRemoteDebuggerPresent", "GetTickCount"],
+        "entropy": {".text": 7.4},
+        "packer_indicators": ["UPX"]
+      },
+      "yara": [{"rule": "RAT_Generic"}, {"rule": "process_injection"}],
+      "deobf": {"obfuscation_indicators": ["Base64 encoded strings", "XOR string decoding"]}
+    },
+    {
+      "id": "critical_triple_yara_packed",
+      "label": "malicious",
+      "category": "severity_critical",
+      "expected_level": "CRÍTICO",
+      "source": "Triple YARA, dual packer, high entropy, full RAT static profile",
+      "static": {
+        "suspicious_imports": ["ws2_32.dll", "wininet.dll", "kernel32.dll"],
+        "suspicious_functions": ["CreateRemoteThread", "WriteProcessMemory", "VirtualAllocEx"],
+        "c2_strings": ["http://203.0.113.240:8080/", "http://203.0.113.241:8080/gate"],
+        "stealer_indicators": ["Chrome\\User Data", "Login Data"],
+        "persistence_indicators": ["CurrentVersion\\Run\\", "RunOnce\\"],
+        "evasion_techniques": ["IsDebuggerPresent", "CheckRemoteDebuggerPresent", "GetTickCount"],
+        "entropy": {".text": 7.9, ".data": 7.2},
+        "packer_indicators": ["UPX", "MPRESS"]
+      },
+      "yara": [{"rule": "RAT_Generic"}, {"rule": "njRAT"}, {"rule": "AsyncRAT"}],
+      "deobf": {"obfuscation_indicators": ["String concatenation obfuscation", "Base64 encoded strings", "Control flow flattening"]}
+    },
+    {
+      "id": "critical_obfuscated_evasion_suite",
+      "label": "malicious",
+      "category": "severity_critical",
+      "expected_level": "CRÍTICO",
+      "source": "Heavy obfuscation plus complete evasion and RAT indicator set",
+      "static": {
+        "suspicious_imports": ["ws2_32.dll", "wininet.dll", "ntdll.dll"],
+        "suspicious_functions": ["VirtualAllocEx", "CreateRemoteThread", "WriteProcessMemory", "NtQueryInformationProcess"],
+        "c2_strings": ["http://203.0.113.250:8443/", "http://203.0.113.251:8443/", "http://203.0.113.252:8443/"],
+        "stealer_indicators": ["Login Data"],
+        "persistence_indicators": ["CurrentVersion\\Run\\", "RunOnce\\"],
+        "evasion_techniques": ["IsDebuggerPresent", "CheckRemoteDebuggerPresent", "GetTickCount", "OutputDebugString"],
+        "entropy": {".text": 7.7},
+        "packer_indicators": ["UPX", "Themida"]
+      },
+      "yara": [{"rule": "evasion_anti_vm"}, {"rule": "RAT_Generic"}],
+      "deobf": {
+        "obfuscation_indicators": [
+          "String concatenation obfuscation",
+          "Base64 encoded strings",
+          "XOR string decoding",
+          "Control flow flattening",
+          "Char array to string conversion"
+        ]
+      }
+    },
+    {
+      "id": "critical_stealer_rat_persistence",
+      "label": "malicious",
+      "category": "severity_critical",
+      "expected_level": "CRÍTICO",
+      "source": "Combined stealer-RAT with triple persistence vectors and multi-YARA",
+      "static": {
+        "suspicious_imports": ["crypt32.dll", "ws2_32.dll", "wininet.dll"],
+        "suspicious_functions": ["CryptUnprotectData", "CreateRemoteThread", "WriteProcessMemory"],
+        "c2_strings": ["http://203.0.113.260/exfil", "http://203.0.113.261/panel", "http://203.0.113.262/beacon"],
+        "stealer_indicators": ["Chrome\\User Data", "Login Data", "Cookies", "Wallet\\"],
+        "persistence_indicators": ["CurrentVersion\\Run\\", "RunOnce\\", "Task Scheduler"],
+        "evasion_techniques": ["IsDebuggerPresent", "CheckRemoteDebuggerPresent", "GetTickCount"],
+        "entropy": {".text": 7.3},
+        "packer_indicators": ["UPX"]
+      },
+      "yara": [{"rule": "RedLine_Stealer"}, {"rule": "RAT_Generic"}],
+      "deobf": {"obfuscation_indicators": ["Base64 encoded strings", "String concatenation obfuscation"]}
+    },
+    {
+      "id": "critical_njrat_pattern",
+      "label": "malicious",
+      "category": "severity_critical",
+      "expected_level": "CRÍTICO",
+      "source": "njRAT full pattern — mutex, injection, stealer, packed, multi-YARA",
+      "static": {
+        "suspicious_imports": ["ws2_32.dll", "wininet.dll", "user32.dll"],
+        "suspicious_functions": ["CreateRemoteThread", "WriteProcessMemory", "SetWindowsHookEx"],
+        "c2_strings": ["njRAT", "http://203.0.113.270:5552/", "203.0.113.271:5552"],
+        "stealer_indicators": ["Chrome\\User Data", "Login Data"],
+        "persistence_indicators": ["CurrentVersion\\Run\\", "RunOnce\\"],
+        "evasion_techniques": ["IsDebuggerPresent", "CheckRemoteDebuggerPresent", "GetTickCount", "OutputDebugString"],
+        "entropy": {".text": 7.5, ".rsrc": 7.1},
+        "packer_indicators": ["UPX"]
+      },
+      "yara": [{"rule": "njRAT"}, {"rule": "RAT_Generic"}, {"rule": "evasion_anti_vm"}],
+      "deobf": {"obfuscation_indicators": ["String concatenation obfuscation", "Base64 encoded strings"]}
+    },
+    {
+      "id": "borderline_legitimate_network_ws2",
+      "label": "benign",
+      "category": "borderline",
+      "expected_level": "BAIXO",
+      "source": "Legitimate network client — ws2_32 and connect API without C2 strings",
+      "static": {
+        "suspicious_imports": ["ws2_32.dll"],
+        "suspicious_functions": ["connect", "send", "recv"],
+        "c2_strings": [],
+        "stealer_indicators": [],
+        "persistence_indicators": [],
+        "evasion_techniques": [],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
+      "id": "borderline_rat_missing_strong_gate",
+      "label": "benign",
+      "category": "borderline",
+      "expected_level": "MÉDIO",
+      "source": "RAT-like indicators but score below ALTO gate — missing YARA and sub-48 score",
+      "static": {
+        "suspicious_imports": ["ws2_32.dll", "wininet.dll"],
+        "suspicious_functions": ["VirtualAlloc"],
+        "c2_strings": ["http://203.0.113.280:8080/"],
+        "stealer_indicators": ["Chrome\\User Data"],
+        "persistence_indicators": ["CurrentVersion\\Run\\"],
+        "evasion_techniques": ["IsDebuggerPresent", "GetTickCount", "Sleep"],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": ["String concatenation obfuscation"]}
+    },
+    {
+      "id": "borderline_yara_fp_noise",
+      "label": "benign",
+      "category": "borderline",
+      "expected_level": "BAIXO",
+      "source": "Generic YARA hit on obfuscated benign binary — score below MÉDIO",
+      "static": {
+        "suspicious_imports": [],
+        "suspicious_functions": [],
+        "c2_strings": [],
+        "stealer_indicators": [],
+        "persistence_indicators": [],
+        "evasion_techniques": ["GetTickCount"],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [{"rule": "suspicious_generic"}],
+      "deobf": {"obfuscation_indicators": ["String concatenation obfuscation", "Base64 encoded strings"]}
+    },
+    {
+      "id": "borderline_high_entropy_packer_legitimate",
+      "label": "benign",
+      "category": "borderline",
+      "expected_level": "BAIXO",
+      "source": "Legitimate UPX plus high entropy without malicious corroboration",
+      "static": {
+        "suspicious_imports": ["kernel32.dll"],
+        "suspicious_functions": ["LoadLibrary"],
+        "c2_strings": [],
+        "stealer_indicators": [],
+        "persistence_indicators": [],
+        "evasion_techniques": [],
+        "entropy": {".text": 7.6},
+        "packer_indicators": ["UPX"]
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": ["String concatenation obfuscation"]}
+    },
+    {
+      "id": "borderline_almost_alto_score",
+      "label": "benign",
+      "category": "borderline",
+      "expected_level": "MÉDIO",
+      "source": "Near-ALTO score with strong_funcs+imports but sub-48 total — gate not reached",
+      "static": {
+        "suspicious_imports": ["ws2_32.dll", "wininet.dll"],
+        "suspicious_functions": ["VirtualAllocEx", "WriteProcessMemory"],
+        "c2_strings": ["http://203.0.113.290:8080/"],
+        "stealer_indicators": ["Chrome\\User Data", "Login Data"],
+        "persistence_indicators": ["CurrentVersion\\Run\\"],
+        "evasion_techniques": ["IsDebuggerPresent", "GetTickCount"],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": ["Base64 encoded strings"]}
+    },
+    {
+      "id": "borderline_stealer_path_only",
+      "label": "benign",
+      "category": "borderline",
+      "expected_level": "MUITO BAIXO",
+      "source": "Browser profile path strings in isolation — common FP in dev tools",
+      "static": {
+        "suspicious_imports": [],
+        "suspicious_functions": [],
+        "c2_strings": [],
+        "stealer_indicators": ["Chrome\\User Data"],
+        "persistence_indicators": [],
+        "evasion_techniques": [],
+        "entropy": {},
+        "packer_indicators": []
+      },
+      "yara": [],
+      "deobf": {"obfuscation_indicators": []}
+    },
+    {
       "id": "c2_only_weak",
       "label": "benign",
-      "source": "Isolated C2-like strings filtered as false positives",
+      "category": "benign_noise",
+      "expected_level": "MUITO BAIXO",
+      "source": "Isolated C2-like strings filtered as false positives (original profile retained)",
       "static": {
         "suspicious_imports": [],
         "suspicious_functions": [],
@@ -71,21 +1152,23 @@
       "deobf": {"obfuscation_indicators": []}
     },
     {
-      "id": "yara_evasion_combo",
-      "label": "malicious",
-      "source": "YARA hit plus evasion and persistence (stealer family pattern)",
+      "id": "heuristic_noise",
+      "label": "benign",
+      "category": "benign_noise",
+      "expected_level": "BAIXO",
+      "source": "Synthetic inflated heuristics without strong evidence (original profile retained)",
       "static": {
-        "suspicious_imports": ["user32.dll"],
-        "suspicious_functions": ["SetWindowsHookEx"],
-        "c2_strings": ["http://203.0.113.50:4444/"],
-        "stealer_indicators": ["Login Data"],
-        "persistence_indicators": ["CurrentVersion\\Run\\"],
-        "evasion_techniques": ["IsDebuggerPresent", "CheckRemoteDebuggerPresent"],
-        "entropy": {".text": 7.2},
-        "packer_indicators": ["UPX"]
+        "suspicious_imports": [],
+        "suspicious_functions": [],
+        "c2_strings": [],
+        "stealer_indicators": [],
+        "persistence_indicators": ["RegSetValueEx"],
+        "evasion_techniques": ["GetTickCount", "IsDebuggerPresent", "OutputDebugString"],
+        "entropy": {},
+        "packer_indicators": []
       },
-      "yara": [{"rule": "RAT_Generic"}, {"rule": "evasion_anti_vm"}],
-      "deobf": {"obfuscation_indicators": ["Base64 encoded strings"]}
+      "yara": [],
+      "deobf": {"obfuscation_indicators": ["x", "y"]}
     }
   ]
 }

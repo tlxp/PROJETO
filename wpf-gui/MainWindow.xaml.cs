@@ -51,19 +51,32 @@ public partial class MainWindow : Window
     private void ShowLanguageSelection(bool isFirstLaunch)
     {
         var view = new LanguageSelectionView { ShowCancel = !isFirstLaunch };
+
+        if (isFirstLaunch)
+        {
+            view.LanguageConfirmed += (_, _) => ShowLoading();
+            SetContentWithFade(view, animateFromZeroOpacity: false);
+            return;
+        }
+
+        // Preserva o ecrã actual (ex.: dashboard com análise em curso) em vez de recriar a vista.
+        var previousContent = ContentHost.Content;
         view.LanguageConfirmed += (_, _) =>
-        {
-            if (isFirstLaunch)
-                ShowLoading();
-            else
-                SetContentWithFade(new MainDashboardView(), animateFromZeroOpacity: true);
-        };
+            RestoreContentAfterLanguagePicker(previousContent, animateFromZeroOpacity: true);
         view.Cancelled += (_, _) =>
-        {
-            if (!isFirstLaunch)
-                SetContentWithFade(new MainDashboardView(), animateFromZeroOpacity: false);
-        };
+            RestoreContentAfterLanguagePicker(previousContent, animateFromZeroOpacity: false);
         SetContentWithFade(view, animateFromZeroOpacity: false);
+    }
+
+
+
+    // --- Restaura conteúdo anterior após escolha ou cancelamento de idioma ---
+    private void RestoreContentAfterLanguagePicker(object? previousContent, bool animateFromZeroOpacity)
+    {
+        if (previousContent != null)
+            SetContentWithFade(previousContent, animateFromZeroOpacity);
+        else
+            SetContentWithFade(new MainDashboardView(), animateFromZeroOpacity);
     }
 
 

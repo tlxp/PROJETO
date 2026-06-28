@@ -17,20 +17,21 @@ participant "vm-agent" as AGENT
 database "SQLite +\nsandbox_jobs" as DB
 
 group Static analysis (streaming)
-  U -> FE : Load file
+  U -> FE : Load file + static mode
   FE -> API : POST /api/analyze_stream
   API -> RAT : Static pipeline
   RAT --> API : Result + NDJSON logs
   API --> FE : Progress and final report
+  FE -> API : POST /api/analysis/upload_static
+  API -> DB : jobId + staticResult
 end
 
-group Dynamic or combined job
+group Dynamic or combined job (Path A — web)
   U -> FE : Load file + dynamic/both mode
   FE -> API : POST /api/analysis
   API -> JOBS : create_job
   JOBS -> DB : state queued/running
   JOBS -> VMO : dynamic pipeline
-  ' *Real or stub driver depending on configuration*
   alt hyperv / proxmox
     VMO -> DRV : real driver
     DRV -> AGENT : upload, run, report
@@ -40,17 +41,17 @@ group Dynamic or combined job
   end
   JOBS -> DB : dynamicResult
   loop polling
-    FE -> API : GET /api/analysis/{jobId}
+    FE -> API : GET /api/analysis/jobId
     API -> DB : read state
     API --> FE : results
   end
 end
 
-group WPF → browser
-  U -> WPF : Drag-and-drop + analysis
-  WPF -> API : analysis + publish job
-  API -> DB : store jobId
-  WPF -> FE : open /analysis?jobId=...
+group WPF Path B
+  U -> WPF : Drag-and-drop + VM analysis
+  WPF -> API : POST /api/analysis/upload_dynamic
+  API -> DB : dynamicResult
+  WPF -> FE : open /analysis/jobId
 end
 
 @enduml

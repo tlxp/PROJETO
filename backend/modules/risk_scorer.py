@@ -182,6 +182,26 @@ class RiskScorer:
 
     # --- Nível calibrado: ALTO/CRÍTICO exigem sinais fortes ---
     def _get_risk_level(self, score: int, details: Dict, yara_count: int) -> str:
+        """Mapeia score numérico para nível de risco com portões de evidência forte.
+
+        Portões (evitam ALTO/CRÍTICO só por ruído heurístico):
+        - ``strong_c2``: >= 2 strings C2.
+        - ``strong_funcs``: >= 2 funções suspeitas.
+        - ``network_imports``: >= 1 import de rede (wininet/ws2_32, etc.).
+        - ``stealer_or_persist``: >= 1 indicador stealer E >= 1 de persistência.
+
+        CRÍTICO: score >= 72 e ``strong_evidence`` (YARA, C2 forte com rede/funções,
+        ou funções + rede + stealer/persistência, ou stealer/persistência + YARA).
+
+        ALTO: score >= 48 com (YARA, C2 forte, ou funções + rede); ou score >= 35
+        com stealer/persistência + YARA (padrão infostealer).
+
+        Perfis só com evasão/obfuscação/packer, sem sinais fortes, ficam no máximo
+        em MÉDIO mesmo com score alto (portão ALTO não abre).
+
+        YARA isolado eleva o score mas não abre ALTO abaixo de 48, salvo combinação
+        stealer/persistência; hits genéricos com pouco score permanecem BAIXO.
+        """
         has_yara = yara_count > 0
         strong_c2 = details["c2_strings"]["count"] >= 2
         strong_funcs = details["suspicious_functions"]["count"] >= 2
@@ -193,11 +213,15 @@ class RiskScorer:
 
         strong_evidence = has_yara or (
             strong_c2 and (strong_funcs or network_imports)
-        ) or (strong_funcs and network_imports and stealer_or_persist)
+        ) or (strong_funcs and network_imports and stealer_or_persist) or (
+            stealer_or_persist and has_yara
+        )
 
         if score >= 72 and strong_evidence:
             return "CRÍTICO"
         if score >= 48 and (has_yara or strong_c2 or (strong_funcs and network_imports)):
+            return "ALTO"
+        if score >= 35 and stealer_or_persist and has_yara:
             return "ALTO"
         if score >= 35:
             return "MÉDIO"

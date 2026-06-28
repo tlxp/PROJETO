@@ -66,7 +66,7 @@ python worker.py
 |--------|------|-----------|
 | `POST` | `/api/analyze` | Análise estática (resposta única). |
 | `POST` | `/api/analyze_stream` | Análise estática em streaming (NDJSON: logs + resultado). |
-| `POST` | `/api/analysis?analysis_type=static\|dynamic\|both` | Cria um job na pipeline. |
+| `POST` | `/api/analysis?analysis_type=static\|dynamic\|both` | Cria job na pipeline. Web: dinâmica/ambas (Caminho A); estática usa também `analyze_stream` + `upload_static`. |
 | `POST` | `/api/analysis/upload_static` | Publica resultado estático calculado noutro processo no mesmo `job_id`. |
 | `POST` | `/api/analysis/upload_dynamic` | Publica relatório da VM (Caminho B — WPF/Hyper-V); pode associar ao mesmo `jobId` da análise estática. |
 | `GET`  | `/api/analysis/{job_id}` | Estado e artefatos de um job. |

@@ -28,19 +28,19 @@ isolada — num único fluxo operacional (web, API ou desktop).
 
 ## Visão geral
 
-O fluxo é **integrado**: o utilizador arrasta um ficheiro, escolhe o tipo de análise e
-recebe relatórios detalhados a partir de um único ecossistema de ferramentas.
+O fluxo é **integrado**: o utilizador arrasta um ficheiro e recebe relatórios detalhados a partir de um único ecossistema de ferramentas.
 
-1. **Arrastar** um ficheiro (`.exe`, `.dll`, `.cs`, etc.) para a interface (web ou desktop WPF).
-2. **Escolher** o tipo de análise: **Estática**, **Dinâmica** ou **Ambas**.
-3. **Consultar** os resultados: código descompilado (C#/pseudo-C), relatório estático, relatório
-   comportamental da VM, scores e indicadores, com explicações assistidas por IA. A interface está
-   disponível em **português** e **inglês** (WPF, web e fallbacks da API) — ver [`docs/i18n.md`](docs/i18n.md).
+1. **Arrastar** um ficheiro (`.exe`, `.dll`, `.cs`, etc.) para a interface **web** ou **desktop WPF**.
+2. **Escolher** o tipo de análise na web: **Estática**, **Dinâmica** ou **Ambas** (dinâmica/ambas usam Caminho A via backend).
+3. **Consultar** os resultados: código descompilado, relatório estático, relatório comportamental da VM,
+   scores e indicadores. Disponível em **português** e **inglês** — ver [`docs/i18n.md`](docs/i18n.md).
 
-| Fluxo | O que faz |
-|-------|-----------|
-| **Estático** | Descompila o binário (ILSpy/Ghidra), analisa imports/strings/YARA/evasão e gera relatório + score, destacando funções potencialmente maliciosas. |
-| **Dinâmico** | Cria/reativa uma VM sandbox isolada (a partir de snapshot limpo), executa a amostra com timeout, monitoriza comportamento (processos, ficheiros, registry, rede) e devolve o relatório comportamental. |
+| Fluxo | Onde iniciar | Caminho | O que faz |
+|-------|--------------|---------|-----------|
+| **Estático** | Web ou WPF | — | Descompilação, YARA, scoring, pseudo-C/IL. Na web: streaming (`/api/analyze_stream`). |
+| **Dinâmico** | Web (modo dinâmica) | **A** | `POST /api/analysis` → vm-agent HTTP (telemetria básica; driver `stub` sem VM real). |
+| **Dinâmico** | WPF | **B** | `04-Run-Sample.ps1` → telemetria completa → `upload_dynamic`. |
+| **Ambas** | Web | **A** + estática | Job único: pipeline estático + dinâmico no backend. |
 
 ---
 
@@ -49,7 +49,7 @@ recebe relatórios detalhados a partir de um único ecossistema de ferramentas.
 | Componente | Pasta | Stack | Descrição |
 |------------|-------|-------|-----------|
 | **Backend** | [`backend/`](backend/README.md) | Python · FastAPI | API e pipeline de análise (estática + orquestração da dinâmica). |
-| **Frontend** | [`frontend/`](frontend/README.md) | React · Vite · TS | Interface web *Drop & Analyze* (upload, relatórios, pseudo-C, IL, xrefs). |
+| **Frontend** | [`frontend/`](frontend/README.md) | React · Vite · TS | *Drop & Analyze*: modos estática/dinâmica/ambas (Caminho A); visualização unificada em `/analysis/{jobId}`. |
 | **Desktop** | [`wpf-gui/`](wpf-gui/README.md) | .NET 8 · WPF | App `RatAnalyzer.Desktop`: ponto de entrada gráfico, bootstrap de dependências e VM. |
 | **GUI Tkinter** *(deprecated / legacy)* | [`backend/gui/`](backend/gui/README.md) | Python · Tkinter | ~~Opcional~~ Mantida só para compatibilidade; usar **web** ou **WPF**. |
 | **VM Agent** | [`vm-agent/`](vm-agent/README.md) | .NET 8 · Minimal API | Agent HTTP que corre dentro da VM sandbox (upload/run/report). |
@@ -187,7 +187,47 @@ em `DATA_DIR/reports/`.
 
 ## Testes e CI
 
-Comandos e convenções: [`CONTRIBUTING.md`](CONTRIBUTING.md). CI: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (**84** pytest · **56** Vitest · **54** xUnit · Playwright E2E · cobertura · `pip-audit` · `gitleaks` · PowerShell UTF-8 · diagramas).
+CI: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (**91** pytest · **62** Vitest · **48** xUnit · Playwright E2E · cobertura · `pip-audit` · `gitleaks` · PowerShell UTF-8 · diagramas).
+
+### Comandos locais
+
+```bash
+# Backend
+cd backend
+pip install --require-hashes -r requirements.lock
+pip install --require-hashes -r requirements-dev.lock
+python -m pytest tests -q
+
+# Integração VM (opt-in — requer sandbox real):
+# RUN_VM_DRIVER_INTEGRATION=1 SANDBOX_VM_DRIVER=hyperv python -m pytest tests/test_vm_drivers.py -m integration -q
+
+# Frontend
+cd frontend && npm i && npm run test && npm run build
+
+# .NET (WPF, vm-agent, benign-vm-test)
+dotnet build RatAnalyzer.sln -c Release
+dotnet test RatAnalyzer.sln -c Release --no-build
+
+# Diagramas (fig-4-* alinhados com docs/diagrams/) — também validado no CI
+python scripts/ci/sync_diagrams_to_report.py --check
+
+# Documentação (.md): links internos e ortografia PT
+python scripts/ci/check_md_links.py
+```
+
+Pre-commit opcional: `pip install pre-commit && pre-commit install`.
+
+### Convenções
+
+| Área | Convenção |
+|------|-----------|
+| **Python** | pytest; locks em `requirements*.lock` |
+| **TypeScript** | `strict`; Vitest; UI em `src/i18n/messages.ts` (PT + EN) |
+| **C# / .NET** | `RatAnalyzer.sln`; MVVM no WPF; UI em `wpf-gui/Localization/` |
+| **PowerShell** | UTF-8 BOM, CRLF, mensagens em PT — [`docs/ps1-scripts.md`](docs/ps1-scripts.md) |
+| **Documentação** | Markdown em PT; diagramas só em [`docs/diagrams/`](docs/diagrams/) |
+
+**Antes de testar com malware real:** VM Hyper-V isolada (sem internet); nunca commitar `secrets/`, `.env` ou passwords — ver [`docs/production-secrets.md`](docs/production-secrets.md) e [`docs/SEGURANCA.md`](docs/SEGURANCA.md).
 
 ---
 
@@ -234,19 +274,19 @@ VM isolada (sem internet), snapshot limpo. Dois caminhos independentes - **tabel
 
 ```mermaid
 flowchart TD
-    START([Preciso de análise dinâmica?]) --> VM{Tenho VM Hyper-V<br/>configurada?}
+    START([Preciso de análise dinâmica?]) --> WHO{Quem orquestra?}
+    WHO -->|Webapp frontend| A["Caminho A — vm-agent HTTP<br/>POST /api/analysis"]
+    WHO -->|App WPF ou scripts PS1| B["Caminho B — PowerShell<br/>04-Run-Sample.ps1"]
+    A --> VM{VM Hyper-V<br/>configurada?}
     VM -->|Não| STUB["Driver stub (default)<br/>valida fluxo sem executar"]
-    VM -->|Sim| WHO{Quem orquestra?}
-    WHO -->|Webapp / API FastAPI| A["Caminho A - vm-agent HTTP<br/>SANDBOX_VM_DRIVER=hyperv"]
-    WHO -->|App WPF ou scripts PS1| B["Caminho B - PowerShell Hyper-V<br/>04-Run-Sample.ps1"]
-    A --> AGENT["Telemetria básica via vm-agent<br/>VM Gen1 ou Gen2"]
-    B --> PSDIRECT["Telemetria completa<br/>ficheiros, registry, rede<br/>cópia PsDirect + SHA256"]
+    VM -->|Sim| AGENT["vm-agent na guest<br/>telemetria básica"]
+    B --> PSDIRECT["PsDirect + SHA256<br/>telemetria completa"]
     START --> PROX{"Driver proxmox?"}
-    PROX -->|Sim| WARN["Experimental - sem guia<br/>use hyperv ou Caminho B"]
+    PROX -->|Sim| WARN["Experimental — use hyperv ou Caminho B"]
 ```
 
-- **Caminho A** - backend + vm-agent HTTP (`SANDBOX_VM_DRIVER=hyperv`; default `stub` não executa amostras).
-- **Caminho B** - WPF / `04-Run-Sample.ps1` (telemetria comportamental completa).
+- **Caminho A** — frontend (modos dinâmica/ambas) ou API → `vm_orchestrator` + vm-agent (`SANDBOX_VM_DRIVER=hyperv`; default `stub`).
+- **Caminho B** — WPF / `04-Run-Sample.ps1` (telemetria comportamental completa).
 
 FAQ: [`docs/faq.md`](docs/faq.md) · diagnóstico Caminho B: [`scripts/hyperv-sandbox/TROUBLESHOOTING.md`](scripts/hyperv-sandbox/TROUBLESHOOTING.md).
 
@@ -254,7 +294,7 @@ FAQ: [`docs/faq.md`](docs/faq.md) · diagnóstico Caminho B: [`scripts/hyperv-sa
 
 ## Documentação
 
-**Índice completo:** [`docs/README.md`](docs/README.md) · [`CONTRIBUTING.md`](CONTRIBUTING.md) · relatório académico [`relatório/main.tex`](relatório/main.tex) (co-localizado com o código; diagramas fonte em `docs/diagrams/`).
+**Índice completo:** [`docs/README.md`](docs/README.md) · [`CHANGELOG.md`](CHANGELOG.md) · relatório académico [`relatório/main.tex`](relatório/main.tex) (co-localizado com o código; diagramas fonte em `docs/diagrams/`).
 
 ---
 
@@ -280,4 +320,4 @@ FAQ: [`docs/faq.md`](docs/faq.md) · diagnóstico Caminho B: [`scripts/hyperv-sa
 
 ## Licença
 
-[MIT](LICENSE) — projeto desenvolvido no âmbito académico (licenciatura). Sugestões e melhorias são bem-vindas — ver [`CONTRIBUTING.md`](CONTRIBUTING.md).
+[MIT](LICENSE) — projeto desenvolvido no âmbito académico (licenciatura).

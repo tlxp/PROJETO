@@ -91,7 +91,7 @@ Invoke-RestMethod -Uri "$base/api/run" -Method Post -Headers $headers `
 Invoke-RestMethod -Uri "$base/api/report" -Headers $headers
 ```
 
-Via backend: `POST /api/analysis?analysis_type=dynamic` - o orquestrador executa upload → run → report e guarda em `dynamicReport`.
+Via backend: `POST /api/analysis?analysis_type=dynamic` (web ou API) — o orquestrador executa upload → run → report e guarda em `dynamicReport`. Telemetria completa: **WPF** (Caminho B).
 
 Smoke test inofensivo: [`benign-vm-test`](../benign-vm-test/README.md) (validação completa de telemetria apenas no **Caminho B**).
 

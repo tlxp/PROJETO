@@ -42,8 +42,8 @@ Coloque os PNG nesta pasta. O `main.tex` mostra caixas placeholder até os fiche
 
 | Ficheiro | Como capturar |
 |----------|---------------|
-| `fig-5-1-web-upload.png` | `npm run dev` → `http://localhost:8080` → ecrã inicial com zona *Drop & Analyze*; incluir seletor de idioma ou `?lang=pt` |
-| `fig-5-2-web-results.png` | Após analisar um `.exe` (ex.: `benign-vm-test.exe`): score visível, painel relatório, pseudo-C ou IL; idealmente permalink `/analysis/{jobId}` |
+| `fig-5-1-web-upload.png` | Ecrã inicial com seletor Estática / Dinâmica / Ambas; `?lang=pt` |
+| `fig-5-2-web-results.png` | Resultados após análise; permalink `/analysis/{jobId}`; coluna relatório dividida se estático + VM |
 | `fig-5-3-wpf-dashboard.png` | `dotnet run --project wpf-gui` (admin) → `MainDashboardView` com tema Signal (obsidian + teal) e botão *Idioma* |
 | `fig-5-4-hyperv-vm.png` | Hyper-V Manager → VM `MalwareSandbox` em execução ou parada, snapshot `CleanState` visível no painel Checkpoints |
 
@@ -56,14 +56,14 @@ Coloque os PNG nesta pasta. O `main.tex` mostra caixas placeholder até os fiche
 
 | Ficheiro | Conteúdo sugerido | Notas para captura |
 |----------|-------------------|-------------------|
-| `fig-5-1-web-upload.png` | Zona de upload (*Drop & Analyze*) | UI bilíngue (PT ou EN); tema escuro Tailwind |
-| `fig-5-2-web-results.png` | Resultados com score e painéis de código | Mostrar coluna **relatório dividida** (estático + VM) quando ambos existem no mesmo `jobId`; permalink `/analysis/{jobId}?lang=…` |
+| `fig-5-1-web-upload.png` | Zona de upload com modos Estática / Dinâmica / Ambas | UI bilíngue; tema escuro Tailwind |
+| `fig-5-2-web-results.png` | Resultados com score e painéis | Relatório dividido (estático + VM) no mesmo `jobId` |
 | `fig-5-3-wpf-dashboard.png` | Ecrã principal WPF | Tema **Signal** (obsidian + teal); botão *Idioma* visível |
 | `fig-5-4-hyperv-vm.png` | Hyper-V Manager | VM `MalwareSandbox`, snapshot `CleanState` |
 
 ### Elementos da UI a documentar nas capturas
 
-- **Web:** três painéis (pseudo-C, IL, relatório); ícone Gemini no painel C; seletor de idioma ou URL com `?lang=en`.
+- **Web:** três painéis; seletor de modo; ícone Gemini; `?lang=en`.
 - **WPF:** `MainDashboardView` com drop zone; opcionalmente `VmAnalysisWindow` (log do `04-Run-Sample.ps1`) ou `StorageMaintenanceWindow` (manutenção via API).
 - **Sandbox:** estado da VM após `01-Setup-MalwareSandbox.ps1`; base `D:\PROJETOVM` (`PROJETOVM_BasePath`).
 

@@ -1,5 +1,5 @@
 // --- Módulo: useIndexAnalysisSession.ts ---
-// Orquestração de análise na página Index (upload, stream e jobs).
+// Orquestração de análise na página Index (upload, stream estático, jobs Caminho A).
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -152,7 +152,6 @@ export function useIndexAnalysisSession() {
   }, [location.search, currentJobId, jobIdFromPath, navigate, beginSession, pollJob]);
 
   // --- Polling leve para atualizar resultados enquanto o job evolui ---
-  // *Ex.: VM a correr após análise estática*
   useEffect(() => {
     if (!currentJobId || !showResults) return;
 
@@ -172,8 +171,7 @@ export function useIndexAnalysisSession() {
             prev && areAnalysisResultsEquivalent(prev, updated) ? prev : updated
           );
           const stillPending = !!(updated.staticPending || updated.dynamicPending);
-          const statusActive =
-            jobStatus === "running" || jobStatus === "queued";
+          const statusActive = jobStatus === "running" || jobStatus === "queued";
           setIsAnalyzing(stillPending || statusActive);
         }
       } catch {
@@ -187,7 +185,6 @@ export function useIndexAnalysisSession() {
     };
   }, [currentJobId, showResults, fetchJob]);
 
-  // --- Auto-carrega demo mock com ?demo=1 (apenas dev; ver mockDemoEnabled.ts) ---
   const mockDemoAutoLoadedRef = useRef(false);
   useEffect(() => {
     if (mockDemoAutoLoadedRef.current) return;
@@ -205,7 +202,6 @@ export function useIndexAnalysisSession() {
     })();
   }, [location.search]);
 
-  // --- Carrega layout de demonstração sem backend (só dev + flag; import dinâmico) ---
   const loadMockDemo = useCallback(async () => {
     if (!isMockDemoEnabled(location.search)) return;
     const { MOCK_DEMO_RESULT } = await import("@/pages/Index/mockDemo");
@@ -216,7 +212,6 @@ export function useIndexAnalysisSession() {
     setIsMockDemo(true);
   }, [location.search]);
 
-  // --- Finaliza job com sucesso e navega para /analysis/:jobId ---
   const finishJobOutcome = useCallback(
     (jobId: string, job: Record<string, unknown>, fallbackFileName?: string) => {
       const chosen = buildAnalysisResultFromJob(job, fallbackFileName);
@@ -231,7 +226,7 @@ export function useIndexAnalysisSession() {
     [navigate]
   );
 
-  // --- Dispara análise (estática via stream ou dinâmica via job) ---
+  // --- Estática: stream; dinâmica/ambas: job Caminho A (POST /api/analysis) ---
   const handleAnalyze = useCallback(async () => {
     if (!file) return;
     const runId = ++analyzeRunRef.current;
@@ -275,9 +270,22 @@ export function useIndexAnalysisSession() {
       const signal = beginSession();
       const submitData = await submitJob(file, analysisMode, signal);
       if (!isCurrent()) return;
-      setAnalysisLogs((prev) => [...prev, `Job criado: ${submitData.jobId}`]);
+      setAnalysisLogs((prev) => [
+        ...prev,
+        `Job criado (${analysisMode}): ${submitData.jobId}`,
+      ]);
 
-      const outcome = await pollJob(submitData.jobId, signal, (status, attempt) => {
+      const outcome = await pollJob(submitData.jobId, signal, (status, attempt, partialJob) => {
+        if (isCurrent() && partialJob) {
+          const partial = buildAnalysisResultFromJob(
+            partialJob,
+            typeof partialJob.fileName === "string" ? partialJob.fileName : file.name
+          );
+          if (partial) {
+            setAnalysisResult(partial);
+            setShowResults(true);
+          }
+        }
         if (isCurrent() && (attempt === 1 || attempt % 10 === 0)) {
           setAnalysisLogs((prev) => [...prev, `Estado do job: ${status}`]);
         }
@@ -289,6 +297,8 @@ export function useIndexAnalysisSession() {
       }
       if (outcome.kind === "still-running") {
         setStillRunningJob({ jobId: submitData.jobId, lastStatus: outcome.lastStatus });
+        setCurrentJobId(submitData.jobId);
+        navigate(ROUTES.analysis(submitData.jobId), { replace: false });
         return;
       }
 
@@ -305,7 +315,16 @@ export function useIndexAnalysisSession() {
         setIsAnalyzing(false);
       }
     }
-  }, [file, analysisMode, stream, beginSession, submitJob, pollJob, navigate, finishJobOutcome]);
+  }, [
+    file,
+    analysisMode,
+    stream,
+    beginSession,
+    submitJob,
+    pollJob,
+    navigate,
+    finishJobOutcome,
+  ]);
 
   return {
     file,

@@ -37,7 +37,8 @@ alt invalid hash
 else valid hash
   PS -> HV : Stop-VM + restore snapshot
   PS --> WPF : report + run JSON
-  WPF -> WPF : publish job to API\n(optional: open browser)
+  WPF -> WPF : publish job to API\nPOST /api/analysis/upload_dynamic
+  WPF -> FE : open /analysis/jobId
 end
 
 @enduml

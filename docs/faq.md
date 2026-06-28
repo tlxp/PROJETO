@@ -24,7 +24,11 @@
 
 ## Análise dinâmica
 
-**Relatório vazio no Caminho A** - Esperado: vm-agent com `monitoring: "not_implemented"`. Telemetria completa: **Caminho B**.
+**Como iniciar na web** — Modos **Dinâmica** ou **Ambas** (Caminho A: `POST /api/analysis` + polling). Requer `SANDBOX_VM_DRIVER=hyperv` e vm-agent para execução real; default `stub` simula sem VM.
+
+**Como iniciar no WPF** — Análise comportamental (Caminho B: `04-Run-Sample.ps1` + `upload_dynamic`).
+
+**Relatório vazio no Caminho A** - Esperado: vm-agent com `monitoring: "not_implemented"`. Telemetria completa: **Caminho B (WPF)**.
 
 **vm-agent health check falha** - `VM_AGENT_TOKEN` igual host/VM; header `X-Agent-Token`; IP estático Internal; bind no IP da VM.
 
@@ -40,4 +44,4 @@ Execute **como Administrador**. Python e Node no PATH para arranque automático 
 
 - Artefatos: `%LOCALAPPDATA%\RatAnalyzer` (`RATANALYZER_DATA_DIR`).
 - Relatórios Caminho B: `D:\PROJETOVM\Reports\`.
-- Testes: [`CONTRIBUTING.md`](../CONTRIBUTING.md).
+- Testes: [README § Testes e CI](../README.md#testes-e-ci).

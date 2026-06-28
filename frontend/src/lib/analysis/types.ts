@@ -27,7 +27,7 @@ export type AnalysisResult = {
   flaggedIndicators?: string[];
   // *Resumo opcional de análise dinâmica*
   dynamicSummary?: string | null;
-  // *Relatório textual completo da análise na VM (Caminho B — Hyper-V)*
+  // *Relatório textual ou JSON da VM (Caminho A via backend ou Caminho B via WPF)*
   vmReport?: string | null;
   // *True quando a análise dinâmica está em curso mas o relatório ainda não chegou*
   dynamicPending?: boolean;
