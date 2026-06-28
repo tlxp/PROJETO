@@ -4,7 +4,7 @@ pefile>=2023.2.7,<2026
 yara-python>=4.3.1,<5.0
 capstone>=5.0.0,<6.0
 # API para o frontend (drop-n-analyze)
-fastapi>=0.110,<1.0
+fastapi>=0.138.1,<1.0
 # uvicorn simples (sem [standard]/uvloop — uvloop não suporta Windows)
 uvicorn>=0.32.0,<1.0
 python-multipart>=0.0.12,<1.0
