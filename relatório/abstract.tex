@@ -1,0 +1,24 @@
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+\markboth{Abstract}{Abstract}
+
+This report presents \rat{}, an integrated static and dynamic analysis platform for detecting
+\emph{Remote Access Trojans} (RATs) in Windows executables (and C\# source with reduced scope),
+developed as the final-year project in Computer Science Engineering at \ubi{}. The solution
+combines a Python backend (FastAPI) with a seven-phase pipeline (PE metadata, ILSpy, heuristics,
+deobfuscation, YARA, risk scoring, native/Ghidra when needed, and reporting), a React web
+interface (with optional Gemini assistant), a WPF desktop application, and an isolated
+Hyper-V sandbox with two independent orchestration paths (HTTP vm-agent and PowerShell Direct
+with SHA-256 integrity checks). Validation relies on 220 automated tests, proxy detection
+metrics on 59 labelled synthetic profiles stratified across five severity levels
+(precision/recall/F1 and level accuracy 1.00), a benign corpus of eight compiled
+PEs analysed statically (specificity 1.00, zero false positives), public MalwareBazaar IOC metadata
+(without host-side malware storage), a formal static benchmark (median 36.1~s, $n=5$), synthetic scoring profiles aligned with
+\filepath{test\_risk\_scoring.py}, and benign execution via \filepath{benign-vm-test.exe} on
+Path~B. The system was designed for explainability and local isolation rather than commercial cloud
+sandboxes, targeting academic and laboratory use.
+
+\Needspace{4\baselineskip}
+\vspace{0.8em}
+\noindent\textbf{Keywords:} malware analysis; RAT; sandbox; Hyper-V; YARA; FastAPI;
+software engineering; cybersecurity.

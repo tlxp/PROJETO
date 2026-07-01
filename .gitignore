@@ -100,3 +100,6 @@ benign-samples/dist/
 # Diagramas — fonte única docs/diagrams/; não versionar .puml derivados do relatório
 relatório/imagens/fig-4-*.puml
 relatório/imagens/plantuml.jar
+
+# Template LaTeX UBI (referência local; não versionar)
+relatório/Formato-LaTeX-Relatorio-2020/

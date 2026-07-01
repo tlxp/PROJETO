@@ -1,0 +1,447 @@
+\chapter{Implementation}
+\label{ch:implementacao}
+
+\section{Introduction}
+
+This chapter describes the implemented system and explains the reasoning behind major design
+choices. For each component, two perspectives are presented: \textbf{functional behaviour} (what
+the system does) and \textbf{design rationale} (why that approach was adopted and which
+trade-offs it entails). Architectural context and diagrams appear in
+Chapters~\ref{ch:engenharia} and~\ref{ch:estado-arte}; validation interpretation appears in
+Section~\ref{sec:discussion-results}.
+
+The primary use case---an analyst submitting a suspicious Windows executable---proceeds as follows:
+the system validates the upload, assigns a unique job identifier, runs static analysis (with optional
+real-time streaming on the web), optionally schedules sandbox execution, and presents unified results
+with decompiled code, behavioural findings, and an explainable risk score. The analyst may
+optionally query the Gemini assistant about suspicious pseudo-C excerpts.
+
+\section{Backend - Static Analysis Pipeline}
+
+\textbf{Functional behaviour.}
+The static analysis engine orchestrates seven phases: (1)~PE metadata extraction;
+(2)~managed decompilation via ILSpy when the sample is a .NET assembly; (3)~import, string, and
+evasion heuristics; (4)~deobfuscation of common encodings; (5)~YARA rule matching;
+(6)~aggregation into a 0--100 risk score with five severity levels; and (7)~structured report
+generation, including native disassembly and Ghidra pseudo-C when ILSpy cannot produce managed
+code. Phases run sequentially on the host; results are persisted per job and exposed through a
+REST API that supports synchronous analysis, NDJSON streaming for live progress, asynchronous
+job creation for combined static/dynamic modes, artefact retrieval, and storage management. Web
+uploads of \texttt{.cs} source files receive string heuristics only; full PE analysis requires a
+compiled binary.
+
+\textbf{Design rationale.}
+Phases are ordered \emph{cheap-before-expensive} because YARA compilation and Ghidra dominate
+wall-clock time on typical laboratory hardware (Table~\ref{tab:benchmark}). Running lightweight
+checks first lets the pipeline fail fast on obvious benign samples and surface early indicators
+before committing to decompilation---a pattern aligned with professional triage workflows
+\cite{bensaoud2024,anderson2012}. Routing .NET samples through ILSpy before Ghidra reflects the
+prevalence of managed RAT loaders and avoids unnecessary native analysis when managed IL is
+available. Limiting \texttt{.cs} handling to heuristics is a deliberate safety trade-off: compiling
+untrusted source on the server would introduce build-time risk without matching the PE analysis
+depth students need after compilation.
+
+The API offers both synchronous and job-based modes because use cases differ. Quick CLI or API
+calls benefit from a single request--response; the web interface benefits from streaming logs
+during long Ghidra runs so users perceive progress rather than a frozen screen. Job identifiers
+unify static and dynamic artefacts when both modes run on the same sample---essential for the
+combined \texttt{both} workflow. Token authentication on analysis routes follows the fail-closed
+policy defined in Chapter~\ref{ch:engenharia}; OpenAPI metadata supports integration without
+requiring this report to catalogue every route.
+
+\section{Web Frontend}
+
+\textbf{Functional behaviour.}
+The web application provides drag-and-drop upload, mode selection (\texttt{static},
+\texttt{dynamic}, or \texttt{both}), real-time progress during static analysis, job submission for
+Path~A sandbox runs, and tri-panel visualisation: structured report, Ghidra pseudo-C, and ILSpy IL
+for .NET samples. Cross-reference navigation links indicators to decompiled regions; bilingual
+support (Portuguese/English) covers classroom use at \ubi{}.
+
+\textbf{Design rationale.}
+A browser-first interface was chosen so students need no local installation beyond the backend and
+sandbox: any laboratory PC with a modern browser can submit samples and read explainable reports.
+Streaming progress addresses a recurring usability complaint in long-running analysis tools---users
+abandon workflows they cannot monitor. Splitting results into three panels reflects how analysts
+actually work: triage from the report and score, then drill into code for confirmation. Keeping
+static visualisation in the browser while WPF handles Path~B avoids duplicating the rich results UI
+in two codebases; both entry points converge on the same job store and permalink model.
+
+Figure~\ref{fig:web-upload} shows the \emph{Drop \& Analyze} upload zone with analysis mode
+selection and real-time progress indicators.
+
+\begin{figure}[H]
+    \centering
+    \reportfig{fig-5-1-web-upload.png}
+    \caption{Web interface - upload zone (\emph{Drop \& Analyze})}
+    \label{fig:web-upload}
+\end{figure}
+
+Figure~\ref{fig:web-results} presents the results view: risk score, structured report, and
+side-by-side pseudo-C and IL panels for decompiled .NET code.
+
+\begin{figure}[H]
+    \centering
+    \reportfig{fig-5-2-web-results.png}
+    \caption{Web interface - report, pseudo-C/IL, and risk score}
+    \label{fig:web-results}
+\end{figure}
+
+\subsection{Gemini Assistant in the Pseudo-C Panel}
+
+\textbf{Functional behaviour.}
+In the pseudo-C panel, the user may open a chat dialog that sends the \emph{visible} decompiled
+excerpt (bounded by a character limit) to Google's Gemini API, together with a natural-language
+question. The API key is stored in browser \texttt{localStorage}; a demonstration mode returns
+simulated answers without external calls.
+
+\textbf{Design rationale.}
+The assistant was placed client-side so sample excerpts and third-party credentials never pass
+through the FastAPI backend---a confidentiality decision consistent with local academic use
+\cite{galli2024}. This sacrifices centralised audit logging and model governance in exchange for
+user control over what code leaves the machine. Bounding the excerpt limits accidental exfiltration
+of entire binaries through the chat surface. The demo mode supports classroom presentations on
+networks where external API access is blocked.
+
+\section{WPF Desktop Application}
+
+\textbf{Functional behaviour.}
+The WPF client (\texttt{Rat Analyzer.exe}) bootstraps backend and frontend dependencies, persists
+language preference, and exposes a dashboard for drag-and-drop analysis. Static analysis opens the
+web results view in the system browser; behavioural analysis invokes Path~B PowerShell automation
+and, when a prior static job exists, publishes the sandbox report to the same job identifier so
+static and dynamic findings appear together.
+
+\textbf{Design rationale.}
+WPF was retained as a desktop entry point because Hyper-V orchestration on Windows often requires
+elevated privileges and direct PowerShell integration that a pure web page cannot safely perform.
+Delegating static visualisation to the browser reuses the full React results experience instead of
+reimplementing panels in XAML---a pragmatic split that trades a two-window workflow for faster
+development and a single source of truth for report rendering. Publishing Path~B results back to
+the shared job store preserves the permalink model students already use from the web UI.
+
+Figure~\ref{fig:wpf-dashboard} shows the \texttt{MainDashboardView}: drag-and-drop sample entry,
+static versus behavioural analysis selection, and integration with Path~B sandbox orchestration.
+
+\begin{figure}[H]
+    \centering
+    \reportfig{fig-5-3-wpf-dashboard.png}
+    \caption{WPF desktop application - main screen}
+    \label{fig:wpf-dashboard}
+\end{figure}
+
+\section{VM Agent and Hyper-V Sandbox}
+
+Dynamic analysis is documented in Figures~\ref{fig:sandbox-paths}--\ref{fig:seq-path-b} and
+Section~\ref{sec:caminhos-ab}. Two orchestration paths coexist; each solves a different integration
+problem.
+
+\subsection{Path A - Backend + HTTP vm-agent}
+
+\textbf{Functional behaviour.}
+With the Hyper-V driver enabled, the Python backend restores the \texttt{CleanState} snapshot,
+starts the guest VM, uploads the sample to an in-guest HTTP agent, triggers execution, polls for
+completion, and retrieves a JSON behavioural report. The agent authenticates requests with a
+shared token, confines uploads to a safe directory, caps file size, and serialises runs so only one
+sample executes at a time.
+
+\textbf{Design rationale.}
+Path~A integrates dynamic analysis into the same job queue as static analysis---the natural choice
+for the web \texttt{dynamic}/\texttt{both} modes. An HTTP agent inside the guest decouples Python
+orchestration from guest OS details: the host only needs snapshot management and REST calls, which
+simplifies testing with a stub driver during development. Single-run serialisation prioritises
+isolation over throughput in teaching labs where concurrent malware execution adds little pedagogical
+value but increases cross-contamination risk \cite{alrawi2024}. Lighter telemetry than Path~B is an
+accepted limitation: Path~A optimises for API cohesion, not maximum behavioural depth.
+
+\subsection{Path B - PowerShell Scripts}
+
+\textbf{Functional behaviour.}
+Path~B is driven by the WPF client and a PowerShell pipeline (phases A--G): VM setup preflight,
+sample copy into the guest, execution of a guest-side collector (\texttt{Run-MalwareAnalysis.ps1}),
+diff of files, registry, network, and Sysmon events when available \cite{sysmon2022}, then report
+transfer via PowerShell Direct or \texttt{Copy-VMFile}. The guest writes a completion digest with
+report SHA-256 and byte length; the host accepts the copy only if both match
+(Listing~\ref{lst:sha256-verify}).
+
+\textbf{Design rationale.}
+Path~B exists because rich Windows-native instrumentation predated the HTTP agent and because
+PowerShell Direct is the most direct way to reach a Hyper-V guest from an elevated desktop session.
+SHA-256 verification across the VM boundary addresses a real failure mode: truncated or partial
+file copies that would otherwise produce silent false negatives in behavioural reporting. Keeping
+Path~B outside the Python driver lets the sandbox evolve---new Sysmon rules, longer timeouts,
+extra collectors---without redeploying the backend. The cost is duplicated orchestration logic and
+two maintenance surfaces, judged acceptable for an academic platform that values depth on the
+teaching path (WPF) and breadth on the API path (web).
+
+\begin{lstlisting}[style=powershell,caption={[Post-transfer SHA-256 verification]{Post-transfer SHA-256 verification --- \filepath{SandboxCommon/VmFileTransfer.ps1}}},label={lst:sha256-verify}]
+function Assert-SandboxCopiedReportHash {
+    param([string] $HostReportPath, [string] $ExpectedSha256, [long] $ExpectedBytes = 0)
+    if ([string]::IsNullOrWhiteSpace($ExpectedSha256)) {
+        throw "Guest SHA-256 digest missing; cannot validate copied report."
+    }
+    if ($ExpectedBytes -gt 0) {
+        $hostBytes = [long](Get-Item -LiteralPath $HostReportPath).Length
+        if ($hostBytes -ne $ExpectedBytes) { throw "Copied report size does not match." }
+    }
+    return (Assert-FileSha256 -Path $HostReportPath -ExpectedSha256 $ExpectedSha256 ...)
+}
+\end{lstlisting}
+
+Figure~\ref{fig:hyperv-vm} shows the \texttt{MalwareSandbox} virtual machine and the
+\texttt{CleanState} snapshot used for isolated sample execution.
+
+\begin{figure}[H]
+    \centering
+    \reportfig{fig-5-4-hyperv-vm.png}
+    \caption{Hyper-V - VM \texttt{MalwareSandbox} and snapshot \texttt{CleanState}}
+    \label{fig:hyperv-vm}
+\end{figure}
+
+\section{User Manual}
+
+Operational setup (dependency installation, backend and frontend startup, WPF administrator
+privileges for Hyper-V, one-time sandbox provisioning, and CLI static analysis) is documented in
+the repository README and sandbox setup guide. This report omits step-by-step command listings to
+keep focus on design and evaluation; students should follow versioned documentation bundled with
+the source release.
+
+\section{Experimental Evaluation}
+
+\subsection{Methodology and Ethical Considerations}
+
+Because executing real malware on university infrastructure introduces safety, legal, and
+operational concerns---potential lateral movement if isolation fails, accidental distribution of
+live specimens, and policy restrictions on storing malicious binaries---validation deliberately
+avoids hosting active RAT executables on the development workstation. This constraint is common in
+academic malware engineering: the goal is to demonstrate \emph{analytical correctness} and
+\emph{pipeline integrity} without turning the laboratory into a malware repository.
+
+The evaluation strategy therefore combines four complementary strands: (i)~\textbf{220 automated
+tests} exercising API contracts, scoring logic, sandbox drivers, and UI components; (ii)~\textbf{59
+stratified synthetic profiles} that encode representative benign and malicious indicator
+combinations aligned with the scoring implementation; (iii)~\textbf{eight compiled benign PEs}
+measuring false-positive behaviour on realistic harmless programs; and (iv)~\textbf{public IOC
+metadata} from MalwareBazaar cross-referenced without downloading binaries, plus dynamic execution
+of a dedicated benign smoke-test binary on Path~B. Synthetic validation is appropriate here
+because the research contribution centres on \emph{explainable aggregation} of indicators: if
+controlled inputs with known ground-truth labels are classified consistently, the scoring model
+behaves as specified; generalisation to unseen families is a separate empirical question requiring
+curated malware corpora under institutional approval.
+
+An optional MalwareBazaar static batch harness was implemented but not executed on the host for
+the same safety reasons; it remains available for supervised laboratory runs. No claim is made
+regarding real-world detection rate or prevalence-weighted accuracy.
+
+\subsection{Static Scoring Validation}
+
+Table~\ref{tab:avaliacao-scoring} summarises representative scoring scenarios exercised
+automatically in CI. These cases probe boundary behaviour: benign validation hashes must not reach
+HIGH without strong evidence; isolated heuristic noise must not trigger high severity; synthetic
+RAT profiles with C2, persistence, and YARA matches must classify as HIGH or CRITICAL.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Static scoring validation scenarios}
+    \label{tab:avaliacao-scoring}
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabularx}{\linewidth}{@{}%
+        >{\raggedright\arraybackslash}p{3.2cm}%
+        >{\raggedright\arraybackslash}p{2.1cm}%
+        >{\centering\arraybackslash}p{0.9cm}%
+        >{\centering\arraybackslash}p{1.8cm}%
+        Y@{}}
+        \toprule
+        \textbf{Scenario} & \textbf{Source} & \textbf{Score} & \textbf{Level} & \textbf{Notes} \\
+        \midrule
+        \filepath{BenignVmTest.exe} &
+        Benign binary &
+        $<48$ &
+        LOW/\allowbreak MEDIUM &
+        Known hash; \texttt{validation\_sample} annotation; no YARA matches \\
+        Heuristic noise &
+        Synthetic profile (pytest) &
+        $<48$ &
+        $\neq$ HIGH &
+        Isolated evasion/noise does not raise to HIGH without strong signals \\
+        Synthetic RAT profile &
+        Synthetic profile (pytest) &
+        $\geq48$ &
+        HIGH/\allowbreak CRITICAL &
+        C2 imports, persistence, YARA \texttt{RAT\_Generic} \\
+        YARA rules v2.0.0 &
+        CI (\texttt{test\_yara\_rules}) &
+        --- &
+        --- &
+        Four files compile without error \\
+        \bottomrule
+    \end{tabularx}
+\end{table}
+
+\subsection{Proxy Detection Metrics}
+
+Proxy precision and recall were computed on \textbf{59 synthetic} profiles stratified across five
+severity levels. A positive triage prediction is defined as HIGH or CRITICAL, mirroring operational
+use where only elevated scores warrant sandbox execution or manual deep dive.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Proxy detection metrics on labelled synthetic profiles ($n=59$)}
+    \label{tab:detection-metrics}
+    \small
+    \begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.2cm}rrrrrr@{}}
+        \toprule
+        \textbf{Metric} & \textbf{TP} & \textbf{TN} & \textbf{FP} & \textbf{FN} &
+        \textbf{Prec.} & \textbf{Rec./F1} \\
+        \midrule
+        HIGH/CRITICAL vs.\ below & 22 & 37 & 0 & 0 & 1.00 & 1.00 / 1.00 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\noindent\small
+Accuracy = 1.00; level accuracy (expected vs.\ predicted level) = 59/59 = 1.00.
+
+The profile set spans 19 VERY LOW, 6 LOW, 12 MEDIUM, 14 HIGH, and 8 CRITICAL cases---from empty
+profiles and Microsoft URLs through AsyncRAT/QuasarRAT-style indicator bundles with packers and
+evasion. All 59 predicted levels matched expectations (37 benign negatives, 22 malicious positives).
+
+\subsection{Discussion of Evaluation Results}
+\label{sec:discussion-results}
+
+Perfect accuracy (1.00) on synthetic profiles does \textbf{not} imply perfect malware detection in
+the field. The metric measures \emph{internal consistency}: given JSON indicator bundles constructed
+to exercise the same scoring functions used in production, the classifier reproduces the intended
+label and severity level. Several sources of optimistic bias must be acknowledged.
+
+First, \textbf{construct bias}: profiles were authored alongside the scorer implementation and
+pytest suite; they encode the designer's mental model of HIGH/CRITICAL gates (\emph{strong\_evidence}
+for YARA or combined C2/function signals). Real malware may present partial, obfuscated, or novel
+combinations that fall between designed buckets. Second, \textbf{spectrum bias}: the benign side
+includes deliberately weak noise profiles but not adversarially crafted binaries designed to evade
+heuristics while remaining malicious \cite{imran2024}. Third, \textbf{absence of prevalence}: metrics are unweighted
+across severity levels; operational false-positive cost on rare HIGH alerts differs from bulk
+benign traffic in enterprise settings.
+
+The benign corpus (specificity 1.00, zero false positives on eight PEs) supports a narrower claim:
+common harmless patterns---HTTP to microsoft.com, registry reads, WinForms UI, crypto digests---do
+not spuriously trigger high severity. Eight samples cannot bound specificity for all legitimate
+software; network libraries and remote-administration tools remain plausible false-positive sources,
+as noted in Chapter~\ref{ch:conclusoes}.
+
+Why accuracy reaches 1.00 here is therefore straightforward: labels are defined on the same feature
+schema the scorer consumes, and gates were tuned until pytest and profile suites agreed. The
+scientifically honest interpretation is \textbf{verification of specification}, not \textbf{validation
+of discovery}. Demonstrating the latter would require executing or statically analysing withheld
+malware families under ethical approval, comparing against VirusTotal or sandbox ground truth, and
+reporting confidence intervals---left as future work. Nonetheless, specification verification is
+valuable: it proves the explainable pipeline behaves deterministically, a prerequisite before any
+field deployment or student-facing grading.
+
+Proxy metrics complement the benign corpus and 220 automated CI tests; together they bound
+\textbf{false-positive risk on harmless code} and \textbf{logical correctness on labelled
+constructs}, while explicitly not bounding \textbf{false-negative risk on live RAT campaigns}.
+
+\subsection{Benign Corpus Static Evaluation}
+
+Eight harmless PEs covering console I/O, file access, HTTP, registry reads, cryptography, environment
+inspection, GUI, and sandbox smoke behaviour were analysed statically. All scored below the HIGH
+threshold (specificity 1.00, zero false positives). Table~\ref{tab:benign-corpus} lists individual
+scores; most cluster at 9 (VERY LOW), with the intentional validation sample at 16 (LOW).
+
+\begin{table}[htbp]
+    \centering
+    \caption[Benign corpus static evaluation ($n=8$ PEs)]{Benign corpus static evaluation ($n=8$ PEs; measured on development host)}
+    \label{tab:benign-corpus}
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabularx}{\linewidth}{@{}%
+        >{\raggedright\arraybackslash}p{3.4cm}%
+        >{\raggedright\arraybackslash}p{2.1cm}%
+        >{\centering\arraybackslash}p{0.9cm}%
+        >{\centering\arraybackslash}p{1.6cm}%
+        Y@{}}
+        \toprule
+        \textbf{Executable} & \textbf{Subfolder} & \textbf{Score} & \textbf{Level} & \textbf{Behaviour} \\
+        \midrule
+        \filepath{BenignHello.exe} & \filepath{hello/} & 9 & VERY LOW & Minimal console \\
+        \filepath{BenignFileIo.exe} & \filepath{file-io/} & 9 & VERY LOW & Read/write in TEMP \\
+        \filepath{BenignHttpMs.exe} & \filepath{http-ms/} & 9 & VERY LOW & HTTP GET microsoft.com \\
+        \filepath{BenignRegistryRead.exe} & \filepath{registry-read/} & 9 & VERY LOW & HKCU read (no Run key) \\
+        \filepath{BenignCryptoDigest.exe} & \filepath{crypto-digest/} & 9 & VERY LOW & Local SHA-256 \\
+        \filepath{BenignEnvDump.exe} & \filepath{env-dump/} & 9 & VERY LOW & Environment variables \\
+        \filepath{BenignGuiMsg.exe} & \filepath{gui-msg/} & 9 & VERY LOW & WinForms MessageBox \\
+        \filepath{BenignVmTest.exe} & \filepath{benign-vm-test} & 16 & LOW & Sandbox smoke test (\texttt{validation\_sample}) \\
+        \bottomrule
+    \end{tabularx}
+\end{table}
+
+\noindent\small
+True negatives = 8; false positives = 0; specificity = 1.00; all passed.
+
+\subsection{Public IOC Metadata Reference}
+
+Public MalwareBazaar listings for QuasarRAT, AsyncRAT, and the benign validation hash provide
+external family labels without storing binaries locally. Validation uses synthetic profiles that
+mirror typical indicators from those families rather than executing the listed samples.
+
+\subsection{Dynamic Sandbox Validation}
+
+Path~B dynamic validation confirmed snapshot restore, guest execution, completion digest emission,
+PsDirect report copy, and SHA-256 verification using a dedicated benign smoke-test binary---exercising
+the full isolation loop without malicious payload. Path~A confirmed execution serialisation and exit
+code reporting; richer in-guest telemetry remains future work (Section~\ref{ch:conclusoes}).
+
+\subsection{Formal Performance Benchmark}
+
+Table~\ref{tab:benchmark} presents a reproducible benchmark on the development workstation
+(Intel Core i7, 16~GB RAM, Windows~10). Static runs used five iterations; the first run's longer
+Ghidra cold-cache probe explains the maximum outlier (68.4~s vs.\ 36.1~s median). Path~B completed
+faster than Path~A in median terms despite richer telemetry, reflecting shorter default execution
+timeouts and different observation depth---a reminder that wall-clock time trades off against
+behavioural coverage.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Formal benchmark - static pipeline and dynamic sandbox paths}
+    \label{tab:benchmark}
+    \small
+    \begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{3.2cm}ccp{1.0cm}Y@{}}
+        \toprule
+        \textbf{Operation} & \textbf{$n$} & \textbf{Median} & \textbf{IQR} & \textbf{Notes} \\
+        \midrule
+        Static pipeline (full) & 5 & 36.1~s & 3.0~s & Min 33.1~s, max 68.4~s; first run includes cold-cache Ghidra probe \\
+        VM restore + boot & 3 & 52~s & 8~s & \texttt{Restore-VMSnapshot} + \texttt{Start-VM} \\
+        Path A (HTTP vm-agent) & 3 & 198~s & 22~s & Includes 120~s sample timeout cap; basic telemetry \\
+        Path B (PsDirect) & 3 & 164~s & 18~s & Default 120~s timeout; full behavioural diff + SHA-256 verify \\
+        \bottomrule
+    \end{tabularx}
+\end{table}
+
+\section{Tests}
+\label{sec:testes}
+
+\textbf{Functional behaviour.}
+Automated coverage totals \textbf{220 tests}: 110 backend pytest cases (API contracts, scoring,
+YARA compilation, pipeline logging, sandbox drivers), 62 frontend Vitest unit tests, Playwright
+end-to-end upload flows, and 48 .NET xUnit tests (vm-agent, WPF, benign smoke binary). CI also
+verifies YARA rule compilation and diagram synchronisation. Path~B was exercised with a dedicated
+benign smoke-test binary; Path~A validates execution gating and exit-code reporting.
+
+\textbf{Design rationale.}
+Tests were distributed across layers because failures in malware platforms often appear at
+interfaces---upload validation, job state transitions, VM driver stubs---rather than in a single
+module. pytest with httpx exercises the API without a browser; Vitest and Playwright cover UI
+contracts that backend tests cannot see; xUnit covers .NET components that Python cannot reach.
+Synthetic scoring profiles and benign PE corpora (Section~\ref{sec:discussion-results}) complement
+unit tests by validating end-to-end scoring behaviour. This pyramid trades some duplication for
+confidence that refactors do not silently break the student-facing workflow.
+
+\section{Conclusions}
+
+The implementation realises the architecture planned in Chapter~\ref{ch:engenharia}: a modular static
+pipeline, asynchronous jobs, two sandbox orchestration paths, and converging web/desktop entry points.
+The dual-path sandbox design reflects a deliberate trade-off---API integration versus instrumentation
+depth---rather than accidental duplication. Appendix~\ref{lst:run-gate} illustrates representative
+sandbox controls at source level for readers who wish to inspect implementation detail.

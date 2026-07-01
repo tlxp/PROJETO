@@ -1,0 +1,91 @@
+\chapter{Appendix}
+
+\section{Token Verification in vm-agent}
+
+\begin{lstlisting}[caption={[Authentication middleware]{Authentication middleware --- \filepath{vm-agent/Security/AgentTokenMiddleware.cs}}},label={lst:vm-agent-token}]
+public static void UseAgentTokenAuth(this WebApplication app, string? agentToken)
+{
+    app.Use(async (context, next) =>
+    {
+        if (!string.IsNullOrWhiteSpace(agentToken))
+        {
+            if (!context.Request.Headers.TryGetValue("X-Agent-Token", out var provided) ||
+                !TokenComparer.FixedTimeEquals(provided.ToString(), agentToken))
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                await context.Response.WriteAsJsonAsync(new
+                    { detail = "Invalid or missing token (header X-Agent-Token)." });
+                return;
+            }
+        }
+        await next();
+    });
+}
+\end{lstlisting}
+
+\section{RunGate --- Serialised Execution}
+
+The \texttt{RunGate} uses a \texttt{SemaphoreSlim(1,1)} with non-blocking acquisition
+(\texttt{WaitAsync(0)}): if a run is already in progress, \texttt{/api/run} returns HTTP~409
+without queueing a second sample.
+
+\begin{lstlisting}[style=csharp,caption={[Single-run gate]{Single-run gate --- \filepath{vm-agent/State/RunGate.cs}}},label={lst:run-gate}]
+public sealed class RunGate
+{
+    private readonly SemaphoreSlim _gate = new(1, 1);
+
+    public async Task<bool> TryEnterAsync() => await _gate.WaitAsync(0);
+
+    public void Release() => _gate.Release();
+}
+\end{lstlisting}
+
+\section{Hyper-V Driver --- Agent HTTP Client}
+
+Listing~\ref{lst:hyperv-agent} shows how the host uploads the sample and polls the behavioural
+report after the VM is ready. Every request includes \texttt{X-Agent-Token} when configured.
+
+\begin{lstlisting}[style=python,caption={[VM agent HTTP calls]{VM agent HTTP calls --- \filepath{vm\_drivers/hyperv.py}}},label={lst:hyperv-agent}]
+def _agent_upload(self, job: "AnalysisJob") -> None:
+    with open(job.sample_path, "rb") as f:
+        files = {"file": (job.sample_path.name, f, "application/octet-stream")}
+        r = requests.post(self._agent_url("/api/upload"), files=files,
+                          headers=_agent_headers(), timeout=...)
+    if not r.ok:
+        raise RuntimeError(f"VM agent upload failed ({r.status_code})")
+
+def _agent_get_report(self) -> Any:
+    r = requests.get(self._agent_url("/api/report"), headers=_agent_headers(), ...)
+    return r.json()
+\end{lstlisting}
+
+\section{VM Agent Limits}
+
+Table~\ref{tab:vm-agent-limits} summarises the execution controls enforced by the in-guest
+vm-agent through \texttt{AgentLimits.cs} and \texttt{RunGate.cs}.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Execution controls in vm-agent (\texttt{AgentLimits.cs}, \texttt{RunGate.cs})}
+    \label{tab:vm-agent-limits}
+    \begin{tabularx}{\linewidth}{@{}lY@{}}
+        \toprule
+        \textbf{Control} & \textbf{Value / behaviour} \\
+        \midrule
+        Maximum upload & 200~MB \\
+        Execution timeout & Configurable; maximum 600~s \\
+        Path traversal & Destination restricted to \texttt{samples/} \\
+        Concurrency & One active run (\texttt{RunGate}) \\
+        Authentication & \texttt{X-Agent-Token} on all routes \\
+        \bottomrule
+    \end{tabularx}
+\end{table}
+
+\section{Report Transfer Protocol (Path B)}
+
+After dynamic analysis on Path~B, the guest writes the behavioural report and a completion
+digest. The host copies both artefacts and accepts the report only when SHA-256 and byte length
+match the guest digest. Specifically, the guest writes \filepath{C:/analysis.txt} and
+\filepath{guest\_analysis\_done.txt} (JSON with \texttt{reportSha256},
+\texttt{reportBytes}, \texttt{transport=psdirect}). The host copies via PsDirect or
+\filepath{Copy-VMFile} and rejects truncated or tampered transfers.

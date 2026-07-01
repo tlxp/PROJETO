@@ -1,0 +1,33 @@
+\chapter*{Resumo}
+\addcontentsline{toc}{chapter}{Resumo}
+\markboth{Resumo}{Resumo}
+
+Este relatório apresenta o \rat{}, uma plataforma integrada de análise estática e dinâmica para
+deteção de cavalos de Troia de acesso remoto (\emph{RAT}) em executáveis \emph{Windows} (e código
+\emph{C\#} com âmbito reduzido), desenvolvida no âmbito do projeto final de Licenciatura em
+Engenharia Informática na \ubi{}. A solução combina um servidor (\emph{backend}) em \emph{Python},
+com \emph{FastAPI}, e uma cadeia de processamento (\emph{pipeline}) de sete fases (metadados de
+executáveis portáteis (\emph{PE}), descompilação com \emph{ILSpy}, heurísticas, desofuscação, regras
+\emph{YARA}, pontuação de risco (\emph{risk scoring}), análise nativa com \emph{Ghidra} quando
+necessário e geração de relatório), uma interface para navegador (\emph{web}) em \emph{React}, com
+assistente \emph{Gemini} opcional, uma aplicação de secretária (\emph{desktop}) \emph{WPF} e um
+ambiente de execução isolado (\emph{sandbox}) \emph{Hyper-V} com dois caminhos de orquestração
+independentes (agente \emph{HTTP} na máquina virtual (\emph{vm-agent}) e \emph{PowerShell Direct}
+com verificação de integridade \emph{SHA-256}). A validação assenta em 220 testes automatizados,
+métricas substitutas de deteção (\emph{proxy detection}) em 59 perfis sintéticos etiquetados
+estratificados por cinco níveis de severidade (precisão, sensibilidade (\emph{recall}), $F_1$ e
+exatidão de nível 1{,}00), um conjunto benigno de oito executáveis \emph{PE} compilados analisados
+estaticamente (especificidade 1{,}00, zero falsos positivos), metadados públicos de indicadores de
+compromisso (\emph{IOC}) do \emph{MalwareBazaar} (sem armazenamento de software malicioso
+(\emph{malware}) na máquina anfitriã (\emph{host})), uma medição formal de desempenho
+(\emph{benchmark}) estático (mediana 36{,}1~s, $n=5$), perfis sintéticos de pontuação
+(\emph{scoring}) alinhados com \filepath{test\_risk\_scoring.py} e execução benigna através de
+\filepath{benign-vm-test.exe} no Caminho~B. O sistema foi concebido para explicabilidade e
+isolamento local, em detrimento de soluções comerciais de análise na nuvem (\emph{cloud sandboxes}),
+destinando-se a uso académico e laboratorial.
+
+\Needspace{4\baselineskip}
+\vspace{0.8em}
+\noindent\textbf{Palavras-chave:} análise de software malicioso (\emph{malware}); troianos de acesso
+remoto (\emph{RAT}); ambiente de execução isolado (\emph{sandbox}); cibersegurança; engenharia de
+software; análise estática e dinâmica.

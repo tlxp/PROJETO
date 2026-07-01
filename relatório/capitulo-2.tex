@@ -1,0 +1,174 @@
+\chapter{State of the Art}
+\label{ch:estado-arte}
+
+\section{Background}
+
+This chapter frames malware analysis techniques for RAT detection and compares widely used
+static, dynamic, and hybrid solutions with \rat.
+
+\section{Malware Analysis: Overview}
+
+Malware analysis is commonly divided into two complementary approaches
+\cite{skoudis2004,cipriano2019,anderson2012,moser2007}. \textbf{Static analysis} examines the
+file without executing it: PE structure, sections, imports/exports, strings, entropy, YARA
+signatures, decompilation, and detection of evasion techniques (anti-debug, anti-VM).
+\textbf{Dynamic analysis} runs the sample in an isolated sandbox and monitors behaviour---process
+creation, registry changes, files, network activity, and persistence.
+
+In the RAT context, static analysis identifies suspicious imports and C2 strings without
+execution risk; dynamic analysis reveals connections, files, and persistence behaviour.
+Neither approach is sufficient alone: packers and polymorphism defeat naive static signatures,
+while sandbox evasion (anti-VM, sleep delays, environment checks) can suppress dynamic
+indicators \cite{anderson2012,moser2007,bensaoud2024}.
+
+The subsections below trace how these techniques evolved, where they fail in practice, and why
+\rat\ favours a hybrid, explainable design.
+
+\subsection{Evolution of Malware Analysis}
+
+Malware analysis has evolved from manual disassembly and signature matching in the late 1990s
+toward automated pipelines that combine sandbox execution, rule engines, and machine learning
+\cite{skoudis2004,bayer2006,willems2007}. Early dynamic tools such as CWSandbox and TTAnalyze
+demonstrated that behavioural traces could complement antivirus heuristics, but required
+carefully controlled environments and human interpretation of noisy logs. The last decade brought
+cloud multi-scanner services, open-source sandboxes (Cuckoo, CAPE), and deep-learning classifiers
+on PE features \cite{raff2018,ucci2019,khan2024,maniriho2023}. Contemporary RAT families (AsyncRAT, QuasarRAT, Remcos)
+further stress this landscape: they blend legitimate remote-administration APIs with obfuscation,
+staged payloads, and commodity packers, making triage a \emph{multi-evidence} problem rather than
+a single score.
+
+\subsection{Static Versus Dynamic Detection: Challenges}
+
+\textbf{Static analysis} is fast, repeatable, and safe---no execution on the analyst host---but
+struggles with encrypted payloads, runtime decryption, and novel variants without known strings or
+imports. \textbf{Dynamic analysis} observes ground-truth behaviour yet incurs higher latency, risks
+sandbox escape if isolation fails, and may miss logic that activates only under specific user
+interaction or after long delays \cite{cipriano2019,moser2007,alrawi2024}. Hybrid workflows therefore remain
+the professional norm: static triage narrows the candidate set; dynamic confirmation validates
+suspicious indicators \cite{bensaoud2024}. \rat\ adopts this hybrid model explicitly, prioritising explainable static
+signals before optional sandbox execution.
+
+\subsection{Explainability Versus Machine Learning}
+
+Machine-learning detectors on raw bytes or PE feature vectors achieve strong benchmark metrics
+\cite{raff2018,ucar2020,apruzzese2018,khan2024} but often function as opaque classifiers: an analyst
+cannot easily justify a verdict to a student, auditor, or court. Recent work on explainable
+behavioural detection \cite{galli2024} and interpretable Windows PE models \cite{khan2024,imran2024}
+highlights this tension. In educational and laboratory settings, \textbf{interpretability} matters
+as much as accuracy. Rule-based YARA matches, scored
+heuristics (C2 strings, persistence, evasion), and decompiled pseudo-C provide auditable
+evidence chains. Large language models offer a complementary layer---natural-language explanation
+of code excerpts---without replacing the underlying indicators. \rat\ deliberately favours this
+\emph{glass-box} design over end-to-end neural classification, accepting that novel malware may
+score below threshold until rules or heuristics are updated.
+
+\subsection{Limitations of Current Approaches}
+
+No single commercial or open-source platform eliminates false positives and false negatives.
+Multi-AV aggregation (VirusTotal) improves coverage but shares samples externally and hides
+engine reasoning. Cloud sandboxes (Any.Run, Hybrid Analysis, Joe Sandbox) excel at rich telemetry
+yet impose cost, latency, and confidentiality constraints for universities holding sensitive
+student or research data. Self-hosted sandboxes (Cuckoo/CAPE) demand substantial operational
+expertise. ML models require labelled datasets that are expensive to curate and drift as families
+evolve \cite{vinod2019,mohaisen2016,imran2024}. These gaps motivate a \textbf{local}, \textbf{transparent},
+and \textbf{modular} platform rather than another opaque cloud service.
+
+\subsection{Sandbox Virtualisation: Hyper-V, Docker, and KVM}
+
+Container platforms such as Docker are ill-suited to faithful Windows malware behaviour: many RATs
+depend on Win32 APIs, GUI subsystems, registry persistence, and process injection patterns that
+do not translate cleanly to Linux containers or minimal Windows images. \textbf{KVM/QEMU} offers
+full hardware virtualisation and is common in Linux-centric research labs, but adds integration
+overhead on Windows workstations where Hyper-V is already enabled for development. \textbf{Hyper-V}
+provides type-1 hypervisor isolation on laboratory PCs, snapshot restore for repeatable runs, and
+native PowerShell automation---trade-offs favouring a Windows-native academic deployment over
+cross-platform portability. Docker and KVM remain valid alternatives where the host OS or
+curriculum differs; they were evaluated and deferred (Section~\ref{ch:tecnologias}).
+
+\subsection{Local Versus Cloud Analysis}
+
+Submitting samples to public sandboxes accelerates triage but leaks file content to third parties
+and prevents custom rule development inside the analysis environment. A \textbf{local sandbox}
+keeps specimens on institutional infrastructure, supports offline teaching, and allows students to
+inspect decompilation and scoring logic without account quotas. The cost is operational: the
+analyst maintains VMs, snapshots, and updates. Configuration choices materially affect what a
+sandbox observes \cite{alrawi2024}. \rat\ targets this local model consciously, accepting higher
+per-run latency than commercial clouds in exchange for confidentiality, reproducibility, and
+pedagogical depth.
+
+\section{Trends in RAT and Malware Detection}
+
+Beyond foundational static and dynamic methods, several product categories shape how analysts
+detect RATs today. The following subsections review commercial sandboxes, multi-engine scanners,
+open-source frameworks, and machine-learning approaches, highlighting trade-offs that informed the
+design of \rat.
+
+\subsection{Commercial and Cloud Sandboxes}
+
+Platforms such as \emph{Any.Run} \cite{anyrun2024}, \emph{Hybrid Analysis} \cite{hybrid2019}, and
+\emph{Joe Sandbox} \cite{joe2020} offer rich dynamic analysis \cite{bayer2006,willems2007,alrawi2024}, but
+impose cost, external sample submission, and limited environment customisation---constraints that
+\rat\ addresses with local, isolated, zero-cost execution.
+
+\subsection{VirusTotal}
+
+\emph{VirusTotal} \cite{virustotal2023} aggregates many antivirus engines for triage, but shares
+submitted samples with partners and does not expose decompiled code or custom detection rules.
+
+\subsection{Open-Source Frameworks}
+
+Several open-source tools address parts of the malware-analysis pipeline, though none combine all
+capabilities targeted by \rat\ in a single educational workflow. \textbf{Cuckoo Sandbox}
+\cite{cuckoo2012} is a self-hostable, extensible Python sandbox with behavioural analysis on Windows
+and Linux; it remains the open-source reference closest to \rat, but requires complex configuration
+and does not integrate decompilation or explainable scoring. \textbf{CAPE Sandbox} \cite{cape2021}, a
+Cuckoo fork, specialises in extracting configurations from malware families and C2 servers---highly
+valuable, yet too narrow for generalist teaching. \textbf{YARA} \cite{yara2023} provides the rule
+language used across the industry; \rat\ embeds YARA as one phase of the static pipeline alongside
+scoring and decompilation. \textbf{Ghidra} and \textbf{ILSpy} \cite{ghidra2019,ilspy2024} are
+essential decompilers typically used from the command line; \rat\ orchestrates both and exposes
+results in the web interface.
+
+\subsection{Machine Learning-Based Detection}
+
+\emph{Deep learning} on PE features achieves high classification metrics
+\cite{raff2018,ucar2020,ucci2019,apruzzese2018,maniriho2023} but yields opaque decisions. \rat\ prioritises
+\textbf{explainability} via concrete indicators and an optional LLM assistant, aligning with recent
+calls for transparent behavioural and static models \cite{galli2024,khan2024}. Public IOC
+repositories such as MalwareBazaar \cite{abusech2021} and labelling tools such as AVclass
+\cite{mohaisen2016} complement local triage \cite{vinod2019}.
+
+\section{Positioning Relative to Existing Solutions}
+
+\rat\ combines multi-phase static analysis with a native Hyper-V sandbox and integrated
+decompilation, exposed through web and WPF interfaces. Table~\ref{tab:comparacao} summarises the
+positioning.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Comparison of the \rat\ solution with existing alternatives}
+    \label{tab:comparacao}
+    \small
+    \begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{2.0cm}>{\raggedright\arraybackslash}p{4.0cm}Y@{}}
+        \toprule
+        \textbf{Reference} & \textbf{Technology} & \textbf{\rat\ solution} \\
+        \midrule
+        VirusTotal & Cloud multi-AV & Local; YARA + heuristics + Hyper-V sandbox \\
+        Cuckoo/CAPE & Self-hostable sandbox & Native Windows sandbox (Hyper-V) \\
+        Any.Run / Hybrid & Commercial sandbox & Free; educational focus; pseudo-C/IL \\
+        YARA standalone & Signature rules & YARA + scoring + decompilation \\
+        Ghidra/ILSpy CLI & Offline decompilation & Orchestrated decompilation + web UI \\
+        ML classifiers & Opaque models & Explainable indicators + report + optional LLM assistant \\
+        \bottomrule
+    \end{tabularx}
+\end{table}
+
+\section{Conclusions}
+
+Effective RAT detection benefits from multi-layer analysis that combines static indicators,
+controlled execution, and human-interpretable reporting. The literature shows a clear tension
+between scalable opaque ML and explainable rule-based triage; cloud sandboxes and local
+hypervisor sandboxes serve different institutional needs. \rat\ positions itself for
+\textbf{local academic use}: Hyper-V isolation, decompilation orchestration, scored heuristics,
+and optional LLM-assisted code explanation, rather than commercial-scale multi-tenant analysis
+or black-box classification alone.

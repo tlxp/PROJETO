@@ -1,0 +1,55 @@
+\chapter{Conclusions and Future Work}
+\label{ch:conclusoes}
+
+\section{Main Conclusions}
+
+\rat\ meets the objectives defined in Chapter~\ref{ch:intro}: it delivers integrated static and
+dynamic RAT analysis with explainable outputs rather than opaque verdicts. Evaluation
+(Section~\ref{sec:discussion-results}) shows internally consistent scoring on synthetic profiles and
+zero false positives on a small benign corpus, while explicitly not claiming field-perfect
+detection.
+
+The \textbf{static pipeline} implements seven analysis phases backed by extensive automated backend
+tests. The \textbf{Hyper-V sandbox} provides two orchestration paths that share snapshot-isolated
+execution. \textbf{Interfaces} include a web application with streaming progress, tri-panel
+reporting, and an optional Gemini assistant, together with a WPF desktop entry point. The project
+includes \textbf{220 automated tests} across Python, TypeScript, and .NET stacks, complemented by
+\textbf{architecture diagrams}, a security guide, and deployment manuals. Throughout, the design
+emphasises \textbf{explainability}: a factorised risk score, decompiled views, and optional
+LLM-assisted interpretation of pseudo-C excerpts.
+
+\section{Limitations}
+
+Several limitations bound the claims that can be made from the current evaluation. Validation
+relies on eight benign PEs, 59 synthetic profiles, and public IOC hashes---not on real RAT binaries
+executed on the development host (see Section~\ref{sec:discussion-results}). Perfect synthetic
+accuracy verifies specification consistency, not field detection rate; construct and spectrum bias
+therefore apply. The MalwareBazaar batch script was implemented but not executed under the
+host-safety policy adopted for this project. Dynamic analysis was exercised only with a benign
+smoke-test binary, and Path~A telemetry remains shallower than Path~B. On the web/API,
+\texttt{.cs} uploads receive string heuristics only. Heuristic scoring may false-positive on
+legitimate network-administration tools, and Hyper-V ties deployment to Windows-capable laboratory
+hosts.
+
+\section{Future Work}
+
+Natural extensions follow from the modular architecture. \textbf{Multi-VM and queue scaling} would
+deploy parallel sandboxes with worker pools and snapshot pools to raise throughput beyond
+single-run serialisation. \textbf{Linux malware support} could extend dynamic analysis to ELF
+specimens via KVM guests alongside the existing Windows Hyper-V path. \textbf{Automated behavioural
+clustering} would group sandbox event traces into similarity classes, surfacing campaign-level
+patterns without manual log review. \textbf{Memory forensics}---for example Volatility-style
+inspection of guest RAM snapshots---could recover injected code and unpacked payloads missed by
+file-system telemetry alone. \textbf{MITRE ATT\&CK mapping} would align static and dynamic
+indicators with standard tactic/technique identifiers for reporting and curriculum alignment.
+
+Further improvements include IDA Pro integration for deeper native analysis beyond Ghidra
+pseudo-C; automatic C2 configuration extraction from obfuscated samples; enriched dynamic telemetry
+(Sysmon, ETW) in the HTTP vm-agent path to match Path~B depth; support for macros, scripts, and
+mobile (APK) formats where institutional policy allows; a curated malware hash database
+(MalwareBazaar/MALPEDIA) with supervised static batch runs; C2 network traffic capture on an
+instrumented internal VLAN; a backend LLM proxy with additional models and automatic
+suspicious-function explanations; and YARA rule management in the web interface for classroom rule
+authoring.
+
+\rat\ provides a solid, extensible foundation for academic malware analysis and future exploration.

@@ -1,0 +1,265 @@
+\chapter{Software Engineering}
+\label{ch:engenharia}
+
+\section{Introduction}
+
+This chapter details system architecture and design: functional and non-functional requirements,
+diagrams, data model, and security architecture.
+
+\section{System Overview}
+
+The following figures summarise the end-to-end workflow and high-level architecture; the diagram
+subsections below refine each element.
+
+\introdiagram[End-to-end workflow (overview sequence)]{%
+Figure~\ref{fig:intro-workflow} situates the analyst workflow: a sample enters through the web or
+desktop interface, undergoes static analysis on the host, and may optionally be executed in an
+isolated Hyper-V sandbox. Results converge in a structured report with decompiled code and an
+explainable risk score.}{fig-4-5-sequence-overview.png}{End-to-end workflow---sample submission, static analysis, optional sandbox execution, and unified reporting (overview sequence)}{fig:intro-workflow}
+
+\introdiagram[High-level system pipeline]{%
+Figure~\ref{fig:intro-pipeline} shows how the presentation tier, API, analysis engine, and sandbox
+layers relate at architectural level.}{fig-4-4-architecture.png}{High-level system pipeline---presentation, API, analysis engine, and sandbox isolation}{fig:intro-pipeline}
+
+\section{Requirements Analysis}
+
+\subsection{Functional Requirements}
+
+Functional requirements were elicited from the intended analyst workflow, the need for isolated
+dynamic execution, and the academic goal of explainable triage rather than opaque classification.
+Stakeholder interviews with the project supervisor, together with comparison against commercial
+sandboxes and open-source frameworks (Chapter~\ref{ch:estado-arte}), informed the scope of upload
+validation, analysis modes, and reporting features. Table~\ref{tab:fr} presents the functional
+requirements identified for \rat.
+
+\small
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{0pt}
+\begin{xltabular}{\linewidth}{@{}>{\raggedright\arraybackslash}p{1.5cm}Y@{}}
+\caption{Functional requirements of \rat} \label{tab:fr} \\
+\toprule
+\textbf{ID} & \textbf{Description} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{ID} & \textbf{Description} \\
+\midrule
+\endhead
+\fr{01} &
+The system shall accept sample uploads in \texttt{.exe}, \texttt{.dll}, and \texttt{.cs} formats
+via the web interface, desktop application, or REST API. The system shall validate file extension,
+enforce a configurable size limit (default 100~MB), and sanitise file names. For \texttt{.cs}
+submissions on the web/API, the system shall apply string-based heuristics only; full PE analysis
+shall require a compiled binary. \\
+\fr{02} &
+The system shall execute a seven-phase static analysis pipeline comprising PE metadata extraction,
+managed decompilation when applicable, import/string/evasion heuristics, deobfuscation, YARA
+scanning, risk scoring, native decompilation when required, and structured report generation. \\
+\fr{03} &
+The system shall execute samples in an isolated Hyper-V virtual machine without Internet
+connectivity and return a behavioural report. The user shall select static, dynamic, or combined
+analysis modes; the web interface shall use Path~A and the WPF application shall use Path~B. \\
+\fr{04} &
+The system shall create, query, and list analysis jobs identified by UUID. The system shall persist
+job metadata in SQLite and store per-job artefacts. \\
+\fr{05} &
+The system shall present analysis results in a web interface with report, pseudo-C, and IL panels.
+The user shall navigate cross-references between panels. The system shall provide a permalink with
+live status updates during sandbox runs. \\
+\fr{06} &
+The system shall compute a risk score from 0 to 100 by aggregating YARA matches, C2 indicators,
+evasion techniques, packers, obfuscation, persistence signals, and entropy. The system shall
+assign one of five severity levels and apply strong-evidence gates for the highest tiers. \\
+\fr{07} &
+The system shall stream incremental NDJSON log events during static analysis so that the user
+receives real-time progress feedback. \\
+\fr{08} &
+The system shall orchestrate dynamic analysis through two paths: (A) a backend-driven HTTP agent
+inside the guest, and (B) PowerShell Direct with post-transfer integrity verification from the WPF
+client. Path~B shall publish sandbox results to the same job as a prior static run when applicable. \\
+\fr{09} &
+The system shall offer an optional browser-side assistant that explains visible decompiled
+pseudo-C excerpts. The user's Gemini API key shall remain in local browser storage. The system
+shall provide a demonstration mode that does not contact external services. \\
+\bottomrule
+\end{xltabular}
+\normalsize
+
+\subsection{Non-Functional Requirements}
+
+Non-functional requirements express quality attributes essential to malware analysis in a
+laboratory environment: confidentiality of samples, isolation of execution, usability for students,
+and maintainability for long-term academic use. Table~\ref{tab:nfr} lists the non-functional
+requirements alongside their rationale.
+
+\small
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{0pt}
+\begin{xltabular}{\linewidth}{@{}>{\raggedright\arraybackslash}p{1.5cm}Y@{}}
+\caption{Non-functional requirements of \rat} \label{tab:nfr} \\
+\toprule
+\textbf{ID} & \textbf{Description} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{ID} & \textbf{Description} \\
+\midrule
+\endhead
+\nfr{01} &
+The system shall bind the API to localhost in production deployments. The system shall require
+authentication tokens before serving analysis requests. Secrets shall not be stored in version
+control. \\
+\nfr{02} &
+The system shall connect the sandbox virtual machine to an internal switch without Internet
+routing. The system shall restore a clean snapshot after each dynamic run. Path~B shall verify
+network isolation before sample execution. \\
+\nfr{03} &
+The system shall support drag-and-drop upload, real-time progress display, and a responsive layout.
+A user with basic security knowledge shall be able to interpret results without formal training. \\
+\nfr{04} &
+The system shall support at least two concurrent analysis workers by default. The administrator
+shall configure execution and VM-operation timeouts per sandbox path. \\
+\nfr{05} &
+The system shall be verifiable through automated continuous integration (pytest, Vitest, dotnet
+build). Dependencies shall be locked and technical documentation versioned. \\
+\nfr{06} &
+The system shall operate without an external Redis instance by falling back to local worker threads.
+An optional Redis queue shall be available for distributed deployments. \\
+\bottomrule
+\end{xltabular}
+\normalsize
+
+\subsection{Requirements Traceability}
+
+Each functional requirement maps to a primary component (backend API, static pipeline, sandbox,
+job store, web UI, scoring module, streaming API, VM orchestration, Gemini assistant) and is
+verified by automated tests in continuous integration. The full traceability matrix, listing
+modules and test suites per requirement, is omitted here to avoid duplicating repository structure;
+coverage is demonstrated by the 220 automated tests summarised in Section~\ref{sec:testes}.
+
+\FloatBarrier
+\section{Diagrams}
+
+PlantUML diagrams (synchronised via \filepath{sync\_diagrams\_to\_report.py}) document functional
+flows, architecture, security boundaries, and sandbox orchestration. Each subsection below
+introduces one diagram and explains its role in the design; the figures are referenced throughout
+Chapters~\ref{ch:engenharia} and~\ref{ch:implementacao}.
+
+\diagramsubsection{Use Case Diagram}{%
+Figure~\ref{fig:usecase} identifies the primary actors---analyst, backend services, sandbox guest,
+and optional LLM assistant---and the use cases they trigger, from sample upload through static
+analysis, dynamic execution, and report consultation.}{fig-4-1-usecase.png}{Use case diagram - \rat}{fig:usecase}
+
+\diagramsubsection{Activity Diagram - Static Analysis}{%
+Figure~\ref{fig:activity-static} details the seven-phase static pipeline executed on the host:
+metadata extraction, managed and native decompilation branches, heuristic scanning, YARA matching,
+risk scoring, and report assembly.}{fig-4-2-activity-static.png}{Activity diagram - static analysis pipeline}{fig:activity-static}
+
+\diagramsubsection{Activity Diagram - Dynamic Analysis}{%
+Figure~\ref{fig:activity-dynamic} shows the dynamic path from job submission through snapshot
+restore, guest execution, telemetry collection, and report transfer back to the host.}{fig-4-3-activity-dynamic.png}{Activity diagram - dynamic analysis pipeline}{fig:activity-dynamic}
+
+\diagramsubsection{System Architecture}{%
+Figure~\ref{fig:architecture} presents the conceptual layering of \rat: presentation tier (web and
+WPF), FastAPI backend, analysis modules, job store, and Hyper-V sandbox.}{fig-4-4-architecture.png}{Conceptual architecture of \rat}{fig:architecture}
+
+\introdiagram{%
+Figure~\ref{fig:sequence} extends this view with an integrated sequence diagram covering static,
+dynamic, and WPF-initiated flows on a single timeline.}{fig-4-5-sequence-overview.png}{Integrated sequence diagram - static, dynamic, and WPF flows}{fig:sequence}
+
+\diagramsubsection{Trust Zones and Authentication}{%
+Figure~\ref{fig:trust-zones} maps the three trust zones---host, isolated sandbox network, and
+untrusted guest---and the data flows crossing each boundary.}{fig-4-6-security-trust-zones.png}{Trust zones - host / sandbox / guest isolation}{fig:trust-zones}
+
+\introdiagram{%
+Figure~\ref{fig:auth} complements the trust-zone view with the authentication tokens and
+credentials required by each component.}{fig-4-10-security-auth.png}{Authentication map - tokens and credentials}{fig:auth}
+
+\diagramsubsection{Sandbox Paths (A and B)}{%
+Figure~\ref{fig:sandbox-paths} compares the two dynamic orchestration paths at a glance.}{fig-4-7-sandbox-paths.png}{Comparison of paths A (HTTP vm-agent) and B (Hyper-V PowerShell)}{fig:sandbox-paths}
+
+\introdiagram{%
+Figure~\ref{fig:seq-path-a} sequences the HTTP vm-agent interactions on Path~A: snapshot restore,
+sample upload, execution, and report retrieval.}{fig-4-8-sequence-path-a.png}{Sequence - Path A (HTTP vm-agent)}{fig:seq-path-a}
+
+\introdiagram{%
+Figure~\ref{fig:seq-path-b} details the PowerShell Direct workflow on Path~B, including SHA-256
+integrity verification of the report copied from the guest.}{fig-4-9-sequence-path-b.png}{Sequence - Path B (PsDirect + SHA256 verification)}{fig:seq-path-b}
+
+\FloatBarrier
+\section{Security Architecture}
+\label{sec:seguranca}
+
+Three trust zones apply: \textbf{host} (trusted analysis services), \textbf{sandbox network}
+(isolated internal switch), and \textbf{guest} (untrusted sample execution). The design follows a
+\emph{fail-closed} policy: production services refuse to start without configured authentication
+tokens; malware executes only inside the VM or a non-executing stub driver; secrets remain outside
+version control; the API listens on localhost; and guest accounts operate with least privilege while
+host administrators manage Hyper-V lifecycle. Defence in depth combines token authentication, upload
+rate limiting, name sanitisation, size caps, and mandatory snapshot restore between runs.
+
+Authentication is layered by component: the backend and WPF client share an API token; the in-guest
+agent validates a separate agent token; Hyper-V automation uses PowerShell Direct with dedicated
+guest credentials. The optional Gemini integration never receives backend credentials---the user's
+API key stays in browser storage---reducing the attack surface for third-party LLM providers.
+Primary residual risks include credential exposure in PowerShell logs (mitigated by environment
+variables and secure dialogs), optional client-side code exfiltration to Gemini (user-controlled),
+and dependency tampering (mitigated by hash-locked installs and optional binary verification on
+WPF startup). Figures~\ref{fig:trust-zones} and~\ref{fig:auth} illustrate these zones and token
+flows; detailed endpoint and variable listings appear in the appendix for operators.
+
+\section{Sandbox Path Comparison}
+\label{sec:caminhos-ab}
+
+Paths A and B address the same isolation goal through different orchestration trade-offs
+(Figure~\ref{fig:sandbox-paths}). \textbf{Path~A} integrates dynamic analysis into the Python
+backend. After snapshot restore, the host talks to an HTTP agent inside the guest for upload,
+execution, and report retrieval. This path suits the web workflow but collects lighter telemetry.
+\textbf{Path~B} is driven by the WPF desktop and PowerShell. Samples reach the guest via
+PowerShell Direct or VM file copy; a guest-side collector gathers richer diffs (files, registry,
+network, Sysmon when present); and the host verifies report integrity with SHA-256 before accepting
+results. Recent sandbox systematisation work \cite{alrawi2024} stresses that monitoring depth and
+configuration strongly affect observable behaviour---a finding that motivated keeping Path~B as a
+deeper, independently evolvable instrumentation path. Both paths share Hyper-V, the internal switch,
+and clean-snapshot restore.
+
+\section{Data Model}
+
+Persistence relies on \textbf{SQLite} with one record per analysis job (UUID identifier, analysis
+type, status, file metadata, timestamps). Per-job artefacts include static and dynamic reports,
+deobfuscation excerpts, and an optional sample copy. Jobs progress through four states---\emph{queued},
+\emph{running}, \emph{completed}, and \emph{failed}---enabling the web interface to poll status
+during long sandbox runs.
+
+Table~\ref{tab:scoring}
+summarises the maximum caps per factor in the risk scorer (each factor contributes up to
+its respective cap; the final score is limited to 100).
+
+\begin{table}[htbp]
+    \centering
+    \caption{Risk score factors (0--100)}
+    \label{tab:scoring}
+    \begin{tabularx}{\linewidth}{@{}Yr@{\hspace{0.6cm}}Yr@{}}
+        \toprule
+        \textbf{Factor} & \textbf{Cap} & \textbf{Factor} & \textbf{Cap} \\
+        \midrule
+        C2 strings & 20 & Persistence & 10 \\
+        YARA matches & 25 & Packer & 10 \\
+        Suspicious functions & 20 & Obfuscation & 8 \\
+        Suspicious imports & 12 & High entropy & 5 \\
+        Stealer indicators & 15 & & \\
+        Evasion techniques & 12 & & \\
+        \bottomrule
+    \end{tabularx}
+\end{table}
+
+\textbf{Levels}: CRITICAL if score $\geq 72$ and
+\texttt{strong\_evidence} (YARA match, or strong C2 combined with suspicious functions/imports);
+HIGH if score $\geq 48$ with at least one strong signal; MEDIUM if score $\geq 35$; LOW if
+score $\geq 15$; otherwise VERY LOW. (The production API returns Portuguese labels:
+\texttt{CRÍTICO}, \texttt{ALTO}, \texttt{MÉDIO}, \texttt{BAIXO}, \texttt{MUITO BAIXO}.)
+
+\section{Conclusions}
+
+Modelling separates presentation, API, analysis, and sandbox concerns. Requirements remain
+traceable through automated CI coverage rather than exhaustive in-report module listings.

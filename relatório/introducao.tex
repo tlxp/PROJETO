@@ -1,0 +1,78 @@
+\chapter{Introduction}
+\label{ch:intro}
+
+\section{Context}
+
+This report presents the final-year project in Computer Science Engineering at \ubi,
+dedicated to the development of \rat: an integrated static and dynamic analysis platform
+for detecting \emph{Remote Access Trojans} (RATs) in Windows executables (\texttt{.exe},
+\texttt{.dll}) and, with reduced scope, C\# source files (\texttt{.cs}): on the web/API,
+\texttt{.cs} files undergo string-based heuristics only (no PE imports or ILSpy); compilation
+to \texttt{.exe} is available via the optional Tkinter GUI or manual build before upload.
+
+RATs are among the most concerning classes of malware today: they allow an attacker to
+remotely control a compromised system, harvest credentials, exfiltrate data, and execute
+arbitrary commands. Their detection often requires combining \emph{offline} techniques
+(static binary analysis) and \emph{online} techniques (behaviour observation in a controlled
+environment), complemented by signature rules and scoring heuristics.
+
+\rat\ was designed in an academic context as an \textbf{educational and triage} tool:
+in addition to flagging risk indicators, it exposes decompiled code, structured reports, and
+explanations of suspicious functions, enabling students and junior analysts to understand
+\emph{why} a file is considered malicious. Complementarily, the web interface integrates a
+\textbf{Google Gemini}-based assistant that allows users to ask, in natural language, about
+the meaning of the pseudo-C excerpt visible in the results panel.
+
+\section{Motivation}
+
+The proliferation of malware with remote access capabilities demands accessible tools that
+integrate multiple analysis layers into a single workflow. Commercial solutions such as
+cloud sandboxes (VirusTotal, Any.Run, Hybrid Analysis) are powerful but often unsuitable for
+teaching or local laboratory contexts, whether due to cost or sample confidentiality.
+
+This project was motivated by the need to \textbf{integrate} static analysis, YARA rules,
+decompilation, and sandbox execution in a single workflow spanning an API, a web interface, and
+a desktop application. Equally important is \textbf{isolation}: potentially malicious samples
+must run inside a Hyper-V virtual machine without Internet connectivity, with automatic restore
+to a clean snapshot after each run. The platform must also favour \textbf{transparency}, producing
+detailed reports---imports, C2 strings, evasion indicators, risk score, pseudo-C/IL---rather than
+a binary verdict alone, with optional natural-language explanation of decompiled excerpts. Finally,
+\textbf{academic reproducibility} requires open-source code, versioned documentation, automated
+tests, and security guidance suitable for supervised laboratory deployment.
+
+\section{Objectives}
+
+The overarching goal of \rat\ is to deliver an integrated static and dynamic analysis platform
+for RAT triage in an academic setting: the analyst uploads a suspect file, receives an
+explainable risk assessment grounded in concrete indicators, and may optionally observe behaviour
+in an isolated sandbox before deciding on further action.
+
+To realise this goal, the project pursued several concrete aims. The system provides a Python
+\textbf{backend} that receives samples, executes a complete static analysis pipeline, and
+orchestrates dynamic analysis jobs in static, dynamic, or combined modes. A \textbf{web interface}
+offers drag-and-drop upload, mode selection, progress streaming, report visualisation, decompiled
+code panels, an optional Gemini assistant, and bilingual support (Portuguese/English). A
+\textbf{WPF desktop application} serves as an alternative entry point with dependency bootstrap,
+persistent language selection, and Hyper-V sandbox integration via Path~B. A \textbf{VM agent} and
+PowerShell automation enable isolated sample execution and behavioural telemetry collection inside
+the guest. An \textbf{explainable scoring model} (0--100) aggregates YARA matches, C2 indicators,
+evasion techniques, packers, obfuscation, and persistence signals. Finally, the solution is
+\textbf{validated} through automated tests, benign samples, and operational documentation for
+local deployment.
+
+\section{Document Organisation}
+
+This report comprises six chapters, an appendix, and a bibliography. \textbf{Chapter~\ref{ch:estado-arte}}
+(\emph{State of the Art}) surveys malware analysis techniques, commercial and open-source
+alternatives, and positions \rat\ relative to existing sandboxes and detection approaches.
+\textbf{Chapter~\ref{ch:tecnologias}} (\emph{Technologies and Tools Used}) describes the
+multi-language stack---Python/FastAPI, React, .NET/WPF, YARA, Ghidra, ILSpy, Hyper-V, and
+SQLite---together with security and isolation choices. \textbf{Chapter~\ref{ch:engenharia}}
+(\emph{Software Engineering}) presents functional and non-functional requirements, UML diagrams,
+the data model, trust zones, and the two sandbox orchestration paths. \textbf{Chapter~\ref{ch:implementacao}}
+(\emph{Implementation}) details each software component, the user manual, experimental
+evaluation, and the automated test suite. \textbf{Chapter~\ref{ch:conclusoes}} (\emph{Conclusions
+and Future Work}) summarises achievements, acknowledges limitations, and outlines extensions such
+as multi-VM scaling, Linux support, and MITRE ATT\&CK mapping. The \textbf{appendix} reproduces
+representative source excerpts for the vm-agent and Hyper-V driver. The \textbf{bibliography}
+lists the references cited throughout the document.

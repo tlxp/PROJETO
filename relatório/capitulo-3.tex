@@ -1,0 +1,105 @@
+\chapter{Technologies and Tools Used}
+\label{ch:tecnologias}
+
+\section{Introduction}
+
+This chapter summarises the technologies used in \rat: backend, interfaces, sandbox, and report.
+
+\section{Python and FastAPI}
+
+\textbf{Python~3.10+} was adopted as the main backend language, due to its maturity in the
+information security ecosystem and the wide availability of libraries for PE file analysis,
+binary format parsing, and integration with decompilation tools.
+\textbf{FastAPI} \cite{fastapi2024} was chosen as the web framework for providing automatic
+data validation with Pydantic, interactive OpenAPI documentation (\texttt{/docs}), and native
+support for asynchronous NDJSON streaming (\texttt{/api/analyze\_stream}), essential for
+real-time feedback during analysis. There is also an optional \textbf{Tkinter} graphical interface
+for local static analysis without a browser, useful for quick demonstrations.
+
+\section{React, Vite and TypeScript}
+
+The web interface was built with \textbf{React~18} and \textbf{TypeScript}, ensuring static
+typing that reduces errors during development. The \textbf{Vite} bundler enables instant hot-reload
+during development and optimised production builds. For visual styling,
+\textbf{Tailwind CSS} and \textbf{shadcn/ui} were adopted; transition animations are handled
+with \textbf{Framer Motion}. The unit test suite uses \textbf{Vitest} (62 unit tests).
+Integration with \textbf{Google Gemini} (\texttt{gemini-2.0-flash}) is done directly in the
+browser: the user's API key is stored in \texttt{localStorage} and never passes through the
+FastAPI backend, ensuring the server has no access to third-party credentials.
+
+\section{.NET~8, WPF and Minimal API}
+
+Three .NET~8 projects share the \texttt{RatAnalyzer.sln} solution: \textbf{Rat Analyzer}
+(WPF desktop, compiles to \texttt{Rat Analyzer.exe}), \textbf{VmAgent} (Minimal API running inside the sandbox
+VM to receive and execute samples), and \textbf{BenignVmTest} (benign executable to validate
+the dynamic pipeline without risk). WPF serves as an alternative entry point to the web
+interface, with automatic dependency bootstrap, persistent language selection, and direct
+integration with the Hyper-V sandbox (Path~B).
+
+\section{YARA, Ghidra and ILSpy}
+
+\textbf{YARA} \cite{yara2023} is the pattern-matching rule language used for signature-based
+detection. Rules reside in \filepath{yara\_rules/} and are compiled and applied to the binary under
+analysis. \textbf{ILSpy CLI} \cite{ilspy2024} decompiles .NET assemblies into readable C\#
+code, enabling inspection of executables written with the managed runtime.
+\textbf{Ghidra~12+} \cite{ghidra2019}, developed by the NSA, is used for decompilation of
+native PE binaries, producing pseudo-C that is exposed in the web interface code panel.
+
+\section{Hyper-V, PowerShell and SQLite}
+
+The dynamic sandbox relies on \textbf{Hyper-V}, the native Windows hypervisor, with a VM named
+\texttt{MalwareSandbox}, connected to an \textbf{Internal} switch with no Internet connectivity
+on the guest and a \texttt{CleanState} snapshot that is restored before each analysis.
+\textbf{PowerShell} automates one-time VM setup (\filepath{01-Setup-MalwareSandbox.ps1}) and,
+on \textbf{Path~B}, sample copy, guest execution, and report transfer
+(\filepath{04-Run-Sample.ps1}). On \textbf{Path~A}, the Python backend
+(\filepath{vm\_drivers/hyperv.py}) uses PowerShell only for snapshot restore and VM start;
+sample upload, execution, and report retrieval go through the HTTP vm-agent.
+\textbf{SQLite} persists analysis jobs in \texttt{analysis.db}; \textbf{Redis}
+with \textbf{RQ} is a configurable option for distributed queuing in environments with multiple workers.
+
+The backend uses a pluggable sandbox driver so that VM orchestration can change between
+development, Hyper-V, or future Proxmox deployments without rewriting the job pipeline. The
+orchestrator calls the active driver for restore, execution, and report retrieval while keeping
+the analysis contract unchanged.
+
+\section{GitHub and LaTeX}
+
+\textbf{GitHub} hosts the project repository, with Git version control and continuous integration
+via \textbf{GitHub Actions} (CI with pytest, Vitest, and dotnet build). Changes are recorded in
+\texttt{CHANGELOG.md} and development conventions in the root \texttt{README.md}. This report was
+written in \textbf{\LaTeX}, a typesetting system widely used in academic and scientific contexts,
+which automatically manages section numbering, figures, tables, and bibliographic references
+with rigour and consistency.
+
+\section{Security and Isolation}
+
+The design adopts \emph{fail-closed} in production: the backend refuses to start without
+\texttt{RATANALYZER\_API\_TOKEN} when \texttt{RATANALYZER\_ENV=production}; the vm-agent
+refuses to start without \texttt{VM\_AGENT\_TOKEN}, except when
+\texttt{VM\_AGENT\_ALLOW\_INSECURE=1} in local development.
+
+Secrets reside in \filepath{secrets/} (gitignored) and are produced by
+\filepath{scripts/generate-production-secrets.ps1}.
+HTTP uploads require authentication, with name sanitisation, size limits, and storage in
+\texttt{DATA\_DIR} outside the repository. The canonical security documentation is in
+\filepath{docs/SEGURANCA.md}.
+
+\section{Technology Choices and Rejected Alternatives}
+
+Major stack decisions balanced \textbf{local reproducibility}, \textbf{Windows fidelity}, and
+\textbf{academic maintainability}. Hyper-V with snapshot restore was preferred over Docker because
+RAT behaviour depends on full Win32 semantics; Docker excels at service isolation but poorly
+replicates GUI, registry, and injection patterns relevant to this project. KVM offers comparable
+isolation on Linux hosts but would have forced a heterogeneous lab setup on predominantly Windows
+workstations. FastAPI was chosen over Flask or Django for asynchronous streaming and schema
+validation; React over alternative SPA frameworks for ecosystem familiarity and test tooling; WPF
+over Electron to avoid bundling a browser runtime while retaining direct Hyper-V integration.
+Redis-backed queuing remains optional so the platform operates offline with local worker threads.
+The Gemini assistant runs in the browser only: decompiled excerpts and API keys stay on the client,
+which protects sample confidentiality at the cost of centralised LLM control.
+
+\section{Conclusion}
+
+The stack reflects the heterogeneous nature of malware analysis: Python for pipeline and API,
+TypeScript for UX, C\# for Windows/Hyper-V integration, and PowerShell for automation.
