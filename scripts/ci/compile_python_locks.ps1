@@ -3,11 +3,23 @@
 
 $ErrorActionPreference = "Stop"
 $backend = Join-Path $PSScriptRoot "..\..\backend" | Resolve-Path
+$postprocess = Join-Path $PSScriptRoot "postprocess_lock.py"
 
 $compileArgs = @(
     "--strip-extras",
-    "--generate-hashes"
+    "--generate-hashes",
+    "--quiet"
 )
+
+function Invoke-Python {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Args)
+    if (Get-Command py -ErrorAction SilentlyContinue) {
+        & py -3.11 @Args
+    } else {
+        & python @Args
+    }
+    if ($LASTEXITCODE -ne 0) { throw "Comando Python falhou: $Args" }
+}
 
 # --- Invocação do pip-compile para um par source/output ---
 function Invoke-Compile {
@@ -15,11 +27,18 @@ function Invoke-Compile {
         [string]$Source,
         [string]$Output
     )
-    $srcPath = Join-Path $backend $Source
-    $outPath = Join-Path $backend $Output
-    Write-Host "pip-compile $Source -> $Output"
-    # Compila dependências com hashes para reprodutibilidade
-    python -m piptools compile $srcPath -o $outPath @compileArgs
+    $tmp = [System.IO.Path]::GetTempFileName()
+    try {
+        Write-Host "pip-compile $Source -> $Output"
+        Invoke-Python -Args (@(
+            "-m", "piptools", "compile",
+            $Source, "-o", $tmp
+        ) + $compileArgs)
+        Invoke-Python -Args @($postprocess, $tmp, $Output)
+    }
+    finally {
+        Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+    }
 }
 
 # --- Compilação de todos os ficheiros lock do backend ---

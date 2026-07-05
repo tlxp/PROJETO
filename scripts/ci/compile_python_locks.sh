@@ -8,10 +8,16 @@ cd "$BACKEND"
 
 ARGS=(--strip-extras --generate-hashes)
 
+POSTPROCESS="$(cd "$(dirname "$0")" && pwd)/postprocess_lock.py"
+
 # --- Invoca pip-compile para um par source/output ---
 compile_one() {
   echo "pip-compile $1 -> $2"
-  python -m piptools compile "$1" -o "$2" "${ARGS[@]}"
+  local tmp
+  tmp="$(mktemp)"
+  python -m piptools compile "$1" -o "$tmp" "${ARGS[@]}"
+  python "$POSTPROCESS" "$tmp" "$2"
+  rm -f "$tmp"
 }
 
 # --- Compilação de todos os ficheiros lock do backend ---
