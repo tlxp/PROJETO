@@ -48,6 +48,7 @@ class TestStubDriver:
 
     def test_run_dynamic_analysis_hyperv_missing_vars(self, monkeypatch, tmp_path):
         # *Driver hyperv sem HYPERV_*/VM_AGENT_BASE_URL deve indicar as variáveis em falta*
+        monkeypatch.setattr("vm_drivers.hyperv.sys.platform", "win32")
         monkeypatch.setenv("SANDBOX_VM_DRIVER", "hyperv")
         for var in ("HYPERV_VM_NAME", "HYPERV_SNAPSHOT_NAME", "VM_AGENT_BASE_URL"):
             monkeypatch.delenv(var, raising=False)
