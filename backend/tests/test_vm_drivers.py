@@ -27,8 +27,16 @@ def _sample_job(tmp_path: Path) -> AnalysisJob:
 
 # --- Testes de StubDriver ---
 class TestStubDriver:
-    def test_run_dynamic_analysis_stub_default(self, monkeypatch, tmp_path):
+    def test_run_dynamic_analysis_driver_unset_raises(self, monkeypatch, tmp_path):
+        # *Sem SANDBOX_VM_DRIVER, a análise dinâmica deve falhar com erro claro*
         monkeypatch.delenv("SANDBOX_VM_DRIVER", raising=False)
+        job = _sample_job(tmp_path)
+
+        with pytest.raises(RuntimeError, match="SANDBOX_VM_DRIVER"):
+            run_dynamic_analysis(job)
+
+    def test_run_dynamic_analysis_stub_explicit(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("SANDBOX_VM_DRIVER", "stub")
         job = _sample_job(tmp_path)
 
         result = run_dynamic_analysis(job)
@@ -37,6 +45,16 @@ class TestStubDriver:
         assert "stub" in result["summary"].lower()
         assert result["behavior"]["status"] == "stub"
         assert result["behavior"]["sample"]["fileName"] == "sample.exe"
+
+    def test_run_dynamic_analysis_hyperv_missing_vars(self, monkeypatch, tmp_path):
+        # *Driver hyperv sem HYPERV_*/VM_AGENT_BASE_URL deve indicar as variáveis em falta*
+        monkeypatch.setenv("SANDBOX_VM_DRIVER", "hyperv")
+        for var in ("HYPERV_VM_NAME", "HYPERV_SNAPSHOT_NAME", "VM_AGENT_BASE_URL"):
+            monkeypatch.delenv(var, raising=False)
+        job = _sample_job(tmp_path)
+
+        with pytest.raises(ValueError, match="HYPERV_VM_NAME"):
+            run_dynamic_analysis(job)
 
 
 @pytest.mark.integration

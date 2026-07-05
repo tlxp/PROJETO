@@ -34,7 +34,8 @@ async def health() -> dict:
         "yara": yara,
         "ghidra": ghidra,
         "apiTokenConfigured": api_token_configured(),
-        "vmDriver": (os.environ.get("SANDBOX_VM_DRIVER") or "stub").strip().lower(),
+        # *"unset" = análise dinâmica não configurada (jobs dynamic/both falham com erro claro)*
+        "vmDriver": (os.environ.get("SANDBOX_VM_DRIVER") or "").strip().lower() or "unset",
         "dataDir": str(config.DATA_DIR),
     }
 

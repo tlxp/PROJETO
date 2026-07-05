@@ -10,7 +10,7 @@ import os
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, fields, asdict
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -117,6 +117,18 @@ def _get_executor() -> ThreadPoolExecutor:
         return _EXECUTOR
 
 
+# --- Constrói AnalysisResult a partir de dict da DB (ignora chaves desconhecidas) ---
+def _result_from_dict(data: object) -> Optional[AnalysisResult]:
+    if not isinstance(data, dict):
+        return None
+    known = {f.name for f in fields(AnalysisResult)}
+    try:
+        return AnalysisResult(**{k: v for k, v in data.items() if k in known})
+    except Exception:  # noqa: BLE001
+        _LOGGER.exception("Falha ao reconstruir AnalysisResult a partir da DB.")
+        return None
+
+
 # --- Garante existência de sandbox_jobs ---
 def _ensure_jobs_dir() -> Path:
     base = config.SANDBOX_JOBS_DIR
@@ -207,6 +219,10 @@ def create_job(file_name: str, contents: bytes, analysis_type: AnalysisType) -> 
             base_dir=base_dir,
             sample_path=sample_path,
             output_dir=output_dir,
+            # Copiar resultados para memória: get_job_payload prefere a versão em
+            # memória, e sem isto o frontend recebia um job "completed" vazio.
+            static_result=_result_from_dict(cached_row.get("staticResult")),
+            dynamic_result=_result_from_dict(cached_row.get("dynamicResult")),
         )
         with _JOBS_LOCK:
             _JOBS[job_id] = job

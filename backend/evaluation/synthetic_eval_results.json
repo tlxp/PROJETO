@@ -1,6 +1,6 @@
 {
   "methodology": "Métricas proxy em perfis estáticos sintéticos etiquetados (sem binários maliciosos). Predição positiva: nível ALTO ou CRÍTICO.",
-  "profiles_path": "C:\\Users\\msh\\AppData\\Local\\Temp\\pytest-of-msh\\pytest-9\\test_run_synthetic_eval_exit_c0\\tampered_profiles.json",
+  "profiles_path": "C:\\Users\\msh\\AppData\\Local\\Temp\\pytest-of-msh\\pytest-1\\test_run_synthetic_eval_exit_c0\\tampered_profiles.json",
   "n_profiles": 59,
   "confusion_matrix": {
     "tp": 22,

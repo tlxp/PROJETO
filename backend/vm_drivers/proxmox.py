@@ -115,7 +115,10 @@ class ProxmoxVMDriver:
         if not self.cfg.agent_base_url:
             missing.append("VM_AGENT_BASE_URL")
         if missing:
-            raise ValueError(f"Config Proxmox incompleta. Variáveis em falta: {', '.join(missing)}")
+            raise ValueError(
+                f"Config Proxmox incompleta. Variáveis em falta: {', '.join(missing)}. "
+                "Defina-as em backend/.env (ou no ambiente)."
+            )
 
     # --- Headers de autenticação Proxmox API Token ---
     def _proxmox_headers(self) -> Dict[str, str]:

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from pathlib import Path
 
 import config
@@ -44,12 +45,17 @@ def compute_pipeline_version() -> str:
         "KEEP_GHIDRA_PROJECT": bool(getattr(config, "KEEP_GHIDRA_PROJECT", True)),
     }
 
-    # *Materializar string com versão, hashes YARA e flags*
+    # *Driver de análise dinâmica: resultados dinâmicos de drivers diferentes
+    # (ex.: stub vs hyperv) não são intercambiáveis no cache*
+    vm_driver = (os.environ.get("SANDBOX_VM_DRIVER") or "").strip().lower()
+
+    # *Materializar string com versão, hashes YARA, flags e driver*
     material = "\n".join(
         [
             f"app_version={APP_VERSION}",
             "yara=" + "|".join(yara_hashes),
             "flags=" + "|".join(f"{k}={int(bool(v))}" for k, v in sorted(flags.items())),
+            f"vm_driver={vm_driver}",
         ]
     )
     return _sha256_text(material)

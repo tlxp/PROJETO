@@ -107,7 +107,8 @@ class HyperVVMDriver:
             missing.append("VM_AGENT_BASE_URL")
         if missing:
             raise ValueError(
-                f"Config Hyper-V incompleta. Variáveis em falta: {', '.join(missing)}"
+                f"Config Hyper-V incompleta. Variáveis em falta: {', '.join(missing)}. "
+                "Defina-as em backend/.env (ver backend/.env.example e docs/sandbox-hyperv-setup.md)."
             )
 
         for label, value in (

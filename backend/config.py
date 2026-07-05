@@ -10,6 +10,31 @@ from pathlib import Path
 # *Raiz do projeto (pasta PROJETO, acima de backend/)*
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+# *Diretório backend (onde vive o .env opcional)*
+BACKEND_DIR = Path(__file__).resolve().parent
+
+
+# --- Carrega backend/.env para o ambiente (sem sobrepor variáveis já definidas) ---
+def _load_dotenv(path: Path) -> None:
+    if not path.exists():
+        return
+    try:
+        for raw_line in path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+    except OSError:
+        # .env é opcional; nunca impedir o arranque por causa dele.
+        pass
+
+
+_load_dotenv(BACKEND_DIR / ".env")
+
 # *Dados do analisador mantidos no repositório*
 YARA_RULES_DIR = PROJECT_ROOT / "yara_rules"
 

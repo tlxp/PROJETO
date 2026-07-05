@@ -126,7 +126,9 @@ backend/
 ### `vm_drivers/`
 
 Padrão de plugin: `base.py` define a interface e cada driver implementa-a. Selecionado por
-`SANDBOX_VM_DRIVER` (`stub` por defeito, seguro). Ver [`docs/sandbox-hyperv-setup.md`](../docs/sandbox-hyperv-setup.md).
+`SANDBOX_VM_DRIVER` (**obrigatório** para análise dinâmica: sem ele os jobs `dynamic`/`both`
+falham com erro explicativo; `stub` dá um relatório simulado seguro). Ver
+[`docs/sandbox-hyperv-setup.md`](../docs/sandbox-hyperv-setup.md).
 
 **Segurança:** [`docs/SEGURANCA.md`](../docs/SEGURANCA.md) · implementação: `security_config.py`, `upload_security.py`.
 
@@ -135,6 +137,9 @@ Padrão de plugin: `base.py` define a interface e cada driver implementa-a. Sele
 Os **artefatos de runtime não são versionados**. Por defeito ficam em `%LOCALAPPDATA%\RatAnalyzer`
 (`DATA_DIR`), com override via `RATANALYZER_DATA_DIR`. Inclui `reports/`, `decompiled/`, `sandbox_jobs/`
 e a base de dados SQLite `analysis.db`. Ver [`config.py`](config.py).
+
+O ficheiro **`backend/.env`** (copiado de [`.env.example`](.env.example)) é carregado
+automaticamente no arranque por `config.py`; variáveis já definidas no ambiente têm prioridade.
 
 Variáveis de ambiente relevantes:
 
@@ -148,7 +153,7 @@ Variáveis de ambiente relevantes:
 | `RATANALYZER_LANG` | Idioma dos fallbacks da API (`pt` \| `en`; default `pt`). Lido também de `Accept-Language` nos routers quando aplicável. |
 | `GHIDRA_INSTALL_DIR` | Caminho do Ghidra (ativa pseudo-C nativo). |
 | `REDIS_URL` | Ativa o modo de fila (RQ); sem ela, jobs em threads locais. |
-| `SANDBOX_VM_DRIVER` | Driver da análise dinâmica (`stub`/`hyperv`/`proxmox`). |
+| `SANDBOX_VM_DRIVER` | Driver da análise dinâmica (`stub`/`hyperv`/`proxmox`). **Sem valor definido, os jobs `dynamic`/`both` falham** com uma mensagem a indicar como configurar. |
 | `VM_AGENT_TOKEN` | **(opcional)** Se definido, os drivers `hyperv`/`proxmox` enviam o header `X-Agent-Token` com este valor em todos os pedidos HTTP ao VM agent (health/upload/run/report). O agent .NET valida o mesmo header. |
 | `SANDBOX_VM_OP_TIMEOUT_SECONDS` | Timeout (s) dedicado a operações de snapshot/start da VM (default **120**), separado do timeout HTTP de 20s. |
 

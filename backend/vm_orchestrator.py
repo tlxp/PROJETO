@@ -18,14 +18,23 @@ if TYPE_CHECKING:
     from analysis_jobs import AnalysisJob
 
 
-# --- Nome do driver a partir de SANDBOX_VM_DRIVER ---
+# --- Nome do driver a partir de SANDBOX_VM_DRIVER (vazio se não definido) ---
 def _get_driver_name() -> str:
-    return (os.getenv("SANDBOX_VM_DRIVER") or "stub").strip().lower()
+    return (os.getenv("SANDBOX_VM_DRIVER") or "").strip().lower()
 
 
 # --- Instanciação do driver conforme configuração ---
 def _build_driver():
     name = _get_driver_name()
+    if not name:
+        raise RuntimeError(
+            "Análise dinâmica não configurada: a variável SANDBOX_VM_DRIVER não está definida. "
+            "Defina-a em backend/.env (ou no ambiente) — ex.: SANDBOX_VM_DRIVER=hyperv com "
+            "HYPERV_VM_NAME, HYPERV_SNAPSHOT_NAME, VM_AGENT_BASE_URL e VM_AGENT_TOKEN. "
+            "Ver backend/.env.example e docs/sandbox-hyperv-setup.md. "
+            "Para um relatório simulado (sem executar a amostra), use SANDBOX_VM_DRIVER=stub."
+        )
+
     from vm_drivers import warn_if_experimental
 
     warn_if_experimental(name)
