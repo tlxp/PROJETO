@@ -12,9 +12,14 @@ import {
   parseReportChapters,
   parseReportResumoLines,
   formatVmReportForDisplay,
+  getResultVmReportDisplay,
   parseVmScoringFromReport,
   compareAnalysisScores,
   translateVmClassification,
+  buildStubVmReportDisplay,
+  parseDynamicReportStub,
+  isVmDriverStub,
+  STUB_DOWNLOAD_PREFIX,
   getCBlocks,
   mergeRanges,
   getBlockContainingLine,
@@ -79,6 +84,31 @@ const SAMPLE_VM_RAW = [
   "===============================================================================",
   "REPORT_END;",
 ].join("\n");
+
+describe("Driver stub", () => {
+  it("deteta vmDriver stub/safe/disabled", () => {
+    expect(isVmDriverStub("stub")).toBe(true);
+    expect(isVmDriverStub("hyperv")).toBe(false);
+    expect(isVmDriverStub("unset")).toBe(false);
+  });
+
+  it("formata relatório explícito para modo simulado", () => {
+    const text = buildStubVmReportDisplay({
+      fileName: "evil.exe",
+      note: "Nota de teste",
+      summary: "Resumo simulado",
+    });
+    expect(text).toContain(STUB_DOWNLOAD_PREFIX);
+    expect(text).toContain("evil.exe");
+    expect(text).toContain("Nota de teste");
+  });
+
+  it("parseDynamicReportStub reconhece JSON do backend", () => {
+    const raw = JSON.stringify({ status: "stub", sample: { fileName: "a.exe" } });
+    expect(parseDynamicReportStub(raw).isStub).toBe(true);
+    expect(parseDynamicReportStub('{"status":"ok"}').isStub).toBe(false);
+  });
+});
 
 describe("Relatório VM", () => {
   describe("formatVmReportForDisplay", () => {
@@ -255,6 +285,30 @@ describe("API e normalização", () => {
       expect(res?.vmReport).toContain('"a": 1');
       expect(res?.report).toBe("");
       expect(res?.cCode).toBe("");
+    });
+
+    it("marca dynamicSimulated quando o relatório vem do driver stub", () => {
+      const job = {
+        status: "completed",
+        analysisType: "dynamic",
+        dynamicResult: {
+          dynamicSummary: "Análise dinâmica simulada (stub). A sandbox de VMs real ainda não está ligada.",
+          dynamicReport: {
+            status: "stub",
+            sandboxEngine: "stub",
+            driver: "stub",
+            sample: { fileName: "sample.exe" },
+            note: "Relatório gerado por driver stub (sem execução real).",
+          },
+        },
+      };
+      const res = buildAnalysisResultFromJob(job, "sample.exe");
+      expect(res?.dynamicSimulated).toBe(true);
+      expect(res?.dynamicSummary).toContain("stub");
+      const display = getResultVmReportDisplay(res);
+      expect(display).toContain(STUB_DOWNLOAD_PREFIX);
+      expect(display).toContain("N/A");
+      expect(parseVmScoringFromReport(display)).toBeNull();
     });
 
     it("usa campos no root como fallback (payloads antigos)", () => {

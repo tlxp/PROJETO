@@ -2,6 +2,12 @@
 // Formatação e parsing de relatórios comportamentais da VM.
 
 import { getT } from "@/i18n";
+import {
+  buildStubVmReportDisplay,
+  isResultDynamicallySimulated,
+  parseDynamicReportStub,
+} from "./stubDetection";
+import type { AnalysisResult } from "./types";
 
 // --- Relatório VM ---
 // *Reparação de encoding, parsing de secções, scoring e formatação para display*
@@ -684,6 +690,32 @@ export function formatVmReportForDisplay(raw: string): string {
   return buildStaticStyleVmReport(parsed);
 }
 
-export function getDisplayVmReport(report: string | null | undefined): string {
-  return formatVmReportForDisplay(report ?? "");
+export function getDisplayVmReport(
+  report: string | null | undefined,
+  opts?: {
+    dynamicSummary?: string | null;
+    dynamicSimulated?: boolean;
+    fileName?: string | null;
+  }
+): string {
+  if (!report?.trim()) return "";
+  const stub = parseDynamicReportStub(report);
+  const simulated = !!(opts?.dynamicSimulated || stub.isStub);
+  if (simulated) {
+    return buildStubVmReportDisplay({
+      note: stub.note,
+      summary: opts?.dynamicSummary,
+      fileName: stub.fileName ?? opts?.fileName,
+    });
+  }
+  return formatVmReportForDisplay(report);
+}
+
+export function getResultVmReportDisplay(result: AnalysisResult | null | undefined): string {
+  if (!result?.vmReport?.trim()) return "";
+  return getDisplayVmReport(result.vmReport, {
+    dynamicSummary: result.dynamicSummary,
+    dynamicSimulated: isResultDynamicallySimulated(result),
+    fileName: result.fileName,
+  });
 }

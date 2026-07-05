@@ -72,6 +72,7 @@ export function normalizeAnalysisResult(
     flaggedIndicators: filterStrings(r.flaggedIndicators),
     flaggedFunctions: normalizeFlaggedFunctions(r.flaggedFunctions),
     dynamicSummary: null,
+    dynamicSimulated: false,
     vmReport: null,
     dynamicPending: false,
     staticPending: false,

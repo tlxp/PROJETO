@@ -5,7 +5,7 @@ import React from "react";
 import { ChevronLeft, ChevronRight, Code2, FileCode2, FileText, Loader2 } from "lucide-react";
 import CodePanel from "@/components/CodePanel";
 import { buildShortFileName } from "@/lib/artifactNaming";
-import { getDisplayVmReport, type AnalysisResult, type ExpandedPanel, type FlaggedFunction } from "@/lib/analysis";
+import { getResultVmReportDisplay, type AnalysisResult, type ExpandedPanel, type FlaggedFunction } from "@/lib/analysis";
 import { StaticPanelShell } from "./StaticAnalysisLoadingOverlay";
 
 type LineRange = { start: number; end: number };
@@ -55,7 +55,7 @@ const ReportColumn: React.FC<{
   onExpand: (panel: Exclude<ExpandedPanel, null>) => void;
 }> = ({ result, baseDownloadName, staticInProgress = false, staticProgress = null, onExpand }) => {
   const staticReport = result?.report?.trim() ?? "";
-  const vmReport = getDisplayVmReport(result?.vmReport);
+  const vmReport = getResultVmReportDisplay(result);
   const dynamicPending = !!result?.dynamicPending;
   const staticPending = staticInProgress;
   const hasStatic = staticReport.length > 0;

@@ -8,6 +8,7 @@ import { isStaticAnalysisInProgress } from "@/lib/analysis";
 import { useI18n } from "@/i18n";
 import type { StillRunningJob } from "./UploadView";
 import StillRunningNotice from "./StillRunningNotice";
+import StubDriverBanner from "./StubDriverBanner";
 import ResultsOverview from "./ResultsOverview";
 import ResultsGrid from "./ResultsGrid";
 import ExpandedView from "./ExpandedView";
@@ -29,6 +30,7 @@ export type AnalysisResultsViewProps = {
   overviewCategoryIndex: number;
   onChangeCategoryIndex: (updater: (prev: number) => number) => void;
   vm: IndexResultsViewModel;
+  showStubBanner?: boolean;
 };
 
 // --- Componente ---
@@ -47,6 +49,7 @@ const AnalysisResultsView = ({
   overviewCategoryIndex,
   onChangeCategoryIndex,
   vm,
+  showStubBanner = false,
 }: AnalysisResultsViewProps) => {
   const { t } = useI18n();
   const staticInProgress = isStaticAnalysisInProgress(result, isAnalyzing);
@@ -70,6 +73,8 @@ const AnalysisResultsView = ({
     </div>
 
     {error && <p className="mt-2 text-sm text-destructive font-medium">{error}</p>}
+
+    {showStubBanner && <StubDriverBanner variant="result" />}
 
     {stillRunningJob && (
       <StillRunningNotice jobId={stillRunningJob.jobId} lastStatus={stillRunningJob.lastStatus} />

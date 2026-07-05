@@ -27,6 +27,7 @@ export function areAnalysisResultsEquivalent(a: AnalysisResult, b: AnalysisResul
     a.riskScore === b.riskScore &&
     a.riskLevel === b.riskLevel &&
     a.dynamicSummary === b.dynamicSummary &&
+    a.dynamicSimulated === b.dynamicSimulated &&
     a.vmReport === b.vmReport &&
     a.dynamicPending === b.dynamicPending &&
     a.staticPending === b.staticPending &&

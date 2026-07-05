@@ -70,6 +70,29 @@ const pt: Messages = {
   routeXref: "Explorador Xref",
   routeResults: "Resultados",
   routePage: "Página",
+  stubBannerTitle: "Análise dinâmica simulada",
+  stubBannerConfigured:
+    "A amostra não será executada. O backend está com SANDBOX_VM_DRIVER=stub — os resultados comportamentais são placeholders de desenvolvimento. Configure hyperv/proxmox ou use o WPF (Caminho B) para execução real.",
+  stubBannerResult:
+    "Este relatório foi gerado sem executar a amostra (driver stub). Não use processos, rede, registo ou scores VM para conclusões de segurança.",
+  stubConfirmTitle: "Sandbox real não configurada",
+  stubConfirmBody:
+    "O backend está em modo stub: a amostra não será executada e o relatório dinâmico será simulado. Deseja continuar?",
+  stubConfirmContinue: "Continuar (simulado)",
+  stubConfirmStaticOnly: "Só análise estática",
+  stubConfirmCancel: "Cancelar",
+  stubVmNotExecuted: "— (não executado)",
+  stubReportTitle: "RELATÓRIO DINÂMICO — MODO SIMULADO (STUB)",
+  stubReportHeadline:
+    "A amostra NÃO foi executada. Este relatório existe apenas para validar o fluxo da API.",
+  stubReportSample: "Amostra",
+  stubReportEvidence: "Evidência comportamental:",
+  stubReportNa: "N/A — amostra não executada",
+  stubReportNoScore:
+    "Score VM: indisponível — não há dados de execução. Não interprete ausência de deteções como benignidade.",
+  stubReportNote: "Nota do sistema:",
+  stubReportConfigure:
+    "Para execução real: defina SANDBOX_VM_DRIVER=hyperv (ou proxmox) no backend, ou use a análise dinâmica via WPF (Caminho B).",
 };
 
 const en: Messages = {
@@ -137,6 +160,29 @@ const en: Messages = {
   routeXref: "Xref Explorer",
   routeResults: "Results",
   routePage: "Page",
+  stubBannerTitle: "Simulated dynamic analysis",
+  stubBannerConfigured:
+    "The sample will not be executed. The backend uses SANDBOX_VM_DRIVER=stub — behavioral results are development placeholders. Configure hyperv/proxmox or use the WPF client (Path B) for real execution.",
+  stubBannerResult:
+    "This report was generated without executing the sample (stub driver). Do not use VM processes, network, registry or scores for security conclusions.",
+  stubConfirmTitle: "Real sandbox not configured",
+  stubConfirmBody:
+    "The backend is in stub mode: the sample will not run and the dynamic report will be simulated. Continue?",
+  stubConfirmContinue: "Continue (simulated)",
+  stubConfirmStaticOnly: "Static analysis only",
+  stubConfirmCancel: "Cancel",
+  stubVmNotExecuted: "— (not executed)",
+  stubReportTitle: "DYNAMIC REPORT — SIMULATED MODE (STUB)",
+  stubReportHeadline:
+    "The sample was NOT executed. This report only validates the API workflow.",
+  stubReportSample: "Sample",
+  stubReportEvidence: "Behavioral evidence:",
+  stubReportNa: "N/A — sample not executed",
+  stubReportNoScore:
+    "VM score: unavailable — no execution data. Do not treat missing detections as benign.",
+  stubReportNote: "System note:",
+  stubReportConfigure:
+    "For real execution: set SANDBOX_VM_DRIVER=hyperv (or proxmox) on the backend, or use dynamic analysis via WPF (Path B).",
 };
 
 export const CATALOG: Record<Lang, Messages> = { pt, en };

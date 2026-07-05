@@ -9,6 +9,7 @@ import UploadView from "./Index/UploadView";
 import IndexHeader from "./Index/IndexHeader";
 import AnalysisResultsView from "./Index/AnalysisResultsView";
 import SnippetModal from "./Index/SnippetModal";
+import StubDriverConfirmDialog from "./Index/StubDriverConfirmDialog";
 
 // --- Componente ---
 const Index = () => {
@@ -49,6 +50,7 @@ const Index = () => {
               onLoadMock={handleLoadMock}
               mockDemoEnabled={mockDemoUiEnabled}
               stillRunning={session.stillRunningJob}
+              showStubBanner={session.isStubDriver}
             />
           ) : (
             <AnalysisResultsView
@@ -66,6 +68,9 @@ const Index = () => {
               overviewCategoryIndex={resultsVm.overviewCategoryIndex}
               onChangeCategoryIndex={resultsVm.setOverviewCategoryIndex}
               vm={resultsVm}
+              showStubBanner={
+                session.isStubDriver || !!session.analysisResult?.dynamicSimulated
+              }
             />
           )}
         </AnimatePresence>
@@ -74,6 +79,13 @@ const Index = () => {
           state={resultsVm.snippetModal}
           onOpenChange={(open) => resultsVm.setSnippetModal((s) => ({ ...s, open }))}
           onNavigate={resultsVm.navigateSnippet}
+        />
+
+        <StubDriverConfirmDialog
+          open={session.stubConfirmOpen}
+          onOpenChange={session.setStubConfirmOpen}
+          onContinue={session.handleStubConfirmContinue}
+          onStaticOnly={session.handleStubConfirmStaticOnly}
         />
       </main>
     </div>

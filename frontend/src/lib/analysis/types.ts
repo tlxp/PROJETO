@@ -29,6 +29,8 @@ export type AnalysisResult = {
   dynamicSummary?: string | null;
   // *Relatório textual ou JSON da VM (Caminho A via backend ou Caminho B via WPF)*
   vmReport?: string | null;
+  // *True quando a análise dinâmica foi simulada (driver stub) — amostra não executada*
+  dynamicSimulated?: boolean;
   // *True quando a análise dinâmica está em curso mas o relatório ainda não chegou*
   dynamicPending?: boolean;
   // *True quando a análise estática está em curso mas o relatório ainda não chegou*

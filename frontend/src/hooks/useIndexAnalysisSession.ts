@@ -14,6 +14,7 @@ import {
 } from "@/lib/analysis";
 import { useAnalysisJob } from "@/hooks/useAnalysisJob";
 import { useAnalysisStream } from "@/hooks/useAnalysisStream";
+import { useSandboxHealth } from "@/hooks/useSandboxHealth";
 import { ROUTES } from "@/routes";
 import type { StillRunningJob } from "@/pages/Index/UploadView";
 import { isMockDemoEnabled } from "@/lib/mockDemoEnabled";
@@ -35,9 +36,11 @@ export function useIndexAnalysisSession() {
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [stillRunningJob, setStillRunningJob] = useState<StillRunningJob | null>(null);
   const [isMockDemo, setIsMockDemo] = useState(false);
+  const [stubConfirmOpen, setStubConfirmOpen] = useState(false);
 
   const stream = useAnalysisStream();
   const { beginSession, submitJob, pollJob, fetchJob, cancel: cancelJob } = useAnalysisJob();
+  const { isStubDriver } = useSandboxHealth();
   const analyzeRunRef = useRef(0);
 
   const handleFileLoaded = useCallback((f: File) => {
@@ -227,104 +230,116 @@ export function useIndexAnalysisSession() {
   );
 
   // --- Estática: stream; dinâmica/ambas: job Caminho A (POST /api/analysis) ---
-  const handleAnalyze = useCallback(async () => {
-    if (!file) return;
-    const runId = ++analyzeRunRef.current;
-    const isCurrent = () => analyzeRunRef.current === runId;
-    setIsMockDemo(false);
-    setIsAnalyzing(true);
-    setError(null);
-    setAnalysisLogs([]);
-    setGhidraProgress(null);
-    setStillRunningJob(null);
+  const runAnalyze = useCallback(
+    async (modeOverride?: AnalysisMode) => {
+      if (!file) return;
+      const mode = modeOverride ?? analysisMode;
+      const runId = ++analyzeRunRef.current;
+      const isCurrent = () => analyzeRunRef.current === runId;
+      setIsMockDemo(false);
+      setIsAnalyzing(true);
+      setError(null);
+      setAnalysisLogs([]);
+      setGhidraProgress(null);
+      setStillRunningJob(null);
 
-    try {
-      if (analysisMode === "static") {
-        const streamResult = await stream.run(file, {
-          onLog: (msg) => setAnalysisLogs((prev) => [...prev, msg]),
-          onGhidraProgress: (pct) => setGhidraProgress(pct),
-          onError: (msg) => setError(msg),
-          onResult: (data) => {
-            setAnalysisResult(data);
-            setShowResults(true);
-          },
+      try {
+        if (mode === "static") {
+          const streamResult = await stream.run(file, {
+            onLog: (msg) => setAnalysisLogs((prev) => [...prev, msg]),
+            onGhidraProgress: (pct) => setGhidraProgress(pct),
+            onError: (msg) => setError(msg),
+            onResult: (data) => {
+              setAnalysisResult(data);
+              setShowResults(true);
+            },
+          });
+
+          if (streamResult && isCurrent()) {
+            try {
+              const jobId = await publishStaticAnalysisResult(streamResult);
+              if (!isCurrent()) return;
+              setCurrentJobId(jobId);
+              navigate(ROUTES.analysis(jobId), { replace: false });
+              setAnalysisLogs((prev) => [...prev, `Resultado registado no backend: ${jobId}`]);
+            } catch (e) {
+              if (isAbortError(e)) return;
+              const message =
+                e instanceof Error ? e.message : getT("staticRegisterFailed");
+              setAnalysisLogs((prev) => [...prev, message]);
+            }
+          }
+          return;
+        }
+
+        const signal = beginSession();
+        const submitData = await submitJob(file, mode, signal);
+        if (!isCurrent()) return;
+        setAnalysisLogs((prev) => [...prev, `Job criado (${mode}): ${submitData.jobId}`]);
+
+        const outcome = await pollJob(submitData.jobId, signal, (status, attempt, partialJob) => {
+          if (isCurrent() && partialJob) {
+            const partial = buildAnalysisResultFromJob(
+              partialJob,
+              typeof partialJob.fileName === "string" ? partialJob.fileName : file.name
+            );
+            if (partial) {
+              setAnalysisResult(partial);
+              setShowResults(true);
+            }
+          }
+          if (isCurrent() && (attempt === 1 || attempt % 10 === 0)) {
+            setAnalysisLogs((prev) => [...prev, `Estado do job: ${status}`]);
+          }
         });
+        if (!isCurrent()) return;
 
-        if (streamResult && isCurrent()) {
-          try {
-            const jobId = await publishStaticAnalysisResult(streamResult);
-            if (!isCurrent()) return;
-            setCurrentJobId(jobId);
-            navigate(ROUTES.analysis(jobId), { replace: false });
-            setAnalysisLogs((prev) => [...prev, `Resultado registado no backend: ${jobId}`]);
-          } catch (e) {
-            if (isAbortError(e)) return;
-            const message =
-              e instanceof Error ? e.message : getT("staticRegisterFailed");
-            setAnalysisLogs((prev) => [...prev, message]);
-          }
+        if (outcome.kind === "failed") {
+          throw new Error(outcome.error);
         }
-        return;
-      }
-
-      const signal = beginSession();
-      const submitData = await submitJob(file, analysisMode, signal);
-      if (!isCurrent()) return;
-      setAnalysisLogs((prev) => [
-        ...prev,
-        `Job criado (${analysisMode}): ${submitData.jobId}`,
-      ]);
-
-      const outcome = await pollJob(submitData.jobId, signal, (status, attempt, partialJob) => {
-        if (isCurrent() && partialJob) {
-          const partial = buildAnalysisResultFromJob(
-            partialJob,
-            typeof partialJob.fileName === "string" ? partialJob.fileName : file.name
-          );
-          if (partial) {
-            setAnalysisResult(partial);
-            setShowResults(true);
-          }
+        if (outcome.kind === "still-running") {
+          setStillRunningJob({ jobId: submitData.jobId, lastStatus: outcome.lastStatus });
+          setCurrentJobId(submitData.jobId);
+          navigate(ROUTES.analysis(submitData.jobId), { replace: false });
+          return;
         }
-        if (isCurrent() && (attempt === 1 || attempt % 10 === 0)) {
-          setAnalysisLogs((prev) => [...prev, `Estado do job: ${status}`]);
+
+        finishJobOutcome(submitData.jobId, outcome.job, file.name);
+      } catch (e) {
+        if (!isCurrent() || isAbortError(e)) return;
+        if (e instanceof ApiError && e.status === 404) {
+          setError(getT("jobNotFound"));
+        } else {
+          setError(e instanceof Error ? e.message : getT("analyzeFileError"));
         }
-      });
-      if (!isCurrent()) return;
+      } finally {
+        if (isCurrent()) {
+          setIsAnalyzing(false);
+        }
+      }
+    },
+    [file, analysisMode, stream, beginSession, submitJob, pollJob, navigate, finishJobOutcome]
+  );
 
-      if (outcome.kind === "failed") {
-        throw new Error(outcome.error);
-      }
-      if (outcome.kind === "still-running") {
-        setStillRunningJob({ jobId: submitData.jobId, lastStatus: outcome.lastStatus });
-        setCurrentJobId(submitData.jobId);
-        navigate(ROUTES.analysis(submitData.jobId), { replace: false });
-        return;
-      }
-
-      finishJobOutcome(submitData.jobId, outcome.job, file.name);
-    } catch (e) {
-      if (!isCurrent() || isAbortError(e)) return;
-      if (e instanceof ApiError && e.status === 404) {
-        setError(getT("jobNotFound"));
-      } else {
-        setError(e instanceof Error ? e.message : getT("analyzeFileError"));
-      }
-    } finally {
-      if (isCurrent()) {
-        setIsAnalyzing(false);
-      }
+  const handleAnalyze = useCallback(() => {
+    if (!file) return;
+    if ((analysisMode === "dynamic" || analysisMode === "both") && isStubDriver) {
+      setStubConfirmOpen(true);
+      return;
     }
-  }, [
-    file,
-    analysisMode,
-    stream,
-    beginSession,
-    submitJob,
-    pollJob,
-    navigate,
-    finishJobOutcome,
-  ]);
+    void runAnalyze();
+  }, [file, analysisMode, isStubDriver, runAnalyze]);
+
+  const handleStubConfirmContinue = useCallback(() => {
+    setStubConfirmOpen(false);
+    void runAnalyze();
+  }, [runAnalyze]);
+
+  const handleStubConfirmStaticOnly = useCallback(() => {
+    setStubConfirmOpen(false);
+    setAnalysisMode("static");
+    void runAnalyze("static");
+  }, [runAnalyze]);
 
   return {
     file,
@@ -339,9 +354,14 @@ export function useIndexAnalysisSession() {
     currentJobId,
     stillRunningJob,
     isMockDemo,
+    isStubDriver,
+    stubConfirmOpen,
+    setStubConfirmOpen,
     handleFileLoaded,
     handleClear,
     handleAnalyze,
+    handleStubConfirmContinue,
+    handleStubConfirmStaticOnly,
     loadMockDemo,
   };
 }

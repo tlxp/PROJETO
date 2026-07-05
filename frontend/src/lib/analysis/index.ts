@@ -3,6 +3,7 @@
 
 export * from "./types";
 export * from "./normalize";
+export * from "./stubDetection";
 export * from "./vmReport";
 export * from "./jobs";
 export * from "./equivalence";

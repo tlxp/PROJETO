@@ -8,6 +8,7 @@ import FileDropZone from "@/components/FileDropZone";
 import type { AnalysisMode } from "@/lib/analysis";
 import { useI18n } from "@/i18n";
 import StillRunningNotice from "./StillRunningNotice";
+import StubDriverBanner from "./StubDriverBanner";
 
 export type StillRunningJob = { jobId: string; lastStatus: string };
 
@@ -25,6 +26,7 @@ type UploadViewProps = {
   onLoadMock: () => void;
   mockDemoEnabled?: boolean;
   stillRunning: StillRunningJob | null;
+  showStubBanner?: boolean;
 };
 
 // --- Componente ---
@@ -42,6 +44,7 @@ const UploadView: React.FC<UploadViewProps> = ({
   onLoadMock,
   mockDemoEnabled = false,
   stillRunning,
+  showStubBanner = false,
 }) => {
   const { t } = useI18n();
   const modes: { value: AnalysisMode; labelKey: "modeStatic" | "modeDynamic" | "modeBoth" }[] = [
@@ -89,6 +92,11 @@ const UploadView: React.FC<UploadViewProps> = ({
           </button>
         ))}
       </div>
+
+      {showStubBanner &&
+        (analysisMode === "dynamic" || analysisMode === "both") && (
+          <StubDriverBanner variant="configured" />
+        )}
 
       {error && <p className="text-sm text-destructive font-medium text-center">{error}</p>}
 

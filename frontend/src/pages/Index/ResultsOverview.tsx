@@ -6,12 +6,14 @@ import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   compareAnalysisScores,
+  getResultVmReportDisplay,
   isVmClassificationBenign,
   parseVmScoringFromReport,
   translateVmClassification,
   type AnalysisResult,
   type ReportCategory,
 } from "@/lib/analysis";
+import { useI18n } from "@/i18n";
 
 type ResultsOverviewProps = {
   result: AnalysisResult;
@@ -38,17 +40,48 @@ const ResultsOverview: React.FC<ResultsOverviewProps> = ({
   onChangeCategoryIndex,
   hasJobId,
 }) => {
-  const vmScoring = parseVmScoringFromReport(result.vmReport);
+  const { t } = useI18n();
+  const dynamicSimulated = !!result.dynamicSimulated;
+  const vmReportForScoring = dynamicSimulated
+    ? ""
+    : getResultVmReportDisplay(result) || (result.vmReport ?? "");
+  const vmScoring = dynamicSimulated ? null : parseVmScoringFromReport(vmReportForScoring);
   const hasStaticScore = result.riskScore > 0 || !!result.riskLevel?.trim();
-  const hasVmScore = vmScoring != null;
+  const hasVmScore = !dynamicSimulated && vmScoring != null;
   const scoreCompare = compareAnalysisScores(result.riskScore, result.riskLevel ?? "", vmScoring);
 
-  if (reportCategories.length === 0 && !hasStaticScore && !hasVmScore) return null;
+  if (reportCategories.length === 0 && !hasStaticScore && !hasVmScore && !dynamicSimulated) {
+    return null;
+  }
 
   return (
     <div className="grid gap-3 md:grid-cols-4 items-stretch text-[11px] font-mono text-muted-foreground">
       <div className="md:col-span-2 rounded-lg border border-border bg-card/70 px-3 py-2">
-        {scoreCompare.hasBoth ? (
+        {dynamicSimulated ? (
+          <div className="space-y-1.5">
+            {hasStaticScore ? (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="rounded border border-border/60 bg-background/40 px-2.5 py-2">
+                  <div className="text-[10px] text-muted-foreground">Estática</div>
+                  <div className={`text-sm font-semibold ${scoreToneClass(result.riskScore)}`}>
+                    {result.riskScore}/100
+                    {result.riskLevel ? ` · ${result.riskLevel.toUpperCase()}` : ""}
+                  </div>
+                </div>
+                <div className="rounded border border-border/60 bg-background/40 px-2.5 py-2">
+                  <div className="text-[10px] text-muted-foreground">VM</div>
+                  <div className="text-sm font-semibold text-muted-foreground">
+                    {t("stubVmNotExecuted")}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm font-semibold text-muted-foreground">
+                VM: {t("stubVmNotExecuted")}
+              </div>
+            )}
+          </div>
+        ) : scoreCompare.hasBoth ? (
           <div className="space-y-1.5">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <div className="rounded border border-border/60 bg-background/40 px-2.5 py-2">

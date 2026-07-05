@@ -3,6 +3,7 @@
 
 import { apiFetchJson } from "../api";
 import { asRecord, normalizeAnalysisResult } from "./normalize";
+import { resolveDynamicSimulated } from "./stubDetection";
 import type { AnalysisResult } from "./types";
 
 // --- Jobs e publicação na API ---
@@ -37,6 +38,33 @@ function computeStaticPending(
   return type === "static" || type === "both";
 }
 
+function resolveDynamicSummary(
+  dr: Record<string, unknown> | null,
+  vmReport: string,
+  fallback?: string | null
+): string | null {
+  if (dr && typeof dr.dynamicSummary === "string" && dr.dynamicSummary.trim()) {
+    return dr.dynamicSummary;
+  }
+  if (fallback?.trim()) return fallback;
+  if (resolveDynamicSimulated(dr?.dynamicReport, vmReport)) {
+    return "Análise dinâmica simulada (stub). A amostra não foi executada.";
+  }
+  return "Análise dinâmica concluída.";
+}
+
+function buildDynamicMeta(
+  dr: Record<string, unknown> | null,
+  vmReport: string,
+  fallbackSummary?: string | null
+): Pick<AnalysisResult, "dynamicSummary" | "dynamicSimulated"> {
+  const dynamicSummary = resolveDynamicSummary(dr, vmReport, fallbackSummary);
+  return {
+    dynamicSummary,
+    dynamicSimulated: resolveDynamicSimulated(dr?.dynamicReport, vmReport, dynamicSummary),
+  };
+}
+
 function computeDynamicPending(
   vmReport: string,
   jobStatus?: string,
@@ -60,8 +88,7 @@ function mergeDynamicFields(
 ): AnalysisResult {
   const dr = asRecord(dynamicResult);
   const vmReport = extractVmReportFromDynamic(dr);
-  const dynamicSummary =
-    dr && typeof dr.dynamicSummary === "string" ? dr.dynamicSummary : base.dynamicSummary ?? null;
+  const dynamicMeta = buildDynamicMeta(dr, vmReport, base.dynamicSummary ?? null);
   const dynamicPending = computeDynamicPending(
     vmReport,
     jobStatus,
@@ -74,7 +101,8 @@ function mergeDynamicFields(
   return {
     ...base,
     vmReport: vmReport || null,
-    dynamicSummary,
+    dynamicSummary: dynamicMeta.dynamicSummary,
+    dynamicSimulated: dynamicMeta.dynamicSimulated,
     dynamicPending,
     staticPending,
     staticProgress: base.staticProgress ?? null,
@@ -116,8 +144,7 @@ export function buildAnalysisResultFromJob(
   const dr = asRecord(dynamicResult);
   if (dr) {
     const vmReport = extractVmReportFromDynamic(dr);
-    const dynamicSummary =
-      typeof dr.dynamicSummary === "string" ? dr.dynamicSummary : "Análise dinâmica concluída.";
+    const dynamicMeta = buildDynamicMeta(dr, vmReport);
     if (vmReport) {
       return {
         report: "",
@@ -130,7 +157,8 @@ export function buildAnalysisResultFromJob(
         riskScore: 0,
         riskLevel: "",
         flaggedIndicators: [],
-        dynamicSummary,
+        dynamicSummary: dynamicMeta.dynamicSummary,
+        dynamicSimulated: dynamicMeta.dynamicSimulated,
         vmReport,
         dynamicPending: false,
         staticPending: computeStaticPending("", jobStatus, analysisType),
@@ -138,14 +166,15 @@ export function buildAnalysisResultFromJob(
     }
     const behaviorStr = dr.dynamicReport != null ? JSON.stringify(dr.dynamicReport, null, 2) : "";
     return {
-      report: `# Análise dinâmica\n\n${dynamicSummary}\n\n${behaviorStr}`,
+      report: `# Análise dinâmica\n\n${dynamicMeta.dynamicSummary}\n\n${behaviorStr}`,
       cCode: "",
       ilCode: "",
       fileName: fallbackFileName ?? "output",
       riskScore: 0,
       riskLevel: "",
       flaggedIndicators: [],
-      dynamicSummary,
+      dynamicSummary: dynamicMeta.dynamicSummary,
+      dynamicSimulated: dynamicMeta.dynamicSimulated,
       vmReport: behaviorStr || null,
       dynamicPending: (jobStatus ?? "").toLowerCase() === "running",
       staticPending: computeStaticPending("", jobStatus, analysisType),

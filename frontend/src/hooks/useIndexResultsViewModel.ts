@@ -17,7 +17,7 @@ import {
   parseReportCategories,
   parseReportChapters,
   parseReportResumoLines,
-  getDisplayVmReport,
+  getResultVmReportDisplay,
   parseSnippetFileSections,
   resolveFlaggedFunctionId,
   zipSnippetPairs,
@@ -508,7 +508,7 @@ export function useIndexResultsViewModel({ result, file, currentJobId }: UseInde
   }, []);
 
   const expandedReportText = useMemo(() => {
-    if (expandedPanel === "report-vm") return getDisplayVmReport(result?.vmReport);
+    if (expandedPanel === "report-vm") return getResultVmReportDisplay(result);
     if (expandedPanel === "report-static" || expandedPanel === "report") return result?.report ?? "";
     return "";
   }, [expandedPanel, result?.vmReport, result?.report]);
