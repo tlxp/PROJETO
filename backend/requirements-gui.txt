@@ -1,4 +1,4 @@
 # Dependências apenas para a GUI Tkinter deprecated (rat_analyzer_gui.py)
 # Instalar com: pip install -r requirements-gui.lock
 # Substitutos recomendados: frontend web ou WPF — ver backend/gui/README.md
-windnd>=1.0.4,<2.0
+windnd>=1.0.7,<2.0
