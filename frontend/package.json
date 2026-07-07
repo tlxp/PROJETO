@@ -20,7 +20,7 @@
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
-    "@radix-ui/react-dialog": "^1.1.14",
+    "@radix-ui/react-dialog": "^1.1.17",
     "@radix-ui/react-tooltip": "^1.2.7",
     "baseline-browser-mapping": "^2.10.0",
     "caniuse-lite": "^1.0.30001776",
